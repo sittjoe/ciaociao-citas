@@ -6,7 +6,9 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nSistema de citas completo para Ciao Ciao Joyería\n\n- Página principal para clientes con calendario de horarios\n- Panel de administración con login\n- Integración con Firebase y EmailJS\n- Subida de identificaciones\n- Sistema de notificaciones por email\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
