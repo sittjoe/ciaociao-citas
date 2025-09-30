@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ciao Ciao - Agendar Cita en Showroom</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌟 Ciao Ciao Joyería</h1>
+            <p class="subtitle">Reserva tu cita en nuestro showroom</p>
+        </header>
+
+        <main>
+            <section class="booking-section">
+                <h2>Agenda tu Visita</h2>
+                <p class="description">Selecciona un horario disponible y completa tus datos para reservar tu cita personalizada.</p>
+
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Cargando horarios disponibles...</p>
+                </div>
+
+                <div id="bookingForm" class="booking-form" style="display: none;">
+                    <!-- Calendario de horarios -->
+                    <div class="calendar-section">
+                        <h3>Horarios Disponibles</h3>
+                        <div id="availableSlots" class="slots-container"></div>
+                    </div>
+
+                    <!-- Formulario de datos -->
+                    <form id="appointmentForm" class="form-section">
+                        <div class="form-group">
+                            <label for="name">Nombre Completo *</label>
+                            <input type="text" id="name" name="name" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="email">Correo Electrónico *</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="phone">Teléfono *</label>
+                            <input type="tel" id="phone" name="phone" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="identification">Identificación (Foto) *</label>
+                            <input type="file" id="identification" name="identification" accept="image/*,.pdf" required>
+                            <small>Formatos aceptados: JPG, PNG, PDF (máx. 5MB)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="notes">Motivo de la visita (opcional)</label>
+                            <textarea id="notes" name="notes" rows="3" placeholder="Ej: Busco anillo de compromiso..."></textarea>
+                        </div>
+
+                        <div class="selected-slot">
+                            <strong>Horario seleccionado:</strong> <span id="selectedSlotDisplay">Ninguno</span>
+                        </div>
+
+                        <button type="submit" id="submitBtn" class="btn-primary" disabled>
+                            Enviar Solicitud de Cita
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Mensaje de éxito -->
+                <div id="successMessage" class="success-message" style="display: none;">
+                    <div class="success-icon">✓</div>
+                    <h3>¡Solicitud Enviada!</h3>
+                    <p>Hemos recibido tu solicitud de cita. Te enviaremos un correo de confirmación pronto.</p>
+                    <button onclick="location.reload()" class="btn-secondary">Hacer otra reserva</button>
+                </div>
+
+                <!-- Mensaje de error -->
+                <div id="errorMessage" class="error-message" style="display: none;">
+                    <h3>Error</h3>
+                    <p id="errorText"></p>
+                    <button onclick="location.reload()" class="btn-secondary">Intentar de nuevo</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Ciao Ciao Joyería &copy; 2025</p>
+            <a href="admin.html" class="admin-link">Acceso Administrador</a>
+        </footer>
+    </div>
+
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
+    <!-- Firebase SDK -->
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

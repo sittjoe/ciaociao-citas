@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Ciao Ciao</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <header style="margin: 0 0 30px 0; padding: 0;">
+                <h1 style="font-size: 2em;">🔐 Admin Panel</h1>
+                <p class="subtitle" style="font-size: 1em;">Ciao Ciao Joyería</p>
+            </header>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="adminPassword">Contraseña de Administrador</label>
+                    <input type="password" id="adminPassword" required>
+                </div>
+                <button type="submit" class="btn-primary">Iniciar Sesión</button>
+                <p id="loginError" style="color: var(--error-color); margin-top: 15px; display: none;"></p>
+            </form>
+            <div style="margin-top: 20px; text-align: center;">
+                <a href="index.html" style="color: var(--primary-color);">← Volver al sitio principal</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminDashboard" class="admin-container" style="display: none;">
+        <header>
+            <div class="admin-header">
+                <div>
+                    <h1>Panel de Administración</h1>
+                    <p class="subtitle">Gestiona horarios y citas</p>
+                </div>
+                <button id="logoutBtn" class="logout-btn">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="admin-tabs">
+            <button class="tab-btn active" data-tab="slots">Horarios Disponibles</button>
+            <button class="tab-btn" data-tab="pending">Citas Pendientes</button>
+            <button class="tab-btn" data-tab="confirmed">Citas Confirmadas</button>
+        </div>
+
+        <!-- Tab: Horarios Disponibles -->
+        <div id="slotsTab" class="tab-content active">
+            <div class="admin-section">
+                <h2>Agregar Nuevo Horario</h2>
+                <form id="addSlotForm" class="add-slot-form">
+                    <div class="form-group" style="margin: 0;">
+                        <label for="slotDate">Fecha</label>
+                        <input type="date" id="slotDate" required>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="slotTime">Hora</label>
+                        <input type="time" id="slotTime" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Agregar Horario</button>
+                </form>
+            </div>
+
+            <div class="admin-section">
+                <h2>Horarios Disponibles</h2>
+                <div id="slotsList" class="slots-list">
+                    <p style="color: var(--text-light);">Cargando horarios...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Citas Pendientes -->
+        <div id="pendingTab" class="tab-content">
+            <div class="admin-section">
+                <h2>Solicitudes Pendientes de Aprobación</h2>
+                <div id="pendingAppointments" class="appointments-list">
+                    <p style="color: var(--text-light);">Cargando citas pendientes...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Citas Confirmadas -->
+        <div id="confirmedTab" class="tab-content">
+            <div class="admin-section">
+                <h2>Citas Confirmadas y Rechazadas</h2>
+                <div id="confirmedAppointments" class="appointments-list">
+                    <p style="color: var(--text-light);">Cargando historial...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for viewing ID -->
+    <div id="idModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; padding: 20px; overflow: auto;">
+        <div style="max-width: 800px; margin: 50px auto; background: white; padding: 30px; border-radius: 8px; position: relative;">
+            <button onclick="closeIdModal()" style="position: absolute; top: 10px; right: 10px; background: var(--error-color); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cerrar</button>
+            <h3 style="margin-bottom: 20px;">Identificación del Cliente</h3>
+            <div id="idContent"></div>
+        </div>
+    </div>
+
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
+    <!-- Firebase SDK -->
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="admin.js"></script>
+</body>
+</html>
