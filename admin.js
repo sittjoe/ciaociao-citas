@@ -1,3 +1,8 @@
+/**
+ * ADMIN.JS - Panel de Administración Mejorado
+ * Gestión avanzada de citas con dashboard, filtros, búsqueda y exportación
+ */
+
 import { firebaseConfig, ADMIN_PASSWORD, emailConfig } from './firebase-config.js';
 
 // Initialize Firebase
@@ -7,14 +12,21 @@ import { getFirestore, collection, query, where, getDocs, addDoc, updateDoc, del
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// Estado global
 let isAuthenticated = false;
+let allAppointments = [];
+let allSlots = [];
+let selectedAppointments = new Set();
 
 // Load EmailJS
 (function() {
     emailjs.init(emailConfig.publicKey);
 })();
 
-// Check authentication
+// ============================================
+// AUTENTICACIÓN
+// ============================================
+
 function checkAuth() {
     const authToken = sessionStorage.getItem('adminAuth');
     if (authToken === 'authenticated') {
@@ -23,7 +35,6 @@ function checkAuth() {
     }
 }
 
-// Login form handler
 document.getElementById('loginForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const password = document.getElementById('adminPassword').value;
@@ -38,37 +49,70 @@ document.getElementById('loginForm').addEventListener('submit', (e) => {
     }
 });
 
-// Logout handler
 document.getElementById('logoutBtn').addEventListener('click', () => {
     sessionStorage.removeItem('adminAuth');
     location.reload();
 });
 
-// Show dashboard
 function showDashboard() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('adminDashboard').style.display = 'block';
     loadAllData();
 }
 
-// Tab switching
+// ============================================
+// NOTIFICACIONES TOAST
+// ============================================
+
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+
+    const icon = type === 'success' ?
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' :
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+    toast.innerHTML = `${icon}<span>${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('toast-show');
+    }, 10);
+
+    setTimeout(() => {
+        toast.classList.remove('toast-show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// ============================================
+// NAVEGACIÓN DE TABS
+// ============================================
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const tabName = btn.dataset.tab;
-
-        // Update buttons
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        // Update content
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.classList.remove('active');
-        });
-        document.getElementById(`${tabName}Tab`).classList.add('active');
+        switchTab(tabName);
     });
 });
 
-// Add slot form handler
+window.switchTab = function(tabName) {
+    // Update buttons
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+    // Update content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`${tabName}Tab`).classList.add('active');
+};
+
+// ============================================
+// GESTIÓN DE HORARIOS
+// ============================================
+
 document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -76,7 +120,7 @@ document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
     const time = document.getElementById('slotTime').value;
 
     if (!date || !time) {
-        alert('Por favor completa todos los campos');
+        showToast('Por favor completa todos los campos', 'error');
         return;
     }
 
@@ -85,7 +129,7 @@ document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
 
         // Check if it's in the future
         if (datetime <= new Date()) {
-            alert('La fecha y hora deben ser en el futuro');
+            showToast('La fecha y hora deben ser en el futuro', 'error');
             return;
         }
 
@@ -100,22 +144,15 @@ document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
         document.getElementById('addSlotForm').reset();
 
         // Reload slots
-        loadSlots();
+        await loadSlots();
 
-        alert('Horario agregado exitosamente');
+        showToast('Horario agregado exitosamente');
     } catch (error) {
         console.error('Error adding slot:', error);
-        alert('Error al agregar horario: ' + error.message);
+        showToast('Error al agregar horario: ' + error.message, 'error');
     }
 });
 
-// Load all data
-function loadAllData() {
-    loadSlots();
-    loadAppointments();
-}
-
-// Load slots
 async function loadSlots() {
     try {
         const slotsRef = collection(db, 'slots');
@@ -126,25 +163,24 @@ async function loadSlots() {
         );
 
         const querySnapshot = await getDocs(q);
-        const slots = [];
+        allSlots = [];
 
         querySnapshot.forEach((doc) => {
             const slotData = doc.data();
-            slots.push({
+            allSlots.push({
                 id: doc.id,
                 ...slotData,
                 datetime: slotData.datetime.toDate()
             });
         });
 
-        displaySlots(slots);
+        displaySlots(allSlots);
     } catch (error) {
         console.error('Error loading slots:', error);
         document.getElementById('slotsList').innerHTML = '<p style="color: var(--error-color);">Error al cargar horarios</p>';
     }
 }
 
-// Display slots
 function displaySlots(slots) {
     const container = document.getElementById('slotsList');
 
@@ -176,7 +212,6 @@ function displaySlots(slots) {
     }).join('');
 }
 
-// Delete slot
 window.deleteSlot = async (slotId) => {
     if (!confirm('¿Estás seguro de eliminar este horario?')) {
         return;
@@ -184,56 +219,162 @@ window.deleteSlot = async (slotId) => {
 
     try {
         await deleteDoc(doc(db, 'slots', slotId));
-        loadSlots();
-        alert('Horario eliminado exitosamente');
+        await loadSlots();
+        showToast('Horario eliminado exitosamente');
     } catch (error) {
         console.error('Error deleting slot:', error);
-        alert('Error al eliminar horario: ' + error.message);
+        showToast('Error al eliminar horario: ' + error.message, 'error');
     }
 };
 
-// Load appointments
+// ============================================
+// GESTIÓN DE CITAS
+// ============================================
+
+async function loadAllData() {
+    await Promise.all([loadSlots(), loadAppointments()]);
+    updateDashboardStats();
+}
+
 async function loadAppointments() {
     try {
         const appointmentsRef = collection(db, 'appointments');
         const q = query(appointmentsRef, orderBy('createdAt', 'desc'));
 
         const querySnapshot = await getDocs(q);
-        const pending = [];
-        const confirmed = [];
+        allAppointments = [];
 
         querySnapshot.forEach((doc) => {
             const appointmentData = doc.data();
-            const appointment = {
+            allAppointments.push({
                 id: doc.id,
                 ...appointmentData,
                 slotDatetime: appointmentData.slotDatetime.toDate()
-            };
-
-            if (appointment.status === 'pending') {
-                pending.push(appointment);
-            } else {
-                confirmed.push(appointment);
-            }
+            });
         });
 
-        displayPendingAppointments(pending);
-        displayConfirmedAppointments(confirmed);
+        filterAndDisplayAppointments();
     } catch (error) {
         console.error('Error loading appointments:', error);
+        showToast('Error al cargar citas', 'error');
     }
 }
 
-// Display pending appointments
+function filterAndDisplayAppointments() {
+    const pending = allAppointments.filter(apt => apt.status === 'pending');
+    const confirmed = allAppointments.filter(apt => apt.status !== 'pending');
+
+    displayPendingAppointments(pending);
+    displayConfirmedAppointments(confirmed);
+    displayUpcomingAppointments(allAppointments);
+}
+
+// ============================================
+// DASHBOARD Y ESTADÍSTICAS
+// ============================================
+
+function updateDashboardStats() {
+    const total = allAppointments.length;
+    const pending = allAppointments.filter(apt => apt.status === 'pending').length;
+    const rejected = allAppointments.filter(apt => apt.status === 'rejected').length;
+
+    // Accepted today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const acceptedToday = allAppointments.filter(apt => {
+        if (apt.status === 'accepted' && apt.updatedAt) {
+            const aptDate = apt.updatedAt.toDate();
+            aptDate.setHours(0, 0, 0, 0);
+            return aptDate.getTime() === today.getTime();
+        }
+        return false;
+    }).length;
+
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statPending').textContent = pending;
+    document.getElementById('statAcceptedToday').textContent = acceptedToday;
+    document.getElementById('statRejected').textContent = rejected;
+}
+
+function displayUpcomingAppointments(appointments) {
+    const container = document.getElementById('upcomingAppointments');
+    const now = new Date();
+
+    const upcoming = appointments
+        .filter(apt => apt.status === 'accepted' && apt.slotDatetime > now)
+        .sort((a, b) => a.slotDatetime - b.slotDatetime)
+        .slice(0, 5);
+
+    if (upcoming.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-light);">No hay citas próximas confirmadas</p>';
+        return;
+    }
+
+    container.innerHTML = upcoming.map(apt => {
+        const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+        });
+        const timeStr = apt.slotDatetime.toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        return `
+            <div class="upcoming-item">
+                <div class="upcoming-time">
+                    <strong>${dateStr}</strong>
+                    <span>${timeStr}</span>
+                </div>
+                <div class="upcoming-info">
+                    <strong>${apt.name}</strong>
+                    <span>${apt.phone}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================
+// CITAS PENDIENTES CON FILTROS
+// ============================================
+
 function displayPendingAppointments(appointments) {
     const container = document.getElementById('pendingAppointments');
 
-    if (appointments.length === 0) {
+    // Apply filters
+    const searchTerm = document.getElementById('searchPending')?.value.toLowerCase() || '';
+    const dateFrom = document.getElementById('filterDateFrom')?.value || '';
+    const dateTo = document.getElementById('filterDateTo')?.value || '';
+
+    let filtered = appointments;
+
+    if (searchTerm) {
+        filtered = filtered.filter(apt =>
+            apt.name.toLowerCase().includes(searchTerm) ||
+            apt.email.toLowerCase().includes(searchTerm) ||
+            apt.phone.includes(searchTerm)
+        );
+    }
+
+    if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        filtered = filtered.filter(apt => apt.slotDatetime >= fromDate);
+    }
+
+    if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(apt => apt.slotDatetime <= toDate);
+    }
+
+    if (filtered.length === 0) {
         container.innerHTML = '<p style="color: var(--text-light);">No hay citas pendientes</p>';
         return;
     }
 
-    container.innerHTML = appointments.map(apt => {
+    container.innerHTML = filtered.map(apt => {
         const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
             weekday: 'long',
             year: 'numeric',
@@ -245,8 +386,14 @@ function displayPendingAppointments(appointments) {
             minute: '2-digit'
         });
 
+        const isSelected = selectedAppointments.has(apt.id);
+
         return `
-            <div class="appointment-card">
+            <div class="appointment-card ${isSelected ? 'selected' : ''}">
+                <input type="checkbox" class="appointment-checkbox"
+                       data-id="${apt.id}"
+                       ${isSelected ? 'checked' : ''}
+                       onchange="toggleAppointmentSelection('${apt.id}')">
                 <div class="appointment-header">
                     <div>
                         <h3>${apt.name}</h3>
@@ -260,25 +407,61 @@ function displayPendingAppointments(appointments) {
                     ${apt.notes ? `<p><strong>Notas:</strong> ${apt.notes}</p>` : ''}
                 </div>
                 <div class="appointment-actions">
-                    <button class="accept-btn" onclick="acceptAppointment('${apt.id}', '${apt.email}', '${apt.name}', '${dateStr}', '${timeStr}')">Aceptar</button>
-                    <button class="reject-btn" onclick="rejectAppointment('${apt.id}', '${apt.email}', '${apt.name}')">Rechazar</button>
+                    <button class="accept-btn" onclick="acceptAppointment('${apt.id}', '${apt.email}', '${apt.name}', '${apt.slotId}', '${dateStr}', '${timeStr}')">Aceptar</button>
+                    <button class="reject-btn" onclick="rejectAppointment('${apt.id}', '${apt.email}', '${apt.name}', '${apt.slotId}')">Rechazar</button>
                     ${apt.identificationUrl ? `<button class="view-id-btn" onclick="viewIdentification('${apt.identificationUrl}')">Ver Identificación</button>` : ''}
                 </div>
             </div>
         `;
     }).join('');
+
+    updateBulkActionsVisibility();
 }
 
-// Display confirmed appointments
+// ============================================
+// CITAS CONFIRMADAS CON FILTROS
+// ============================================
+
 function displayConfirmedAppointments(appointments) {
     const container = document.getElementById('confirmedAppointments');
 
-    if (appointments.length === 0) {
+    // Apply filters
+    const searchTerm = document.getElementById('searchConfirmed')?.value.toLowerCase() || '';
+    const statusFilter = document.getElementById('filterStatus')?.value || '';
+    const dateFrom = document.getElementById('filterDateFromConfirmed')?.value || '';
+    const dateTo = document.getElementById('filterDateToConfirmed')?.value || '';
+
+    let filtered = appointments;
+
+    if (searchTerm) {
+        filtered = filtered.filter(apt =>
+            apt.name.toLowerCase().includes(searchTerm) ||
+            apt.email.toLowerCase().includes(searchTerm) ||
+            apt.phone.includes(searchTerm)
+        );
+    }
+
+    if (statusFilter) {
+        filtered = filtered.filter(apt => apt.status === statusFilter);
+    }
+
+    if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        filtered = filtered.filter(apt => apt.slotDatetime >= fromDate);
+    }
+
+    if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(apt => apt.slotDatetime <= toDate);
+    }
+
+    if (filtered.length === 0) {
         container.innerHTML = '<p style="color: var(--text-light);">No hay citas confirmadas o rechazadas</p>';
         return;
     }
 
-    container.innerHTML = appointments.map(apt => {
+    container.innerHTML = filtered.map(apt => {
         const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
             weekday: 'long',
             year: 'numeric',
@@ -314,80 +497,213 @@ function displayConfirmedAppointments(appointments) {
     }).join('');
 }
 
-// Accept appointment
-window.acceptAppointment = async (appointmentId, email, name, dateStr, timeStr) => {
+// ============================================
+// FILTROS Y BÚSQUEDA
+// ============================================
+
+// Event listeners for filters
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        document.getElementById('searchPending')?.addEventListener('input', filterAndDisplayAppointments);
+        document.getElementById('filterDateFrom')?.addEventListener('change', filterAndDisplayAppointments);
+        document.getElementById('filterDateTo')?.addEventListener('change', filterAndDisplayAppointments);
+
+        document.getElementById('searchConfirmed')?.addEventListener('input', filterAndDisplayAppointments);
+        document.getElementById('filterStatus')?.addEventListener('change', filterAndDisplayAppointments);
+        document.getElementById('filterDateFromConfirmed')?.addEventListener('change', filterAndDisplayAppointments);
+        document.getElementById('filterDateToConfirmed')?.addEventListener('change', filterAndDisplayAppointments);
+    }, 1000);
+});
+
+window.clearFilters = function(tab) {
+    if (tab === 'pending') {
+        document.getElementById('searchPending').value = '';
+        document.getElementById('filterDateFrom').value = '';
+        document.getElementById('filterDateTo').value = '';
+    } else if (tab === 'confirmed') {
+        document.getElementById('searchConfirmed').value = '';
+        document.getElementById('filterStatus').value = '';
+        document.getElementById('filterDateFromConfirmed').value = '';
+        document.getElementById('filterDateToConfirmed').value = '';
+    }
+    filterAndDisplayAppointments();
+};
+
+// ============================================
+// ACCIONES EN LOTE (BULK ACTIONS)
+// ============================================
+
+window.toggleAppointmentSelection = function(appointmentId) {
+    if (selectedAppointments.has(appointmentId)) {
+        selectedAppointments.delete(appointmentId);
+    } else {
+        selectedAppointments.add(appointmentId);
+    }
+    updateBulkActionsVisibility();
+    filterAndDisplayAppointments();
+};
+
+function updateBulkActionsVisibility() {
+    const bulkActions = document.getElementById('bulkActionsPending');
+    const count = selectedAppointments.size;
+
+    if (count > 0) {
+        bulkActions.style.display = 'flex';
+        document.getElementById('selectedCountPending').textContent = count;
+    } else {
+        bulkActions.style.display = 'none';
+    }
+}
+
+window.bulkAccept = async function() {
+    if (selectedAppointments.size === 0) return;
+
+    if (!confirm(`¿Confirmar ${selectedAppointments.size} citas seleccionadas?`)) {
+        return;
+    }
+
+    try {
+        const promises = [];
+        for (const appointmentId of selectedAppointments) {
+            const apt = allAppointments.find(a => a.id === appointmentId);
+            if (apt) {
+                promises.push(acceptAppointmentSilent(appointmentId, apt.email, apt.name, apt.slotId, apt.slotDatetime));
+            }
+        }
+
+        await Promise.all(promises);
+        selectedAppointments.clear();
+        await loadAllData();
+        showToast(`${promises.length} citas aceptadas exitosamente`);
+    } catch (error) {
+        console.error('Error in bulk accept:', error);
+        showToast('Error al aceptar citas: ' + error.message, 'error');
+    }
+};
+
+window.bulkReject = async function() {
+    if (selectedAppointments.size === 0) return;
+
+    if (!confirm(`¿Rechazar ${selectedAppointments.size} citas seleccionadas?`)) {
+        return;
+    }
+
+    try {
+        const promises = [];
+        for (const appointmentId of selectedAppointments) {
+            const apt = allAppointments.find(a => a.id === appointmentId);
+            if (apt) {
+                promises.push(rejectAppointmentSilent(appointmentId, apt.email, apt.name, apt.slotId));
+            }
+        }
+
+        await Promise.all(promises);
+        selectedAppointments.clear();
+        await loadAllData();
+        showToast(`${promises.length} citas rechazadas`);
+    } catch (error) {
+        console.error('Error in bulk reject:', error);
+        showToast('Error al rechazar citas: ' + error.message, 'error');
+    }
+};
+
+// ============================================
+// ACEPTAR/RECHAZAR CITAS
+// ============================================
+
+window.acceptAppointment = async (appointmentId, email, name, slotId, dateStr, timeStr) => {
     if (!confirm('¿Confirmar esta cita?')) {
         return;
     }
 
     try {
-        // Update appointment status
-        await updateDoc(doc(db, 'appointments', appointmentId), {
-            status: 'accepted',
-            updatedAt: serverTimestamp()
-        });
-
-        // Get appointment data to mark slot as unavailable
-        const appointmentRef = doc(db, 'appointments', appointmentId);
-        const appointmentDoc = await getDocs(query(collection(db, 'appointments'), where('__name__', '==', appointmentId)));
-
-        let slotId = null;
-        appointmentDoc.forEach(doc => {
-            slotId = doc.data().slotId;
-        });
-
-        if (slotId) {
-            await updateDoc(doc(db, 'slots', slotId), {
-                available: false
-            });
-        }
-
-        // Send confirmation email
-        await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
-            to_email: email,
-            to_name: name,
-            subject: 'Cita Confirmada - Ciao Ciao',
-            message: `Hola ${name},\n\n¡Tu cita ha sido confirmada!\n\nFecha: ${dateStr}\nHora: ${timeStr}\n\nTe esperamos en nuestro showroom.\n\nCiao Ciao Joyería`
-        });
-
-        loadAllData();
-        alert('Cita aceptada exitosamente');
+        await acceptAppointmentSilent(appointmentId, email, name, slotId, { dateStr, timeStr });
+        await loadAllData();
+        showToast('Cita aceptada exitosamente');
     } catch (error) {
         console.error('Error accepting appointment:', error);
-        alert('Error al aceptar cita: ' + error.message);
+        showToast('Error al aceptar cita: ' + error.message, 'error');
     }
 };
 
-// Reject appointment
-window.rejectAppointment = async (appointmentId, email, name) => {
+async function acceptAppointmentSilent(appointmentId, email, name, slotId, datetimeInfo) {
+    // Update appointment status
+    await updateDoc(doc(db, 'appointments', appointmentId), {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+    });
+
+    // Mark slot as unavailable
+    if (slotId) {
+        await updateDoc(doc(db, 'slots', slotId), {
+            available: false
+        });
+    }
+
+    // Send confirmation email
+    let dateStr, timeStr;
+    if (typeof datetimeInfo === 'object' && datetimeInfo.dateStr) {
+        dateStr = datetimeInfo.dateStr;
+        timeStr = datetimeInfo.timeStr;
+    } else {
+        const datetime = datetimeInfo;
+        dateStr = datetime.toLocaleDateString('es-ES', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        timeStr = datetime.toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+        to_email: email,
+        to_name: name,
+        subject: 'Cita Confirmada - Ciao Ciao',
+        message: `Hola ${name},\n\n¡Tu cita ha sido confirmada!\n\nFecha: ${dateStr}\nHora: ${timeStr}\n\nTe esperamos en nuestro showroom.\n\nCiao Ciao Joyería`
+    });
+}
+
+window.rejectAppointment = async (appointmentId, email, name, slotId) => {
     if (!confirm('¿Rechazar esta cita?')) {
         return;
     }
 
     try {
-        // Update appointment status
-        await updateDoc(doc(db, 'appointments', appointmentId), {
-            status: 'rejected',
-            updatedAt: serverTimestamp()
-        });
-
-        // Send rejection email
-        await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
-            to_email: email,
-            to_name: name,
-            subject: 'Solicitud de Cita - Ciao Ciao',
-            message: `Hola ${name},\n\nLamentamos informarte que no podemos confirmar tu cita en el horario solicitado.\n\nPor favor, visita nuestra página para seleccionar otro horario disponible.\n\nCiao Ciao Joyería`
-        });
-
-        loadAllData();
-        alert('Cita rechazada');
+        await rejectAppointmentSilent(appointmentId, email, name, slotId);
+        await loadAllData();
+        showToast('Cita rechazada');
     } catch (error) {
         console.error('Error rejecting appointment:', error);
-        alert('Error al rechazar cita: ' + error.message);
+        showToast('Error al rechazar cita: ' + error.message, 'error');
     }
 };
 
-// View identification
+async function rejectAppointmentSilent(appointmentId, email, name, slotId) {
+    // Update appointment status
+    await updateDoc(doc(db, 'appointments', appointmentId), {
+        status: 'rejected',
+        updatedAt: serverTimestamp()
+    });
+
+    // Slot remains available (don't update)
+
+    // Send rejection email
+    await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+        to_email: email,
+        to_name: name,
+        subject: 'Solicitud de Cita - Ciao Ciao',
+        message: `Hola ${name},\n\nLamentamos informarte que no podemos confirmar tu cita en el horario solicitado.\n\nPor favor, visita nuestra página para seleccionar otro horario disponible.\n\nCiao Ciao Joyería`
+    });
+}
+
+// ============================================
+// VER IDENTIFICACIÓN
+// ============================================
+
 window.viewIdentification = (url) => {
     const modal = document.getElementById('idModal');
     const content = document.getElementById('idContent');
@@ -404,6 +720,80 @@ window.viewIdentification = (url) => {
 window.closeIdModal = () => {
     document.getElementById('idModal').style.display = 'none';
 };
+
+// ============================================
+// EXPORTACIÓN A CSV
+// ============================================
+
+function appointmentsToCSV(appointments) {
+    const headers = ['Nombre', 'Email', 'Teléfono', 'Fecha', 'Hora', 'Estado', 'Notas'];
+    const rows = appointments.map(apt => {
+        const dateStr = apt.slotDatetime.toLocaleDateString('es-ES');
+        const timeStr = apt.slotDatetime.toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        const statusText = apt.status === 'pending' ? 'Pendiente' : apt.status === 'accepted' ? 'Aceptada' : 'Rechazada';
+
+        return [
+            apt.name,
+            apt.email,
+            apt.phone,
+            dateStr,
+            timeStr,
+            statusText,
+            apt.notes || ''
+        ];
+    });
+
+    let csv = headers.join(',') + '\n';
+    rows.forEach(row => {
+        csv += row.map(cell => `"${cell}"`).join(',') + '\n';
+    });
+
+    return csv;
+}
+
+function downloadCSV(csv, filename) {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+window.exportPendingCSV = function() {
+    const pending = allAppointments.filter(apt => apt.status === 'pending');
+    const csv = appointmentsToCSV(pending);
+    const timestamp = new Date().toISOString().split('T')[0];
+    downloadCSV(csv, `citas-pendientes-${timestamp}.csv`);
+    showToast('CSV exportado exitosamente');
+};
+
+window.exportConfirmedCSV = function() {
+    const confirmed = allAppointments.filter(apt => apt.status !== 'pending');
+    const csv = appointmentsToCSV(confirmed);
+    const timestamp = new Date().toISOString().split('T')[0];
+    downloadCSV(csv, `citas-confirmadas-${timestamp}.csv`);
+    showToast('CSV exportado exitosamente');
+};
+
+window.exportAllCSV = function() {
+    const csv = appointmentsToCSV(allAppointments);
+    const timestamp = new Date().toISOString().split('T')[0];
+    downloadCSV(csv, `todas-las-citas-${timestamp}.csv`);
+    showToast('CSV exportado exitosamente');
+};
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
 
 // Set minimum date for slot picker to today
 document.getElementById('slotDate').min = new Date().toISOString().split('T')[0];
