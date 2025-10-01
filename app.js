@@ -5,7 +5,7 @@
 
 import { CalendarManager, DateUtils } from './calendar.js';
 import { Validators, ValidationUtils } from './validation.js';
-import { firebaseConfig, emailConfig } from './firebase-config.js';
+import { firebaseConfig, emailConfig, adminEmail } from './firebase-config.js';
 
 // Firebase imports
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
@@ -486,7 +486,7 @@ async function sendConfirmationEmails(appointmentData, appointmentId) {
     // Email al admin
     try {
         await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
-            to_email: 'admin@ciaociao.com', // CAMBIAR ESTO
+            to_email: adminEmail,
             to_name: 'Admin',
             subject: 'Nueva Solicitud de Cita - Ciao Ciao',
             message: `Nueva solicitud:\n\nCliente: ${appointmentData.name}\nEmail: ${appointmentData.email}\nTeléfono: ${appointmentData.phone}\nFecha: ${dateStr}\nHora: ${timeStr}\nNotas: ${appointmentData.notes || 'N/A'}\n\nID: ${appointmentId}`
