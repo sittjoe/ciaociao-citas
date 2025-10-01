@@ -1337,33 +1337,67 @@ footer {
     margin-bottom: var(--spacing-xl);
 }
 
+.admin-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.admin-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, rgba(201, 165, 90, 0.1), rgba(168, 139, 73, 0.1));
+    border-radius: var(--radius-md);
+    padding: 6px;
+}
+
+.admin-logo svg {
+    filter: drop-shadow(0 2px 8px rgba(201, 165, 90, 0.2));
+}
+
 .admin-header h1 {
-    font-size: 2rem;
+    font-size: 1.75rem;
     color: var(--black-rich);
     margin: 0;
+    margin-bottom: 2px;
 }
 
 .admin-header .subtitle {
     color: var(--gray-medium);
-    font-size: 1rem;
+    font-size: 0.9rem;
     margin: 0;
 }
 
 .logout-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
     padding: 12px 24px;
     background: linear-gradient(135deg, #EF5350, #E53935);
     color: var(--white-pure);
     border: none;
     border-radius: var(--radius-md);
     font-weight: 600;
+    font-size: 0.95rem;
     cursor: pointer;
     transition: all var(--transition-base);
     box-shadow: 0 4px 12px rgba(239, 83, 80, 0.3);
 }
 
+.logout-btn svg {
+    transition: transform var(--transition-base);
+}
+
 .logout-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(239, 83, 80, 0.4);
+}
+
+.logout-btn:hover svg {
+    transform: translateX(2px);
 }
 
 /* ===== TABS NAVIGATION ===== */
@@ -2008,14 +2042,34 @@ footer {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--spacing-md);
+        padding: var(--spacing-md);
+    }
+
+    .admin-header-left {
+        width: 100%;
+    }
+
+    .admin-logo {
+        width: 40px;
+        height: 40px;
+    }
+
+    .admin-logo svg {
+        width: 28px;
+        height: 28px;
     }
 
     .admin-header h1 {
-        font-size: 1.5rem;
+        font-size: 1.4rem;
+    }
+
+    .admin-header .subtitle {
+        font-size: 0.85rem;
     }
 
     .logout-btn {
         width: 100%;
+        justify-content: center;
     }
 
     .admin-tabs {
