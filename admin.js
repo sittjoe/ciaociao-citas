@@ -370,6 +370,57 @@ function showEmptyState(container, type) {
 }
 
 // ============================================
+// AVATAR GENERATOR
+// ============================================
+
+function generateAvatar(name) {
+    const words = name.trim().split(' ');
+    const initials = words.length >= 2
+        ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
+        : words[0].slice(0, 2).toUpperCase();
+
+    // 6 color variations based on first letter
+    const colors = [
+        { bg: 'linear-gradient(135deg, #C9A55A, #A88B49)', text: '#FFF' }, // Gold
+        { bg: 'linear-gradient(135deg, #66BB6A, #43A047)', text: '#FFF' }, // Green
+        { bg: 'linear-gradient(135deg, #42A5F5, #1E88E5)', text: '#FFF' }, // Blue
+        { bg: 'linear-gradient(135deg, #AB47BC, #8E24AA)', text: '#FFF' }, // Purple
+        { bg: 'linear-gradient(135deg, #FF7043, #F4511E)', text: '#FFF' }, // Orange
+        { bg: 'linear-gradient(135deg, #EC407A, #D81B60)', text: '#FFF' }  // Pink
+    ];
+
+    const colorIndex = name.charCodeAt(0) % colors.length;
+    const color = colors[colorIndex];
+
+    return `
+        <div class="appointment-avatar" style="background: ${color.bg}; color: ${color.text};">
+            ${initials}
+        </div>
+    `;
+}
+
+function getRelativeTime(date) {
+    const now = new Date();
+    const diff = now - date;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 7) {
+        return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+    } else if (days > 0) {
+        return `Hace ${days} ${days === 1 ? 'día' : 'días'}`;
+    } else if (hours > 0) {
+        return `Hace ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+    } else if (minutes > 0) {
+        return `Hace ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+    } else {
+        return 'Hace un momento';
+    }
+}
+
+// ============================================
 // CONFIRMATION MODAL
 // ============================================
 
@@ -784,6 +835,7 @@ function displayPendingAppointments(appointments) {
         });
 
         const isSelected = selectedAppointments.has(apt.id);
+        const timeAgo = apt.createdAt ? getRelativeTime(apt.createdAt.toDate()) : '';
 
         return `
             <div class="appointment-card ${isSelected ? 'selected' : ''}">
@@ -792,9 +844,13 @@ function displayPendingAppointments(appointments) {
                        ${isSelected ? 'checked' : ''}
                        onchange="toggleAppointmentSelection('${apt.id}')">
                 <div class="appointment-header">
-                    <div>
-                        <h3>${apt.name}</h3>
-                        <p style="color: var(--text-light);">${dateStr} - ${timeStr}</p>
+                    <div class="appointment-header-left">
+                        ${generateAvatar(apt.name)}
+                        <div class="appointment-header-info">
+                            <h3>${apt.name}</h3>
+                            <p style="color: var(--text-light);">${dateStr} - ${timeStr}</p>
+                            ${timeAgo ? `<p class="appointment-time-ago">${timeAgo}</p>` : ''}
+                        </div>
                     </div>
                     <span class="appointment-status status-pending">Pendiente</span>
                 </div>
@@ -874,13 +930,18 @@ function displayConfirmedAppointments(appointments) {
         const statusClass = apt.status === 'accepted' ? 'status-accepted' : 'status-rejected';
         const statusText = apt.status === 'accepted' ? 'Aceptada' : 'Rechazada';
         const cardClass = apt.status === 'accepted' ? 'accepted' : 'rejected';
+        const timeAgo = apt.updatedAt ? getRelativeTime(apt.updatedAt.toDate()) : '';
 
         return `
             <div class="appointment-card ${cardClass}">
                 <div class="appointment-header">
-                    <div>
-                        <h3>${apt.name}</h3>
-                        <p style="color: var(--text-light);">${dateStr} - ${timeStr}</p>
+                    <div class="appointment-header-left">
+                        ${generateAvatar(apt.name)}
+                        <div class="appointment-header-info">
+                            <h3>${apt.name}</h3>
+                            <p style="color: var(--text-light);">${dateStr} - ${timeStr}</p>
+                            ${timeAgo ? `<p class="appointment-time-ago">${statusText} ${timeAgo.toLowerCase()}</p>` : ''}
+                        </div>
                     </div>
                     <span class="appointment-status ${statusClass}">${statusText}</span>
                 </div>

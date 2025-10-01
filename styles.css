@@ -2137,15 +2137,45 @@ footer {
     gap: var(--spacing-sm);
 }
 
+.appointment-header-left {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    flex: 1;
+}
+
+.appointment-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.appointment-header-info {
+    flex: 1;
+}
+
 .appointment-header h3 {
     font-size: 1.25rem;
     color: var(--black-rich);
-    margin: 0;
+    margin: 0 0 4px 0;
 }
 
 .appointment-header p {
-    margin: var(--spacing-xs) 0 0 0;
+    margin: 0;
     font-size: 0.9rem;
+}
+
+.appointment-time-ago {
+    font-size: 0.85rem;
+    color: var(--gray-medium);
+    margin-top: 4px;
 }
 
 .appointment-status {
@@ -2154,6 +2184,17 @@ footer {
     font-size: 0.85rem;
     font-weight: 600;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all var(--transition-base);
+}
+
+.appointment-status::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
 }
 
 .status-pending {
@@ -2161,14 +2202,29 @@ footer {
     color: #E65100;
 }
 
+.status-pending::before {
+    background: #FF9800;
+    box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+}
+
 .status-accepted {
     background: linear-gradient(135deg, #E8F5E9, #C8E6C9);
     color: #1B5E20;
 }
 
+.status-accepted::before {
+    background: #4CAF50;
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+}
+
 .status-rejected {
     background: linear-gradient(135deg, #FFEBEE, #FFCDD2);
     color: #B71C1C;
+}
+
+.status-rejected::before {
+    background: #F44336;
+    box-shadow: 0 0 8px rgba(244, 67, 54, 0.6);
 }
 
 .appointment-info {
