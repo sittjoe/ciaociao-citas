@@ -67,6 +67,71 @@ function showDashboard() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('adminDashboard').style.display = 'block';
     loadAllData();
+    initKeyboardShortcuts();
+}
+
+// ============================================
+// KEYBOARD SHORTCUTS
+// ============================================
+
+function initKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Ignore if typing in input/textarea
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            // Allow Escape to close modals even when focused
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('confirmModal');
+                if (modal.style.display === 'flex') {
+                    document.getElementById('modalCancel').click();
+                }
+            }
+            return;
+        }
+
+        const ctrl = e.ctrlKey || e.metaKey;
+
+        // Ctrl+K: Focus search
+        if (ctrl && e.key === 'k') {
+            e.preventDefault();
+            const activeTab = document.querySelector('.tab-content.active');
+            const searchInput = activeTab?.querySelector('input[type="text"]');
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.select();
+            }
+        }
+
+        // Ctrl+1/2/3/4: Switch tabs
+        if (ctrl && ['1', '2', '3', '4'].includes(e.key)) {
+            e.preventDefault();
+            const tabs = ['dashboard', 'slots', 'pending', 'confirmed'];
+            const tabIndex = parseInt(e.key) - 1;
+            switchTab(tabs[tabIndex]);
+        }
+
+        // Ctrl+E: Export CSV (from active tab)
+        if (ctrl && e.key === 'e') {
+            e.preventDefault();
+            const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+            if (activeTab === 'pending') {
+                exportPendingCSV();
+            } else if (activeTab === 'confirmed') {
+                exportConfirmedCSV();
+            } else {
+                exportAllCSV();
+            }
+        }
+
+        // Escape: Clear search
+        if (e.key === 'Escape') {
+            const activeTab = document.querySelector('.tab-content.active');
+            const searchInput = activeTab?.querySelector('input[type="text"]');
+            if (searchInput && searchInput.value) {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+            }
+        }
+    });
 }
 
 // ============================================
@@ -1050,17 +1115,37 @@ function displayConfirmedAppointments(appointments) {
 }
 
 // ============================================
-// FILTROS Y BÚSQUEDA
+// FILTROS Y BÚSQUEDA MEJORADA
 // ============================================
+
+// Debounce helper
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Debounced filter function (300ms delay)
+const debouncedFilter = debounce(() => {
+    filterAndDisplayAppointments();
+}, 300);
 
 // Event listeners for filters
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
-        document.getElementById('searchPending')?.addEventListener('input', filterAndDisplayAppointments);
+        // Search inputs with debounce
+        document.getElementById('searchPending')?.addEventListener('input', debouncedFilter);
+        document.getElementById('searchConfirmed')?.addEventListener('input', debouncedFilter);
+
+        // Date filters immediate
         document.getElementById('filterDateFrom')?.addEventListener('change', filterAndDisplayAppointments);
         document.getElementById('filterDateTo')?.addEventListener('change', filterAndDisplayAppointments);
-
-        document.getElementById('searchConfirmed')?.addEventListener('input', filterAndDisplayAppointments);
         document.getElementById('filterStatus')?.addEventListener('change', filterAndDisplayAppointments);
         document.getElementById('filterDateFromConfirmed')?.addEventListener('change', filterAndDisplayAppointments);
         document.getElementById('filterDateToConfirmed')?.addEventListener('change', filterAndDisplayAppointments);
