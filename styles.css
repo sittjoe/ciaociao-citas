@@ -1917,6 +1917,134 @@ footer {
     box-shadow: 0 6px 20px rgba(239, 83, 80, 0.4);
 }
 
+/* ===== CUSTOM CHECKBOXES ===== */
+
+.appointment-checkbox {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--gold-champagne);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    position: relative;
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+    margin-right: var(--spacing-sm);
+}
+
+.appointment-checkbox:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 4px rgba(201, 165, 90, 0.1);
+}
+
+.appointment-checkbox:checked {
+    background: linear-gradient(135deg, var(--gold-champagne), var(--gold-dark));
+    border-color: var(--gold-dark);
+}
+
+.appointment-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 3px;
+    width: 6px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    animation: checkmark 0.3s ease-out;
+}
+
+@keyframes checkmark {
+    0% {
+        opacity: 0;
+        transform: rotate(45deg) scale(0);
+    }
+    50% {
+        opacity: 1;
+        transform: rotate(45deg) scale(1.2);
+    }
+    100% {
+        opacity: 1;
+        transform: rotate(45deg) scale(1);
+    }
+}
+
+/* ===== MICRO ANIMATIONS ===== */
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.stat-value {
+    transition: all var(--transition-base);
+}
+
+.stat-value.updating {
+    animation: pulse 0.5s ease;
+    color: var(--gold-champagne);
+}
+
+.action-btn,
+.accept-btn,
+.reject-btn,
+.view-id-btn,
+.delete-btn,
+.btn-primary,
+.btn-secondary {
+    position: relative;
+    overflow: hidden;
+}
+
+.action-btn::before,
+.accept-btn::before,
+.reject-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.action-btn:active::before,
+.accept-btn:active::before,
+.reject-btn:active::before {
+    width: 300px;
+    height: 300px;
+}
+
+/* Toast bounce animation */
+.toast {
+    animation: slideInBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes slideInBounce {
+    0% {
+        opacity: 0;
+        transform: translateX(400px);
+    }
+    60% {
+        opacity: 1;
+        transform: translateX(-20px);
+    }
+    80% {
+        transform: translateX(10px);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
+
 /* Upcoming Appointments */
 
 .upcoming-item {
