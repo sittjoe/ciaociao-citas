@@ -1,0 +1,29 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ============================================
+    // IDENTIFICATIONS: Archivos de identificación
+    // ============================================
+    // - Clientes: pueden subir archivos (hasta 5MB)
+    // - Admin: puede leer todos los archivos
+    match /identifications/{fileName} {
+      // Permitir subida de archivos con límite de 5MB
+      // Validar tipos de archivo permitidos: images y PDF
+      allow write: if request.resource.size < 5 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*')
+                   || request.resource.contentType == 'application/pdf');
+
+      // Permitir lectura de archivos (para admin revisar identificaciones)
+      allow read: if true;
+    }
+
+    // ============================================
+    // OTROS ARCHIVOS (bloqueados por defecto)
+    // ============================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
