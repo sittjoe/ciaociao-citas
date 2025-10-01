@@ -1,6 +1,11 @@
 # 🌟 Sistema de Citas - Ciao Ciao Joyería
 
-Sistema completo de agendamiento de citas para showroom de joyería, deployable en GitHub Pages.
+[![Firebase](https://img.shields.io/badge/Firebase-10.8.0-FFCA28?logo=firebase)](https://firebase.google.com/)
+[![EmailJS](https://img.shields.io/badge/EmailJS-3.x-0066CC?logo=minutemailer)](https://www.emailjs.com/)
+[![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel)](https://vercel.com/)
+[![Netlify](https://img.shields.io/badge/Deploy-Netlify-00C7B7?logo=netlify)](https://www.netlify.com/)
+
+Sistema completo de agendamiento de citas para showroom de joyería, con diseño luxury y gestión avanzada.
 
 ## 📋 Características
 
@@ -13,12 +18,16 @@ Sistema completo de agendamiento de citas para showroom de joyería, deployable 
 
 ### Para Administrador:
 - ✅ Panel de administración protegido con contraseña
+- ✅ Dashboard con estadísticas en tiempo real
 - ✅ Gestión de horarios disponibles (agregar/eliminar)
-- ✅ Ver citas pendientes de aprobación
-- ✅ Aceptar o rechazar citas
-- ✅ Ver identificaciones adjuntas
-- ✅ Historial de citas confirmadas/rechazadas
-- ✅ Notificaciones automáticas por email
+- ✅ Filtros avanzados (búsqueda, fechas, estado)
+- ✅ Acciones en lote (aceptar/rechazar múltiples)
+- ✅ Aceptar o rechazar citas individuales
+- ✅ Ver identificaciones adjuntas en modal
+- ✅ Exportación a CSV (pendientes, confirmadas, todas)
+- ✅ Notificaciones toast elegantes
+- ✅ Historial completo de citas
+- ✅ Emails automáticos (confirmación/rechazo)
 
 ## 🚀 Configuración
 
@@ -120,10 +129,11 @@ Sistema completo de agendamiento de citas para showroom de joyería, deployable 
    };
    ```
 
-7. **IMPORTANTE**: Actualiza el email del admin en `app.js` línea 136:
+7. **IMPORTANTE**: Configura el email del administrador en `firebase-config.js`:
    ```javascript
-   to_email: 'tu-email@ciaociao.com', // ← Cambia esto
+   export const adminEmail = "tu-email@ejemplo.com";
    ```
+   Aquí recibirás notificaciones cuando un cliente agende una cita.
 
 ### 3. Cambiar Contraseña de Admin
 
@@ -139,114 +149,150 @@ Agrega este script en `index.html` y `admin.html` antes del cierre de `</body>`:
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 ```
 
-## 📦 Despliegue en GitHub Pages
+## 📦 Despliegue
 
-### Opción 1: Desde GitHub Web
+### Opción 1: Vercel (Recomendado)
 
-1. Crea un nuevo repositorio en GitHub
-2. Sube todos los archivos del proyecto
-3. Ve a Settings → Pages
-4. En "Source", selecciona la rama `main` y carpeta `/ (root)`
-5. Click en "Save"
-6. Tu sitio estará disponible en `https://tu-usuario.github.io/nombre-repo/`
+1. Ve a [Vercel](https://vercel.com/)
+2. Click en **"New Project"**
+3. Importa tu repositorio de GitHub
+4. Vercel detectará automáticamente la configuración (gracias a `vercel.json`)
+5. Click en **"Deploy"**
+6. Tu sitio estará en: `https://tu-proyecto.vercel.app`
 
-### Opción 2: Desde la Terminal
+**URLs importantes:**
+- Cliente: `https://tu-proyecto.vercel.app/`
+- Admin: `https://tu-proyecto.vercel.app/admin.html`
 
-```bash
-# Inicializar repositorio
-git init
-git add .
-git commit -m "Initial commit: Sistema de citas Ciao Ciao"
+### Opción 2: Netlify
 
-# Conectar con GitHub
-git branch -M main
-git remote add origin https://github.com/tu-usuario/nombre-repo.git
-git push -u origin main
+1. Ve a [Netlify](https://www.netlify.com/)
+2. Click en **"Add new site"** → **"Import an existing project"**
+3. Conecta tu repositorio de GitHub
+4. Netlify detectará automáticamente la configuración (gracias a `netlify.toml`)
+5. Click en **"Deploy site"**
+6. Tu sitio estará en: `https://tu-proyecto.netlify.app`
 
-# Habilitar GitHub Pages desde Settings → Pages
-```
+**URLs importantes:**
+- Cliente: `https://tu-proyecto.netlify.app/`
+- Admin: `https://tu-proyecto.netlify.app/admin.html`
+
+### ⚠️ Importante después del despliegue
+
+1. **Configura firebase-config.js** con tus credenciales reales
+2. **NO subas firebase-config.js** a GitHub (ya está en .gitignore)
+3. **Vuelve a desplegar** después de configurar
 
 ## 🎯 Uso
 
 ### Para Administrador:
 
-1. Ve a `https://tu-sitio.github.io/admin.html`
+1. Ve a `https://tu-proyecto.vercel.app/admin.html` (o tu URL de Netlify)
 2. Ingresa la contraseña configurada
-3. **Agregar horarios disponibles**:
-   - Pestaña "Horarios Disponibles"
+3. **Dashboard**:
+   - Ve estadísticas en tiempo real
+   - Próximas 5 citas confirmadas
+   - Acciones rápidas
+4. **Agregar horarios**:
+   - Pestaña "Horarios"
    - Selecciona fecha y hora
    - Click en "Agregar Horario"
-4. **Gestionar citas**:
-   - Pestaña "Citas Pendientes" → Ver solicitudes nuevas
-   - Click en "Aceptar" o "Rechazar"
+5. **Gestionar citas pendientes**:
+   - Pestaña "Pendientes"
+   - Usa filtros para buscar
+   - Aceptar/rechazar individual o en lote
    - Ver identificación adjunta
-5. **Ver historial**:
-   - Pestaña "Citas Confirmadas" → Ver todas las citas
+6. **Ver historial**:
+   - Pestaña "Confirmadas"
+   - Filtrar por estado y fechas
+   - Exportar a CSV
 
 ### Para Clientes:
 
-1. Ve a `https://tu-sitio.github.io/`
-2. Selecciona un horario disponible
-3. Completa el formulario con tus datos
-4. Adjunta foto de identificación
-5. Envía la solicitud
-6. Recibirás un email de confirmación
+1. Ve a `https://tu-proyecto.vercel.app/` (o tu URL de Netlify)
+2. Selecciona una fecha en el calendario
+3. Elige un horario disponible
+4. Completa el formulario multi-paso
+5. Sube tu identificación (drag & drop)
+6. Confirma y envía
+7. Recibirás email de confirmación automático
 
 ## 🔧 Estructura del Proyecto
 
 ```
-ciaociao-appointments/
-├── index.html              # Página principal para clientes
-├── admin.html              # Panel de administración
-├── styles.css              # Estilos generales
-├── app.js                  # Lógica del cliente
-├── admin.js                # Lógica del admin
-├── firebase-config.js      # Configuración (NO subir a GitHub público)
-└── README.md              # Este archivo
+ciaociao-citas/
+├── index.html                      # Página principal para clientes
+├── admin.html                      # Panel de administración
+├── styles.css                      # Estilos luxury completos
+├── app.js                          # Lógica del cliente (606 líneas)
+├── admin.js                        # Lógica del admin (803 líneas)
+├── validation.js                   # Sistema de validaciones (283 líneas)
+├── calendar.js                     # Calendario interactivo (343 líneas)
+├── firebase-config.js              # Configuración REAL (NO subir)
+├── firebase-config.template.js     # Template para repo
+├── vercel.json                     # Configuración Vercel
+├── netlify.toml                    # Configuración Netlify
+├── assets/icons/                   # 8 SVG icons profesionales
+├── SETUP.md                        # Guía de configuración completa
+├── MANUAL-USUARIO.md               # Manual de administración
+└── README.md                       # Este archivo
 ```
 
 ## ⚠️ Seguridad
 
-**IMPORTANTE**: Si tu repositorio es **público**:
+### ✅ Configuración Segura Incluida
 
-1. **NO subas `firebase-config.js` a GitHub**:
-   ```bash
-   # Agregar a .gitignore
-   echo "firebase-config.js" >> .gitignore
-   ```
+1. **firebase-config.js ya está protegido**:
+   - ✅ Archivo incluido en `.gitignore`
+   - ✅ NO se subirá a GitHub
+   - ✅ Template disponible: `firebase-config.template.js`
 
-2. **Alternativa**: Crea `firebase-config.template.js` con valores de ejemplo:
-   ```javascript
-   export const firebaseConfig = {
-       apiKey: "TU_API_KEY",
-       authDomain: "TU_PROJECT.firebaseapp.com",
-       // ...
-   };
-   ```
+2. **Instrucciones para configurar**:
+   - Copia `firebase-config.template.js` → `firebase-config.js`
+   - Llena con tus credenciales reales
+   - El archivo con credenciales NUNCA se subirá a GitHub
 
-3. Los usuarios deben:
-   - Copiar `firebase-config.template.js` → `firebase-config.js`
-   - Llenar con sus propios valores
+3. **Headers de Seguridad** (automáticos):
+   - ✅ X-Content-Type-Options: nosniff
+   - ✅ X-Frame-Options: DENY
+   - ✅ X-XSS-Protection: 1; mode=block
+   - ✅ Referrer-Policy: strict-origin-when-cross-origin
+   - ✅ Cache-Control optimizado
 
-4. **Las reglas de Firestore y Storage ya protegen los datos** - los clientes no pueden leer/modificar citas ni identificaciones de otros usuarios.
+4. **Reglas de Firebase**:
+   - ✅ Firestore: Clientes solo pueden crear citas, no leer ni modificar
+   - ✅ Storage: Solo escritura de archivos < 5MB (imágenes/PDF)
+   - ✅ Admin accede vía sesión protegida por contraseña
+
+5. **Contraseña de Admin**:
+   - ⚠️ Almacenada en cliente (sessionStorage)
+   - ✅ Para producción real, considera Firebase Auth
+   - ✅ Suficiente para MVP y uso privado
 
 ## 🎨 Personalización
 
-### Colores (en `styles.css`):
+### Paleta de Colores Luxury (en `styles.css`):
 ```css
 :root {
-    --primary-color: #d4af37;      /* Dorado */
-    --secondary-color: #1a1a1a;    /* Negro */
-    --success-color: #28a745;      /* Verde */
-    --error-color: #dc3545;        /* Rojo */
+    --gold-champagne: #C9A55A;    /* Dorado champagne principal */
+    --gold-dark: #A88B49;         /* Dorado oscuro para hover */
+    --gold-light: #E8D5A8;        /* Dorado claro para fondos */
+    --black-rich: #0D0D0D;        /* Negro rico para textos */
+    --black-soft: #1A1A1A;        /* Negro suave para fondos */
 }
 ```
 
-### Logo:
-Agrega tu logo en el header de `index.html` y `admin.html`
+### Tipografía:
+- **Títulos**: Cormorant Garamond (serif elegante)
+- **Texto**: Inter (sans-serif moderna)
 
-### Textos:
-Personaliza todos los mensajes en los archivos HTML y JS
+### Iconos:
+- 8 SVG custom en `assets/icons/`
+- Fácil de personalizar colores y tamaños
+
+### Mensajes y Textos:
+- Todos centralizados en JS y HTML
+- Busca por palabra clave para personalizar
 
 ## 📧 Plantilla de Email Sugerida
 

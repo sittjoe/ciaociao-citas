@@ -10,6 +10,10 @@ export const firebaseConfig = {
     appId: "TU_APP_ID"
 };
 
+// Email del administrador
+// Aquí se enviarán las notificaciones de nuevas citas pendientes
+export const adminEmail = "TU_EMAIL_ADMIN_AQUI";
+
 // Contraseña de administrador (cámbiala por una segura)
 export const ADMIN_PASSWORD = "ciaociao2025";
 

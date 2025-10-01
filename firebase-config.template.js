@@ -13,9 +13,13 @@ export const firebaseConfig = {
     appId: "TU_APP_ID"
 };
 
+// Email del administrador
+// Aquí se enviarán las notificaciones de nuevas citas pendientes
+export const adminEmail = "tu-email@ejemplo.com";
+
 // Contraseña de administrador
 // IMPORTANTE: Cambia esto por una contraseña segura
-export const ADMIN_PASSWORD = "ciaociao2025";
+export const ADMIN_PASSWORD = "CambiaEstaContraseña2025";
 
 // Configuración de EmailJS
 // Obtén estos valores desde https://www.emailjs.com/
@@ -24,10 +28,3 @@ export const emailConfig = {
     templateId: "TU_TEMPLATE_ID",
     publicKey: "TU_PUBLIC_KEY"
 };
-
-// NOTA: Después de configurar, no olvides:
-// 1. Agregar el script de EmailJS en index.html y admin.html:
-//    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-//
-// 2. Cambiar el email del administrador en app.js línea 136:
-//    to_email: 'tu-email@ciaociao.com'
