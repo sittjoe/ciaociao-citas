@@ -925,6 +925,213 @@ footer {
     }
 }
 
+/* ========================================
+   ADMIN PANEL STYLES
+   ======================================== */
+
+/* ===== LOGIN SCREEN ===== */
+
+.login-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--black-rich) 0%, var(--black-soft) 100%);
+    position: relative;
+    overflow: hidden;
+    padding: var(--spacing-md);
+}
+
+.login-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(201,165,90,0.05)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23grid)"/></svg>');
+    opacity: 0.3;
+}
+
+.login-box {
+    position: relative;
+    z-index: 2;
+    background: var(--white-pure);
+    padding: var(--spacing-2xl);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    max-width: 450px;
+    width: 100%;
+    animation: slideUp var(--transition-slow);
+}
+
+.login-box h1 {
+    color: var(--black-rich);
+    margin-bottom: var(--spacing-xs);
+}
+
+.login-box .subtitle {
+    color: var(--gray-medium);
+    margin-bottom: var(--spacing-xl);
+}
+
+.login-box .form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.login-box label {
+    display: block;
+    font-weight: 500;
+    color: var(--gray-dark);
+    margin-bottom: var(--spacing-xs);
+    font-size: 0.95rem;
+}
+
+.login-box input[type="password"] {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid var(--gray-light);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    transition: all var(--transition-base);
+    font-family: 'Inter', sans-serif;
+}
+
+.login-box input[type="password"]:focus {
+    outline: none;
+    border-color: var(--gold-champagne);
+    box-shadow: 0 0 0 3px rgba(201, 165, 90, 0.1);
+}
+
+/* ===== ADMIN CONTAINER ===== */
+
+.admin-container {
+    min-height: 100vh;
+    background: var(--white-warm);
+    padding-bottom: var(--spacing-2xl);
+}
+
+.admin-header {
+    background: var(--white-pure);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid var(--gold-champagne);
+    margin-bottom: var(--spacing-xl);
+}
+
+.admin-header h1 {
+    font-size: 2rem;
+    color: var(--black-rich);
+    margin: 0;
+}
+
+.admin-header .subtitle {
+    color: var(--gray-medium);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.logout-btn {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #EF5350, #E53935);
+    color: var(--white-pure);
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 12px rgba(239, 83, 80, 0.3);
+}
+
+.logout-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(239, 83, 80, 0.4);
+}
+
+/* ===== TABS NAVIGATION ===== */
+
+.admin-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    background: var(--white-pure);
+    padding: 0 var(--spacing-xl);
+    box-shadow: var(--shadow-sm);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 2px solid var(--gray-light);
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.admin-tabs::-webkit-scrollbar {
+    height: 4px;
+}
+
+.admin-tabs::-webkit-scrollbar-thumb {
+    background: var(--gold-champagne);
+    border-radius: 2px;
+}
+
+.tab-btn {
+    padding: 16px 24px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--gray-medium);
+    font-weight: 500;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    white-space: nowrap;
+    font-family: 'Inter', sans-serif;
+}
+
+.tab-btn:hover {
+    color: var(--gold-dark);
+    background: rgba(201, 165, 90, 0.05);
+}
+
+.tab-btn.active {
+    color: var(--gold-champagne);
+    font-weight: 600;
+    border-bottom-color: var(--gold-champagne);
+    background: rgba(201, 165, 90, 0.08);
+}
+
+/* ===== TAB CONTENT ===== */
+
+.tab-content {
+    display: none;
+    padding: var(--spacing-xl);
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn var(--transition-base);
+}
+
+.admin-section {
+    background: var(--white-pure);
+    padding: var(--spacing-xl);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    margin-bottom: var(--spacing-xl);
+}
+
+.admin-section h2 {
+    font-size: 1.5rem;
+    color: var(--black-rich);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 2px solid var(--gray-light);
+}
+
 /* ===== ADMIN PANEL: DASHBOARD & STATS ===== */
 
 .stats-grid {
@@ -1185,9 +1392,332 @@ footer {
     color: var(--black-rich);
 }
 
+/* ===== APPOINTMENT CARDS ===== */
+
+.appointments-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.appointment-card {
+    background: var(--white-pure);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-md);
+    border-left: 4px solid var(--gold-champagne);
+    transition: all var(--transition-base);
+    position: relative;
+}
+
+.appointment-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.appointment-card.selected {
+    border-left-color: var(--gold-dark);
+    background: rgba(201, 165, 90, 0.05);
+    box-shadow: 0 0 0 2px var(--gold-champagne);
+}
+
+.appointment-card.accepted {
+    border-left-color: #66BB6A;
+}
+
+.appointment-card.rejected {
+    border-left-color: #EF5350;
+}
+
+.appointment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-md);
+    gap: var(--spacing-sm);
+}
+
+.appointment-header h3 {
+    font-size: 1.25rem;
+    color: var(--black-rich);
+    margin: 0;
+}
+
+.appointment-header p {
+    margin: var(--spacing-xs) 0 0 0;
+    font-size: 0.9rem;
+}
+
+.appointment-status {
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-pending {
+    background: linear-gradient(135deg, #FFF3E0, #FFE0B2);
+    color: #E65100;
+}
+
+.status-accepted {
+    background: linear-gradient(135deg, #E8F5E9, #C8E6C9);
+    color: #1B5E20;
+}
+
+.status-rejected {
+    background: linear-gradient(135deg, #FFEBEE, #FFCDD2);
+    color: #B71C1C;
+}
+
+.appointment-info {
+    display: grid;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+}
+
+.appointment-info p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--gray-dark);
+}
+
+.appointment-info strong {
+    color: var(--black-rich);
+    font-weight: 600;
+}
+
+.appointment-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--gray-light);
+}
+
+.appointment-checkbox {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    z-index: 10;
+    accent-color: var(--gold-champagne);
+}
+
+/* ===== ACTION BUTTONS ===== */
+
+.accept-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #66BB6A, #43A047);
+    color: var(--white-pure);
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 12px rgba(102, 187, 106, 0.3);
+}
+
+.accept-btn:hover {
+    background: linear-gradient(135deg, #43A047, #2E7D32);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(102, 187, 106, 0.4);
+}
+
+.reject-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #EF5350, #E53935);
+    color: var(--white-pure);
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 12px rgba(239, 83, 80, 0.3);
+}
+
+.reject-btn:hover {
+    background: linear-gradient(135deg, #E53935, #C62828);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(239, 83, 80, 0.4);
+}
+
+.view-id-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #42A5F5, #1E88E5);
+    color: var(--white-pure);
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 12px rgba(66, 165, 245, 0.3);
+}
+
+.view-id-btn:hover {
+    background: linear-gradient(135deg, #1E88E5, #1565C0);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(66, 165, 245, 0.4);
+}
+
+.delete-btn {
+    padding: 10px 20px;
+    background: transparent;
+    color: #EF5350;
+    border: 2px solid #EF5350;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.delete-btn:hover {
+    background: #EF5350;
+    color: var(--white-pure);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 83, 80, 0.3);
+}
+
+/* ===== SLOTS LIST ===== */
+
+.add-slot-form {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-xl);
+}
+
+.add-slot-form .form-group {
+    flex: 1;
+    min-width: 200px;
+}
+
+.add-slot-form label {
+    display: block;
+    font-weight: 500;
+    color: var(--gray-dark);
+    margin-bottom: var(--spacing-xs);
+    font-size: 0.95rem;
+}
+
+.add-slot-form input[type="date"],
+.add-slot-form input[type="time"] {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--gray-light);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    transition: all var(--transition-base);
+    font-family: 'Inter', sans-serif;
+}
+
+.add-slot-form input:focus {
+    outline: none;
+    border-color: var(--gold-champagne);
+    box-shadow: 0 0 0 3px rgba(201, 165, 90, 0.1);
+}
+
+.slots-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.slot-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--white-pure);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--gold-champagne);
+    transition: all var(--transition-base);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.slot-item:hover {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-md);
+}
+
+.slot-item div {
+    flex: 1;
+}
+
+.slot-item strong {
+    color: var(--black-rich);
+    font-weight: 600;
+}
+
 /* ===== RESPONSIVE ADMIN ===== */
 
 @media (max-width: 768px) {
+    .admin-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-md);
+    }
+
+    .admin-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .logout-btn {
+        width: 100%;
+    }
+
+    .admin-tabs {
+        padding: 0 var(--spacing-md);
+    }
+
+    .tab-content {
+        padding: var(--spacing-md);
+    }
+
+    .admin-section {
+        padding: var(--spacing-md);
+    }
+
+    .appointment-header {
+        flex-direction: column;
+    }
+
+    .appointment-actions {
+        flex-direction: column;
+    }
+
+    .appointment-actions button {
+        width: 100%;
+    }
+
+    .add-slot-form {
+        flex-direction: column;
+    }
+
+    .add-slot-form .form-group {
+        width: 100%;
+    }
+
+    .slot-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+
+    .delete-btn {
+        width: 100%;
+    }
+
+
     .stats-grid {
         grid-template-columns: 1fr;
     }
