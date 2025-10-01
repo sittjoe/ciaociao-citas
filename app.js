@@ -145,7 +145,19 @@ class TimeSlotManager {
         titleEl.textContent = `Horarios disponibles para ${DateUtils.formatLongDate(date)}`;
 
         if (AppState.slotsForSelectedDate.length === 0) {
-            container.innerHTML = '<p style="text-align: center; padding: 40px; color: var(--gray-medium);">No hay horarios disponibles para esta fecha.</p>';
+            container.innerHTML = `
+                <div class="empty-state-client">
+                    <svg width="80" height="80" viewBox="0 0 80 80" fill="none" class="empty-state-icon">
+                        <circle cx="40" cy="40" r="38" stroke="var(--gold-champagne)" stroke-width="2" opacity="0.2"/>
+                        <path d="M25 40L35 50L55 30" stroke="var(--gold-champagne)" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+                        <circle cx="40" cy="40" r="3" fill="var(--gold-champagne)"/>
+                    </svg>
+                    <h4 class="empty-state-title">No hay horarios disponibles</h4>
+                    <p class="empty-state-text">
+                        Esta fecha no tiene horarios disponibles. Por favor, selecciona otra fecha en el calendario.
+                    </p>
+                </div>
+            `;
             return;
         }
 
