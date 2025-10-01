@@ -22,6 +22,11 @@ let selectedAppointments = new Set();
 let statusChart = null;
 let weekChart = null;
 
+// Pagination
+let currentPagePending = 1;
+let currentPageConfirmed = 1;
+const itemsPerPage = 10;
+
 // Load EmailJS
 (function() {
     emailjs.init(emailConfig.publicKey);
@@ -368,6 +373,88 @@ function showEmptyState(container, type) {
         </div>
     `;
 }
+
+// ============================================
+// PAGINATION
+// ============================================
+
+function paginateArray(array, page, perPage = itemsPerPage) {
+    const start = (page - 1) * perPage;
+    const end = start + perPage;
+    return array.slice(start, end);
+}
+
+function createPagination(containerId, totalItems, currentPage, onPageChange) {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (totalPages <= 1) return '';
+
+    const start = (currentPage - 1) * itemsPerPage + 1;
+    const end = Math.min(currentPage * itemsPerPage, totalItems);
+
+    let paginationHTML = `
+        <div class="pagination">
+            <div class="pagination-info">
+                Mostrando ${start}-${end} de ${totalItems}
+            </div>
+            <div class="pagination-buttons">
+                <button class="pagination-btn" onclick="${onPageChange}(1)" ${currentPage === 1 ? 'disabled' : ''}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 17L13 12L18 7M11 17L6 12L11 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button class="pagination-btn" onclick="${onPageChange}(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+    `;
+
+    // Show page numbers
+    const showPages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(showPages / 2));
+    let endPage = Math.min(totalPages, startPage + showPages - 1);
+
+    if (endPage - startPage < showPages - 1) {
+        startPage = Math.max(1, endPage - showPages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHTML += `
+            <button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="${onPageChange}(${i})">
+                ${i}
+            </button>
+        `;
+    }
+
+    paginationHTML += `
+                <button class="pagination-btn" onclick="${onPageChange}(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button class="pagination-btn" onclick="${onPageChange}(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M6 17L11 12L6 7M13 17L18 12L13 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+
+    return paginationHTML;
+}
+
+window.goToPagePending = function(page) {
+    currentPagePending = page;
+    const pending = allAppointments.filter(apt => apt.status === 'pending');
+    displayPendingAppointments(pending);
+};
+
+window.goToPageConfirmed = function(page) {
+    currentPageConfirmed = page;
+    const confirmed = allAppointments.filter(apt => apt.status !== 'pending');
+    displayConfirmedAppointments(confirmed);
+};
 
 // ============================================
 // AVATAR GENERATOR
@@ -822,7 +909,10 @@ function displayPendingAppointments(appointments) {
         return;
     }
 
-    container.innerHTML = filtered.map(apt => {
+    // Paginate
+    const paginated = paginateArray(filtered, currentPagePending);
+
+    container.innerHTML = paginated.map(apt => {
         const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
             weekday: 'long',
             year: 'numeric',
@@ -866,7 +956,7 @@ function displayPendingAppointments(appointments) {
                 </div>
             </div>
         `;
-    }).join('');
+    }).join('') + createPagination('pendingAppointments', filtered.length, currentPagePending, 'goToPagePending');
 
     updateBulkActionsVisibility();
 }
@@ -915,7 +1005,10 @@ function displayConfirmedAppointments(appointments) {
         return;
     }
 
-    container.innerHTML = filtered.map(apt => {
+    // Paginate
+    const paginated = paginateArray(filtered, currentPageConfirmed);
+
+    container.innerHTML = paginated.map(apt => {
         const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
             weekday: 'long',
             year: 'numeric',
@@ -953,7 +1046,7 @@ function displayConfirmedAppointments(appointments) {
                 ${apt.identificationUrl ? `<button class="view-id-btn" onclick="viewIdentification('${apt.identificationUrl}')">Ver Identificación</button>` : ''}
             </div>
         `;
-    }).join('');
+    }).join('') + createPagination('confirmedAppointments', filtered.length, currentPageConfirmed, 'goToPageConfirmed');
 }
 
 // ============================================
