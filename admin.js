@@ -18,6 +18,10 @@ let allAppointments = [];
 let allSlots = [];
 let selectedAppointments = new Set();
 
+// Charts instances
+let statusChart = null;
+let weekChart = null;
+
 // Load EmailJS
 (function() {
     emailjs.init(emailConfig.publicKey);
@@ -276,6 +280,7 @@ function filterAndDisplayAppointments() {
 function updateDashboardStats() {
     const total = allAppointments.length;
     const pending = allAppointments.filter(apt => apt.status === 'pending').length;
+    const accepted = allAppointments.filter(apt => apt.status === 'accepted').length;
     const rejected = allAppointments.filter(apt => apt.status === 'rejected').length;
 
     // Accepted today
@@ -294,6 +299,168 @@ function updateDashboardStats() {
     document.getElementById('statPending').textContent = pending;
     document.getElementById('statAcceptedToday').textContent = acceptedToday;
     document.getElementById('statRejected').textContent = rejected;
+
+    // Initialize or update charts
+    initializeCharts(pending, accepted, rejected);
+    updateWeekChart();
+}
+
+// ============================================
+// GRÁFICAS CON CHART.JS
+// ============================================
+
+function initializeCharts(pending, accepted, rejected) {
+    // Status Pie Chart
+    const statusCtx = document.getElementById('statusChart');
+    if (!statusCtx) return;
+
+    if (statusChart) {
+        statusChart.destroy();
+    }
+
+    statusChart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pendientes', 'Aceptadas', 'Rechazadas'],
+            datasets: [{
+                data: [pending, accepted, rejected],
+                backgroundColor: [
+                    'rgba(255, 167, 38, 0.8)',
+                    'rgba(102, 187, 106, 0.8)',
+                    'rgba(239, 83, 80, 0.8)'
+                ],
+                borderColor: [
+                    '#FFA726',
+                    '#66BB6A',
+                    '#EF5350'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
+                        font: {
+                            family: 'Inter',
+                            size: 12
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(13, 13, 13, 0.9)',
+                    padding: 12,
+                    titleFont: {
+                        family: 'Inter',
+                        size: 14
+                    },
+                    bodyFont: {
+                        family: 'Inter',
+                        size: 13
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateWeekChart() {
+    const weekCtx = document.getElementById('weekChart');
+    if (!weekCtx) return;
+
+    // Calculate appointments per day for last 7 days
+    const today = new Date();
+    const days = [];
+    const counts = [];
+
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+
+        const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
+        const dayCount = allAppointments.filter(apt => {
+            if (apt.slotDatetime) {
+                const aptDate = new Date(apt.slotDatetime.toDate());
+                aptDate.setHours(0, 0, 0, 0);
+                return aptDate.getTime() === date.getTime();
+            }
+            return false;
+        }).length;
+
+        days.push(dayName);
+        counts.push(dayCount);
+    }
+
+    if (weekChart) {
+        weekChart.destroy();
+    }
+
+    weekChart = new Chart(weekCtx, {
+        type: 'bar',
+        data: {
+            labels: days,
+            datasets: [{
+                label: 'Citas',
+                data: counts,
+                backgroundColor: 'rgba(201, 165, 90, 0.8)',
+                borderColor: '#C9A55A',
+                borderWidth: 2,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(13, 13, 13, 0.9)',
+                    padding: 12,
+                    titleFont: {
+                        family: 'Inter',
+                        size: 14
+                    },
+                    bodyFont: {
+                        family: 'Inter',
+                        size: 13
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        font: {
+                            family: 'Inter',
+                            size: 11
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        font: {
+                            family: 'Inter',
+                            size: 11
+                        }
+                    },
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
 }
 
 function displayUpcomingAppointments(appointments) {

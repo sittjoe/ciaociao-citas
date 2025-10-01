@@ -170,6 +170,21 @@
                 </div>
             </div>
 
+            <!-- Charts Section -->
+            <div class="admin-section">
+                <h2>Estadísticas de Citas</h2>
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Estado de Citas</h3>
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Citas por Día (Últimos 7 Días)</h3>
+                        <canvas id="weekChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <!-- Quick Actions -->
             <div class="admin-section">
                 <h2>Acciones Rápidas</h2>
@@ -314,6 +329,9 @@
 
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 
     <!-- EmailJS SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
