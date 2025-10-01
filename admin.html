@@ -358,6 +358,20 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal" style="display: none;">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-icon" id="modalIcon"></div>
+            <h3 class="modal-title" id="modalTitle"></h3>
+            <p class="modal-message" id="modalMessage"></p>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="modalCancel">Cancelar</button>
+                <button class="btn-confirm" id="modalConfirm">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 
