@@ -9,21 +9,66 @@
 <body>
     <!-- Login Screen -->
     <div id="loginScreen" class="login-container">
+        <!-- Animated Background Particles -->
+        <div class="particles">
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+        </div>
+
         <div class="login-box">
-            <header style="margin: 0 0 30px 0; padding: 0;">
-                <h1 style="font-size: 2em;">🔐 Admin Panel</h1>
-                <p class="subtitle" style="font-size: 1em;">Ciao Ciao Joyería</p>
+            <!-- Logo con animación -->
+            <div class="login-logo">
+                <svg width="60" height="60" viewBox="0 0 40 40" fill="none" class="logo-diamond">
+                    <defs>
+                        <linearGradient id="diamondGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:var(--gold-champagne);stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:var(--gold-dark);stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M20 2L8 14L20 38L32 14L20 2Z" fill="url(#diamondGradient)" class="diamond-shine"/>
+                    <path d="M20 2L8 14L20 20L32 14L20 2Z" fill="var(--gold-light)" opacity="0.5"/>
+                </svg>
+            </div>
+
+            <header class="login-header">
+                <h1>Panel de Administración</h1>
+                <p class="subtitle">Ciao Ciao Joyería</p>
+                <span class="version-badge">v1.0</span>
             </header>
-            <form id="loginForm">
+
+            <form id="loginForm" class="login-form">
                 <div class="form-group">
                     <label for="adminPassword">Contraseña de Administrador</label>
-                    <input type="password" id="adminPassword" required>
+                    <div class="password-input-wrapper">
+                        <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M8 11V7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7V11" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <input type="password" id="adminPassword" placeholder="Ingresa tu contraseña" required>
+                    </div>
                 </div>
-                <button type="submit" class="btn-primary">Iniciar Sesión</button>
-                <p id="loginError" style="color: var(--error-color); margin-top: 15px; display: none;"></p>
+                <button type="submit" class="btn-primary btn-login">
+                    <span>Iniciar Sesión</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M13 7L18 12M18 12L13 17M18 12H6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <p id="loginError" class="login-error" style="display: none;"></p>
             </form>
-            <div style="margin-top: 20px; text-align: center;">
-                <a href="index.html" style="color: var(--primary-color);">← Volver al sitio principal</a>
+
+            <div class="login-footer">
+                <a href="index.html" class="back-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    Volver al sitio principal
+                </a>
             </div>
         </div>
     </div>
