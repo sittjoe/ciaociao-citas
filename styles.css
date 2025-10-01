@@ -1426,17 +1426,26 @@ footer {
 }
 
 .tab-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
     padding: 16px 24px;
     background: transparent;
     border: none;
     border-bottom: 3px solid transparent;
     color: var(--gray-medium);
     font-weight: 500;
-    font-size: 1rem;
+    font-size: 0.95rem;
     cursor: pointer;
     transition: all var(--transition-base);
     white-space: nowrap;
     font-family: 'Inter', sans-serif;
+    position: relative;
+}
+
+.tab-btn svg {
+    transition: all var(--transition-base);
+    flex-shrink: 0;
 }
 
 .tab-btn:hover {
@@ -1444,11 +1453,20 @@ footer {
     background: rgba(201, 165, 90, 0.05);
 }
 
+.tab-btn:hover svg {
+    transform: translateY(-2px);
+}
+
 .tab-btn.active {
     color: var(--gold-champagne);
     font-weight: 600;
     border-bottom-color: var(--gold-champagne);
     background: rgba(201, 165, 90, 0.08);
+}
+
+.tab-btn.active svg {
+    stroke-width: 2.5;
+    filter: drop-shadow(0 2px 4px rgba(201, 165, 90, 0.3));
 }
 
 /* ===== TAB CONTENT ===== */
@@ -2106,6 +2124,22 @@ footer {
 
     .admin-tabs {
         padding: 0 var(--spacing-md);
+        gap: 0;
+    }
+
+    .tab-btn {
+        padding: 14px 16px;
+        font-size: 0.85rem;
+        gap: 6px;
+    }
+
+    .tab-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .tab-btn span {
+        display: none;
     }
 
     .tab-content {
