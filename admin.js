@@ -189,7 +189,7 @@ function displaySlots(slots) {
     const container = document.getElementById('slotsList');
 
     if (slots.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-light);">No hay horarios disponibles</p>';
+        showEmptyState(container, 'no-slots');
         return;
     }
 
@@ -217,9 +217,14 @@ function displaySlots(slots) {
 }
 
 window.deleteSlot = async (slotId) => {
-    if (!confirm('¿Estás seguro de eliminar este horario?')) {
-        return;
-    }
+    const confirmed = await showConfirmModal(
+        '¿Eliminar horario?',
+        'Esta acción no se puede deshacer. El horario será eliminado permanentemente.',
+        null,
+        'danger'
+    );
+
+    if (!confirmed) return;
 
     try {
         await deleteDoc(doc(db, 'slots', slotId));
@@ -232,10 +237,234 @@ window.deleteSlot = async (slotId) => {
 };
 
 // ============================================
+// SKELETON LOADERS
+// ============================================
+
+function showSkeletonStats() {
+    const statsGrid = document.querySelector('.stats-grid');
+    if (!statsGrid) return;
+
+    statsGrid.innerHTML = Array(4).fill('').map(() => `
+        <div class="skeleton-stat-card">
+            <div class="skeleton skeleton-icon"></div>
+            <div style="flex: 1;">
+                <div class="skeleton skeleton-stat-value"></div>
+                <div class="skeleton skeleton-stat-label"></div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function showSkeletonAppointments(containerId, count = 3) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = Array(count).fill('').map(() => `
+        <div class="skeleton-card">
+            <div class="skeleton-header">
+                <div class="skeleton skeleton-avatar"></div>
+                <div style="flex: 1;">
+                    <div class="skeleton skeleton-title"></div>
+                    <div class="skeleton skeleton-text"></div>
+                </div>
+            </div>
+            <div class="skeleton skeleton-text-full"></div>
+            <div class="skeleton skeleton-text-full"></div>
+            <div class="skeleton skeleton-text" style="width: 50%;"></div>
+            <div class="skeleton-actions">
+                <div class="skeleton skeleton-button"></div>
+                <div class="skeleton skeleton-button"></div>
+                <div class="skeleton skeleton-button"></div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function showSkeletonSlots() {
+    const container = document.getElementById('slotsList');
+    if (!container) return;
+
+    container.innerHTML = Array(5).fill('').map(() => `
+        <div class="skeleton-card" style="padding: var(--spacing-md);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <div class="skeleton skeleton-title" style="width: 40%;"></div>
+                    <div class="skeleton skeleton-text" style="width: 30%; margin-top: 8px;"></div>
+                </div>
+                <div class="skeleton skeleton-button" style="width: 80px; height: 36px;"></div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ============================================
+// EMPTY STATES
+// ============================================
+
+function showEmptyState(container, type) {
+    const emptyStates = {
+        'no-pending': {
+            svg: `<svg width="120" height="120" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#C9A55A" stroke-width="1.5" opacity="0.3"/>
+                <path d="M12 8V12L15 15" stroke="#C9A55A" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M16 2L20 6M20 6L16 10M20 6H12" stroke="#66BB6A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`,
+            title: '¡Todo al día!',
+            message: 'No hay citas pendientes de aprobación en este momento.'
+        },
+        'no-confirmed': {
+            svg: `<svg width="120" height="120" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="4" width="18" height="18" rx="2" stroke="#C9A55A" stroke-width="1.5" opacity="0.3"/>
+                <line x1="8" y1="2" x2="8" y2="6" stroke="#C9A55A" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="16" y1="2" x2="16" y2="6" stroke="#C9A55A" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="3" y1="10" x2="21" y2="10" stroke="#C9A55A" stroke-width="1.5"/>
+            </svg>`,
+            title: 'Sin citas confirmadas',
+            message: 'Aún no hay citas aceptadas o rechazadas en el sistema.'
+        },
+        'no-slots': {
+            svg: `<svg width="120" height="120" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#C9A55A" stroke-width="1.5" opacity="0.3"/>
+                <path d="M12 7V12H17" stroke="#C9A55A" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M8 4L12 2L16 4" stroke="#FFA726" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`,
+            title: 'No hay horarios disponibles',
+            message: 'Comienza agregando tu primer horario disponible.',
+            action: `<button class="action-btn" onclick="document.getElementById('slotDate').focus()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Agregar Horario
+            </button>`
+        },
+        'no-results': {
+            svg: `<svg width="120" height="120" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="8" stroke="#C9A55A" stroke-width="1.5"/>
+                <path d="M21 21L16.65 16.65" stroke="#C9A55A" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="7" y1="11" x2="15" y2="11" stroke="#EF5350" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>`,
+            title: 'No se encontraron resultados',
+            message: 'Intenta ajustar los filtros o buscar con otros términos.'
+        },
+        'no-upcoming': {
+            svg: `<svg width="120" height="120" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="6" width="18" height="15" rx="2" stroke="#C9A55A" stroke-width="1.5" opacity="0.3"/>
+                <path d="M8 4V8M16 4V8" stroke="#C9A55A" stroke-width="1.5" stroke-linecap="round"/>
+                <circle cx="12" cy="14" r="2" fill="#66BB6A" opacity="0.5"/>
+            </svg>`,
+            title: 'Sin próximas citas',
+            message: 'No hay citas confirmadas próximas para mostrar.'
+        }
+    };
+
+    const state = emptyStates[type] || emptyStates['no-results'];
+
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon">${state.svg}</div>
+            <h3 class="empty-state-title">${state.title}</h3>
+            <p class="empty-state-message">${state.message}</p>
+            ${state.action || ''}
+        </div>
+    `;
+}
+
+// ============================================
+// CONFIRMATION MODAL
+// ============================================
+
+function showConfirmModal(title, message, onConfirm, type = 'warning') {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        const modalIcon = document.getElementById('modalIcon');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const confirmBtn = document.getElementById('modalConfirm');
+        const cancelBtn = document.getElementById('modalCancel');
+
+        // Set content
+        modalTitle.textContent = title;
+        modalMessage.textContent = message;
+
+        // Set icon based on type
+        const icons = {
+            warning: `<svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>`,
+            danger: `<svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 9V13M12 17H12.01M3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M12 8L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>`,
+            success: `<svg viewBox="0 0 24 24" fill="none">
+                <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`
+        };
+
+        modalIcon.innerHTML = icons[type];
+        modalIcon.className = `modal-icon ${type}`;
+        confirmBtn.className = type === 'danger' ? 'btn-confirm danger' : 'btn-confirm';
+
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+
+        // Handle confirm
+        const handleConfirm = () => {
+            cleanup();
+            if (onConfirm) onConfirm();
+            resolve(true);
+        };
+
+        // Handle cancel
+        const handleCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+
+        // Handle backdrop click
+        const handleBackdrop = (e) => {
+            if (e.target.classList.contains('modal-backdrop')) {
+                handleCancel();
+            }
+        };
+
+        // Handle Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                handleCancel();
+            }
+        };
+
+        // Cleanup function
+        const cleanup = () => {
+            modal.style.display = 'none';
+            document.body.style.overflow = '';
+            confirmBtn.removeEventListener('click', handleConfirm);
+            cancelBtn.removeEventListener('click', handleCancel);
+            modal.removeEventListener('click', handleBackdrop);
+            document.removeEventListener('keydown', handleEscape);
+        };
+
+        // Attach event listeners
+        confirmBtn.addEventListener('click', handleConfirm);
+        cancelBtn.addEventListener('click', handleCancel);
+        modal.addEventListener('click', handleBackdrop);
+        document.addEventListener('keydown', handleEscape);
+    });
+}
+
+// ============================================
 // GESTIÓN DE CITAS
 // ============================================
 
 async function loadAllData() {
+    // Show skeletons
+    showSkeletonStats();
+    showSkeletonAppointments('pendingAppointments');
+    showSkeletonAppointments('confirmedAppointments');
+    showSkeletonAppointments('upcomingAppointments', 5);
+    showSkeletonSlots();
+
     await Promise.all([loadSlots(), loadAppointments()]);
     updateDashboardStats();
 }
@@ -473,7 +702,7 @@ function displayUpcomingAppointments(appointments) {
         .slice(0, 5);
 
     if (upcoming.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-light);">No hay citas próximas confirmadas</p>';
+        showEmptyState(container, 'no-upcoming');
         return;
     }
 
@@ -537,7 +766,8 @@ function displayPendingAppointments(appointments) {
     }
 
     if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-light);">No hay citas pendientes</p>';
+        const hasFilters = searchTerm || dateFrom || dateTo;
+        showEmptyState(container, hasFilters ? 'no-results' : 'no-pending');
         return;
     }
 
@@ -624,7 +854,8 @@ function displayConfirmedAppointments(appointments) {
     }
 
     if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-light);">No hay citas confirmadas o rechazadas</p>';
+        const hasFilters = searchTerm || statusFilter || dateFrom || dateTo;
+        showEmptyState(container, hasFilters ? 'no-results' : 'no-confirmed');
         return;
     }
 
@@ -725,9 +956,14 @@ function updateBulkActionsVisibility() {
 window.bulkAccept = async function() {
     if (selectedAppointments.size === 0) return;
 
-    if (!confirm(`¿Confirmar ${selectedAppointments.size} citas seleccionadas?`)) {
-        return;
-    }
+    const confirmed = await showConfirmModal(
+        'Aceptar citas seleccionadas',
+        `¿Confirmar ${selectedAppointments.size} citas seleccionadas? Se enviarán emails de confirmación.`,
+        null,
+        'success'
+    );
+
+    if (!confirmed) return;
 
     try {
         const promises = [];
@@ -751,9 +987,14 @@ window.bulkAccept = async function() {
 window.bulkReject = async function() {
     if (selectedAppointments.size === 0) return;
 
-    if (!confirm(`¿Rechazar ${selectedAppointments.size} citas seleccionadas?`)) {
-        return;
-    }
+    const confirmed = await showConfirmModal(
+        'Rechazar citas seleccionadas',
+        `¿Rechazar ${selectedAppointments.size} citas seleccionadas? Esta acción no se puede deshacer.`,
+        null,
+        'danger'
+    );
+
+    if (!confirmed) return;
 
     try {
         const promises = [];
@@ -779,9 +1020,14 @@ window.bulkReject = async function() {
 // ============================================
 
 window.acceptAppointment = async (appointmentId, email, name, slotId, dateStr, timeStr) => {
-    if (!confirm('¿Confirmar esta cita?')) {
-        return;
-    }
+    const confirmed = await showConfirmModal(
+        'Aceptar cita',
+        `¿Confirmar cita de ${name}? Se enviará un email de confirmación.`,
+        null,
+        'success'
+    );
+
+    if (!confirmed) return;
 
     try {
         await acceptAppointmentSilent(appointmentId, email, name, slotId, { dateStr, timeStr });
@@ -835,9 +1081,14 @@ async function acceptAppointmentSilent(appointmentId, email, name, slotId, datet
 }
 
 window.rejectAppointment = async (appointmentId, email, name, slotId) => {
-    if (!confirm('¿Rechazar esta cita?')) {
-        return;
-    }
+    const confirmed = await showConfirmModal(
+        'Rechazar cita',
+        `¿Rechazar cita de ${name}? El horario quedará disponible nuevamente.`,
+        null,
+        'danger'
+    );
+
+    if (!confirmed) return;
 
     try {
         await rejectAppointmentSilent(appointmentId, email, name, slotId);
