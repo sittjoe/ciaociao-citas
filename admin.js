@@ -1279,6 +1279,30 @@ window.acceptAppointment = async (appointmentId, email, name, slotId, dateStr, t
 };
 
 async function acceptAppointmentSilent(appointmentId, email, name, slotId, datetimeInfo) {
+    // PASO 25: Validación de conflictos - verificar si slot aún disponible
+    if (slotId) {
+        const slotDoc = await getDocs(query(collection(db, 'slots'), where('__name__', '==', slotId)));
+        if (!slotDoc.empty) {
+            const slotData = slotDoc.docs[0].data();
+            if (slotData.available === false) {
+                throw new Error('Este horario ya fue reservado por otra cita. Por favor, elige otro horario.');
+            }
+        }
+
+        // Verificar si hay otra cita aceptada con este mismo slot
+        const conflictQuery = query(
+            collection(db, 'appointments'),
+            where('slotId', '==', slotId),
+            where('status', '==', 'accepted')
+        );
+        const conflictSnapshot = await getDocs(conflictQuery);
+
+        if (!conflictSnapshot.empty) {
+            // Hay conflicto, rechazar operación
+            throw new Error('Conflicto detectado: Este horario ya fue aceptado para otra cita.');
+        }
+    }
+
     // Update appointment status
     await updateDoc(doc(db, 'appointments', appointmentId), {
         status: 'accepted',
