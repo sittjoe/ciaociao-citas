@@ -1,0 +1,8 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M20 2L8 14L20 38L32 14L20 2Z" fill="currentColor"/>
+  <path d="M20 2L8 14H32L20 2Z" fill="currentColor" opacity="0.7"/>
+  <path d="M8 14L20 38L14 14H8Z" fill="currentColor" opacity="0.5"/>
+  <path d="M32 14L20 38L26 14H32Z" fill="currentColor" opacity="0.5"/>
+  <path d="M14 14L20 38L20 14H14Z" fill="currentColor" opacity="0.3"/>
+  <path d="M26 14L20 38L20 14H26Z" fill="currentColor" opacity="0.3"/>
+</svg>
