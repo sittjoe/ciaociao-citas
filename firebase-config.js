@@ -1,26 +1,36 @@
-// Firebase Configuration
-// IMPORTANTE: Reemplaza estos valores con tu configuración de Firebase
+// ============================================
+// CONFIGURACIÓN DE FIREBASE
+// ============================================
+// Proyecto: Ciao Ciao Citas
+// Configurado: $(date +%Y-%m-%d)
 
 export const firebaseConfig = {
-    apiKey: "TU_API_KEY",
-    authDomain: "TU_PROJECT_ID.firebaseapp.com",
-    projectId: "TU_PROJECT_ID",
-    storageBucket: "TU_PROJECT_ID.appspot.com",
-    messagingSenderId: "TU_MESSAGING_SENDER_ID",
-    appId: "TU_APP_ID"
+    apiKey: "AIzaSyBxNIfANjQhnHtzr0SMYwMXwvMizpJo-p0",
+    authDomain: "ciaociao-citas.firebaseapp.com",
+    projectId: "ciaociao-citas",
+    storageBucket: "ciaociao-citas.firebasestorage.app",
+    messagingSenderId: "750282945341",
+    appId: "1:750282945341:web:72d5cfe27769260b648b54"
 };
 
-// Email del administrador
+// ============================================
+// EMAIL DEL ADMINISTRADOR
+// ============================================
 // Aquí se enviarán las notificaciones de nuevas citas pendientes
-export const adminEmail = "TU_EMAIL_ADMIN_AQUI";
+export const adminEmail = "info@ciaociao.mx";
 
-// Contraseña de administrador (cámbiala por una segura)
-export const ADMIN_PASSWORD = "ciaociao2025";
+// ============================================
+// CONTRASEÑA DEL PANEL DE ADMINISTRACIÓN
+// ============================================
+// Usa esta contraseña para acceder a /admin.html
+export const ADMIN_PASSWORD = "27181730";
 
-// Configuración de EmailJS
-// IMPORTANTE: Reemplaza estos valores con tu configuración de EmailJS
+// ============================================
+// CONFIGURACIÓN DE EMAILJS
+// ============================================
+// Servicio: Zoho Mail (info@ciaociao.mx)
 export const emailConfig = {
-    serviceId: "TU_SERVICE_ID",
-    templateId: "TU_TEMPLATE_ID",
-    publicKey: "TU_PUBLIC_KEY"
+    publicKey: "AyFUquhb1yytve6Lv",
+    serviceId: "service_swd9ilc",
+    templateId: "template_hsqbxmy"
 };
