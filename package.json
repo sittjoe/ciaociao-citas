@@ -1,6 +1,7 @@
 {
   "devDependencies": {
-    "@playwright/test": "^1.55.1"
+    "@playwright/test": "^1.55.1",
+    "firebase-tools": "^14.17.0"
   },
   "dependencies": {
     "@upstash/context7-mcp": "^1.0.20"

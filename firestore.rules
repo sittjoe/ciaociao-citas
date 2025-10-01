@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // SLOTS: Horarios disponibles
+    // ============================================
+    // - Clientes: pueden leer solo los disponibles (available == true)
+    // - Admin: CRUD completo (crear, leer, actualizar, eliminar)
+    match /slots/{slotId} {
+      // Lectura pública solo de slots disponibles
+      allow read: if resource == null || resource.data.available == true;
+
+      // Admin puede crear, actualizar y eliminar cualquier slot
+      // (Sin autenticación real, cualquiera con acceso al admin puede hacerlo)
+      allow create: if request.resource.data.keys().hasAll(['datetime', 'available', 'createdAt'])
+                    && request.resource.data.available is bool
+                    && request.resource.data.datetime is timestamp;
+
+      allow update: if request.resource.data.keys().hasAll(['datetime', 'available'])
+                    && request.resource.data.available is bool
+                    && request.resource.data.datetime is timestamp;
+
+      allow delete: if true;
+    }
+
+    // ============================================
+    // APPOINTMENTS: Citas de clientes
+    // ============================================
+    // - Clientes: pueden crear citas con status 'pending'
+    // - Admin: puede leer, actualizar status y eliminar
+    match /appointments/{appointmentId} {
+      // Clientes pueden crear citas con status 'pending'
+      allow create: if request.resource.data.status == 'pending'
+                    && request.resource.data.keys().hasAll(['name', 'email', 'phone', 'slotId', 'slotDatetime', 'identificationUrl', 'status', 'createdAt'])
+                    && request.resource.data.email is string
+                    && request.resource.data.email.matches('.*@.*')
+                    && request.resource.data.phone is string
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() >= 3;
+
+      // Admin puede leer todas las citas
+      allow read: if true;
+
+      // Admin puede actualizar citas (cambiar status, agregar notas, etc)
+      allow update: if request.resource.data.status in ['pending', 'accepted', 'rejected', 'cancelled'];
+
+      // Admin puede eliminar citas
+      allow delete: if true;
+    }
+  }
+}
