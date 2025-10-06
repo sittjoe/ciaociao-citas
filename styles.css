@@ -58,7 +58,8 @@ body {
     font-size: 16px;
     line-height: 1.6;
     color: var(--gray-dark);
-    background: var(--white-warm);
+    background: linear-gradient(135deg, #FDFBF7 0%, #FFFFFF 50%, #F9F7F4 100%);
+    background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
