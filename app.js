@@ -5,7 +5,7 @@
 
 import { CalendarManager, DateUtils } from './calendar.js';
 import { Validators, ValidationUtils } from './validation.js';
-import { firebaseConfig, emailConfig, adminEmail } from './firebase-config.js';
+import { firebaseConfig, emailConfig, adminEmail } from './config-inline.js';
 
 // Firebase imports
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';

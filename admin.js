@@ -3,7 +3,7 @@
  * Gestión avanzada de citas con dashboard, filtros, búsqueda y exportación
  */
 
-import { firebaseConfig, ADMIN_PASSWORD, emailConfig } from './firebase-config.js';
+import { firebaseConfig, ADMIN_PASSWORD, emailConfig } from './config-inline.js';
 
 // Initialize Firebase
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
