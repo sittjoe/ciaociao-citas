@@ -393,19 +393,32 @@ function showEmptyState(container, type) {
             message: 'Aún no hay citas aceptadas o rechazadas en el sistema.'
         },
         'no-slots': {
-            svg: `<svg width="120" height="120" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="#C9A55A" stroke-width="1.5" opacity="0.3"/>
-                <path d="M12 7V12H17" stroke="#C9A55A" stroke-width="1.5" stroke-linecap="round"/>
-                <path d="M8 4L12 2L16 4" stroke="#FFA726" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            svg: `<svg width="140" height="140" viewBox="0 0 200 200" fill="none">
+                <circle cx="100" cy="100" r="80" stroke="#E8D5A8" stroke-width="3" opacity="0.5"/>
+                <circle cx="100" cy="100" r="60" stroke="#C9A55A" stroke-width="3" opacity="0.3"/>
+                <path d="M100 50V100L130 115" stroke="#C9A55A" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="100" cy="100" r="8" fill="#C9A55A"/>
+                <path d="M70 30L100 15L130 30" stroke="#FFA726" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
             </svg>`,
-            title: 'No hay horarios disponibles',
-            message: 'Comienza agregando tu primer horario disponible.',
-            action: `<button class="action-btn" onclick="document.getElementById('slotDate').focus()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-                Agregar Horario
-            </button>`
+            title: '¡Comienza aquí! 🎯',
+            message: 'Aún no tienes horarios disponibles. Agrégalos rápidamente para que tus clientes puedan agendar citas.',
+            action: `
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 20px;">
+                    <button class="btn-primary" onclick="openQuickSlotModal()" style="padding: 14px 28px; font-size: 15px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="margin-right: 8px;">
+                            <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        Agregar Horarios Rápido
+                    </button>
+                    <button class="btn-secondary" onclick="addWeekSlots()" style="padding: 14px 28px; font-size: 15px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="margin-right: 8px;">
+                            <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        Esta Semana Completa
+                    </button>
+                </div>
+            `
         },
         'no-results': {
             svg: `<svg width="120" height="120" viewBox="0 0 24 24" fill="none">
@@ -1473,11 +1486,253 @@ window.exportAllCSV = function() {
 };
 
 // ============================================
-// INICIALIZACIÓN
+// QUICK SLOT MODAL - AGREGAR HORARIOS RÁPIDO
 // ============================================
 
-// Set minimum date for slot picker to today
-document.getElementById('slotDate').min = new Date().toISOString().split('T')[0];
+let selectedQuickDate = null;
+let selectedTimes = new Set();
+
+// Abrir modal
+window.openQuickSlotModal = function() {
+    document.getElementById('quickSlotModal').style.display = 'flex';
+    // Set minimum date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('quickSlotDate').min = today;
+    document.getElementById('quickSlotDate').value = today;
+    selectedQuickDate = today;
+
+    // Initialize time chips listeners
+    initializeTimeChips();
+
+    // Reset
+    clearSelectedTimes();
+};
+
+// Cerrar modal
+window.closeQuickSlotModal = function() {
+    document.getElementById('quickSlotModal').style.display = 'none';
+    selectedQuickDate = null;
+    selectedTimes.clear();
+    updatePreview();
+};
+
+// Seleccionar fecha rápida
+window.selectQuickDate = function(option) {
+    const today = new Date();
+    let targetDate;
+
+    switch(option) {
+        case 'today':
+            targetDate = today;
+            break;
+        case 'tomorrow':
+            targetDate = new Date(today);
+            targetDate.setDate(targetDate.getDate() + 1);
+            break;
+        case 'nextWeek':
+            targetDate = new Date(today);
+            targetDate.setDate(targetDate.getDate() + 7);
+            break;
+    }
+
+    const dateString = targetDate.toISOString().split('T')[0];
+    document.getElementById('quickSlotDate').value = dateString;
+    selectedQuickDate = dateString;
+    updatePreview();
+};
+
+// Actualizar fecha seleccionada
+window.updateSelectedDate = function() {
+    selectedQuickDate = document.getElementById('quickSlotDate').value;
+    updatePreview();
+};
+
+// Inicializar chips de tiempo
+function initializeTimeChips() {
+    const chips = document.querySelectorAll('.time-chip');
+    chips.forEach(chip => {
+        chip.onclick = function() {
+            const time = this.dataset.time;
+            if (selectedTimes.has(time)) {
+                selectedTimes.delete(time);
+                this.classList.remove('selected');
+            } else {
+                selectedTimes.add(time);
+                this.classList.add('selected');
+            }
+            updatePreview();
+        };
+    });
+}
+
+// Seleccionar todos los horarios
+window.selectAllTimes = function() {
+    const chips = document.querySelectorAll('.time-chip');
+    chips.forEach(chip => {
+        const time = chip.dataset.time;
+        selectedTimes.add(time);
+        chip.classList.add('selected');
+    });
+    updatePreview();
+};
+
+// Limpiar horarios seleccionados
+window.clearSelectedTimes = function() {
+    selectedTimes.clear();
+    const chips = document.querySelectorAll('.time-chip');
+    chips.forEach(chip => chip.classList.remove('selected'));
+    updatePreview();
+};
+
+// Actualizar preview
+function updatePreview() {
+    const previewSection = document.getElementById('previewSection');
+    const previewList = document.getElementById('previewList');
+    const confirmBtn = document.getElementById('confirmAddSlots');
+    const slotCount = document.getElementById('slotCount');
+
+    if (selectedTimes.size === 0 || !selectedQuickDate) {
+        previewSection.style.display = 'none';
+        confirmBtn.disabled = true;
+        slotCount.textContent = '0';
+        return;
+    }
+
+    // Mostrar preview
+    previewSection.style.display = 'block';
+    confirmBtn.disabled = false;
+    slotCount.textContent = selectedTimes.size;
+
+    // Generar lista de preview
+    const date = new Date(selectedQuickDate + 'T00:00');
+    const dateStr = date.toLocaleDateString('es-MX', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+
+    const timesArray = Array.from(selectedTimes).sort();
+    const previewHTML = timesArray.map(time => {
+        const [hours, minutes] = time.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+
+        return `
+            <div class="preview-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M9 11L12 14L22 4" stroke="var(--gold-champagne)" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>${dateStr} - ${displayHour}:${minutes} ${ampm}</span>
+            </div>
+        `;
+    }).join('');
+
+    previewList.innerHTML = previewHTML;
+}
+
+// Confirmar y agregar horarios
+window.confirmAddSlots = async function() {
+    if (selectedTimes.size === 0 || !selectedQuickDate) {
+        showToast('Selecciona al menos una fecha y hora', 'error');
+        return;
+    }
+
+    const confirmBtn = document.getElementById('confirmAddSlots');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Agregando...';
+
+    try {
+        const slotsRef = collection(db, 'slots');
+        const promises = [];
+
+        for (const time of selectedTimes) {
+            const datetime = new Date(`${selectedQuickDate}T${time}:00`);
+
+            // Validar que sea en el futuro
+            if (datetime <= new Date()) {
+                continue;
+            }
+
+            promises.push(
+                addDoc(slotsRef, {
+                    datetime: Timestamp.fromDate(datetime),
+                    available: true,
+                    createdAt: serverTimestamp()
+                })
+            );
+        }
+
+        await Promise.all(promises);
+
+        showToast(`${promises.length} horarios agregados exitosamente`);
+        closeQuickSlotModal();
+        await loadSlots();
+
+    } catch (error) {
+        console.error('Error adding slots:', error);
+        showToast('Error al agregar horarios: ' + error.message, 'error');
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = 'Agregar <span id="slotCount">' + selectedTimes.size + '</span> Horarios';
+    }
+};
+
+// Agregar semana completa (Lunes a Viernes, 9AM-5PM)
+window.addWeekSlots = async function() {
+    const confirmed = await showConfirmModal(
+        '📅 Agregar Semana Completa',
+        '¿Deseas agregar horarios para toda la próxima semana? (Lunes a Viernes, 9AM-5PM, cada hora)',
+        'confirm'
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const slotsRef = collection(db, 'slots');
+        const promises = [];
+
+        // Obtener el próximo lunes
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
+        const nextMonday = new Date(today);
+        nextMonday.setDate(today.getDate() + daysUntilMonday);
+        nextMonday.setHours(0, 0, 0, 0);
+
+        // Generar horarios: Lunes a Viernes, 9AM a 5PM
+        for (let day = 0; day < 5; day++) {
+            const currentDate = new Date(nextMonday);
+            currentDate.setDate(nextMonday.getDate() + day);
+
+            for (let hour = 9; hour <= 17; hour++) {
+                const datetime = new Date(currentDate);
+                datetime.setHours(hour, 0, 0, 0);
+
+                promises.push(
+                    addDoc(slotsRef, {
+                        datetime: Timestamp.fromDate(datetime),
+                        available: true,
+                        createdAt: serverTimestamp()
+                    })
+                );
+            }
+        }
+
+        await Promise.all(promises);
+
+        showToast(`¡${promises.length} horarios agregados para la próxima semana!`);
+        await loadSlots();
+
+    } catch (error) {
+        console.error('Error adding week slots:', error);
+        showToast('Error al agregar horarios: ' + error.message, 'error');
+    }
+};
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
 
 // Initialize
 checkAuth();
