@@ -28,7 +28,7 @@ Antes de comenzar, asegúrate de tener:
 
 1. En el dashboard de tu proyecto, haz clic en el ícono **</>** (Web)
 2. Ingresa el nombre de la app: `Ciao Ciao Booking`
-3. **NO** marques "Firebase Hosting"
+3. **SÍ** marca "Firebase Hosting" (lo usaremos para desplegar)
 4. Haz clic en **"Registrar app"**
 5. **¡IMPORTANTE!** Copia todo el código de configuración que aparece:
 
@@ -247,29 +247,44 @@ export const emailConfig = {
 
 ---
 
-## 🚀 Paso 4: Desplegar en Vercel o Netlify
+## 🚀 Paso 4: Desplegar en Firebase Hosting
 
-### Opción A: Vercel
+### 4.1 Instalar Firebase CLI
 
-1. Ve a [Vercel](https://vercel.com/)
-2. Haz clic en **"Sign Up"** (si no tienes cuenta)
-3. Conecta tu cuenta de GitHub
-4. Haz clic en **"Add New Project"**
-5. Importa tu repositorio de GitHub
-6. Vercel detectará automáticamente la configuración (gracias a `vercel.json`)
-7. Haz clic en **"Deploy"**
-8. ¡Listo! Tu sitio estará en: `https://tu-proyecto.vercel.app`
+1. Instala Firebase Tools globalmente:
+   ```bash
+   npm install -g firebase-tools
+   ```
 
-### Opción B: Netlify
+2. Login en Firebase:
+   ```bash
+   firebase login
+   ```
 
-1. Ve a [Netlify](https://www.netlify.com/)
-2. Haz clic en **"Sign Up"** (si no tienes cuenta)
-3. Conecta tu cuenta de GitHub
-4. Haz clic en **"Add new site"** → **"Import an existing project"**
-5. Selecciona tu repositorio de GitHub
-6. Netlify detectará automáticamente la configuración (gracias a `netlify.toml`)
-7. Haz clic en **"Deploy site"**
-8. ¡Listo! Tu sitio estará en: `https://tu-proyecto.netlify.app`
+### 4.2 Inicializar Firebase Hosting (si es primera vez)
+
+1. En el directorio del proyecto, ejecuta:
+   ```bash
+   firebase init
+   ```
+
+2. Selecciona las siguientes opciones:
+   - ✅ Hosting
+   - ✅ Firestore
+   - ✅ Storage
+   - Proyecto: Selecciona tu proyecto existente
+   - Directorio público: **`.`** (punto, directorio actual)
+   - Single-page app: **NO**
+   - Sobrescribir archivos: **NO**
+
+### 4.3 Desplegar
+
+1. Ejecuta:
+   ```bash
+   firebase deploy
+   ```
+
+2. ¡Listo! Tu sitio estará en: `https://tu-proyecto-id.web.app`
 
 ---
 
@@ -277,7 +292,7 @@ export const emailConfig = {
 
 ### 5.1 Probar el Frontend de Clientes
 
-1. Abre tu sitio: `https://tu-proyecto.vercel.app` (o Netlify)
+1. Abre tu sitio: `https://tu-proyecto-id.web.app`
 2. Verifica que la página cargue correctamente
 3. Intenta agendar una cita de prueba:
    - Selecciona una fecha (necesitas agregar horarios primero desde el admin)
@@ -287,7 +302,7 @@ export const emailConfig = {
 
 ### 5.2 Probar el Panel de Administración
 
-1. Ve a: `https://tu-proyecto.vercel.app/admin.html`
+1. Ve a: `https://tu-proyecto-id.web.app/admin.html`
 2. Ingresa la contraseña que configuraste en `ADMIN_PASSWORD`
 3. Verifica que puedas:
    - Ver el dashboard con estadísticas
@@ -341,7 +356,7 @@ Si tienes problemas que no puedes resolver:
 
 1. 🔍 Revisa la consola del navegador (F12 → Console)
 2. 📧 Revisa los logs de Firebase Console
-3. 📊 Verifica los logs de Vercel o Netlify
+3. 📊 Verifica los logs de Firebase Hosting con `firebase hosting:channel:list`
 4. 📚 Consulta el archivo `MANUAL-USUARIO.md` para instrucciones de uso
 
 ---
@@ -351,8 +366,8 @@ Si tienes problemas que no puedes resolver:
 Tu sistema de citas está completamente configurado y listo para usar. 🎉
 
 **URLs Importantes:**
-- 🌐 Sitio principal: `https://tu-proyecto.vercel.app`
-- 🔐 Panel admin: `https://tu-proyecto.vercel.app/admin.html`
+- 🌐 Sitio principal: `https://tu-proyecto-id.web.app`
+- 🔐 Panel admin: `https://tu-proyecto-id.web.app/admin.html`
 - 🔥 Firebase Console: https://console.firebase.google.com/
 - 📧 EmailJS Dashboard: https://dashboard.emailjs.com/
 

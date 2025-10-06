@@ -2,8 +2,7 @@
 
 [![Firebase](https://img.shields.io/badge/Firebase-10.8.0-FFCA28?logo=firebase)](https://firebase.google.com/)
 [![EmailJS](https://img.shields.io/badge/EmailJS-3.x-0066CC?logo=minutemailer)](https://www.emailjs.com/)
-[![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel)](https://vercel.com/)
-[![Netlify](https://img.shields.io/badge/Deploy-Netlify-00C7B7?logo=netlify)](https://www.netlify.com/)
+[![Firebase Hosting](https://img.shields.io/badge/Hosting-Firebase-orange?logo=firebase)](https://firebase.google.com/docs/hosting)
 
 Sistema completo de agendamiento de citas para showroom de joyería, con diseño luxury y gestión avanzada.
 
@@ -180,45 +179,64 @@ Agrega este script en `index.html` y `admin.html` antes del cierre de `</body>`:
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 ```
 
-## 📦 Despliegue
+## 📦 Despliegue en Firebase Hosting
 
-### Opción 1: Vercel (Recomendado)
+### Requisitos Previos
+- Tener [Node.js](https://nodejs.org/) instalado
+- Tener [Firebase CLI](https://firebase.google.com/docs/cli) instalado: `npm install -g firebase-tools`
+- Haber configurado Firebase (ver sección anterior)
 
-1. Ve a [Vercel](https://vercel.com/)
-2. Click en **"New Project"**
-3. Importa tu repositorio de GitHub
-4. Vercel detectará automáticamente la configuración (gracias a `vercel.json`)
-5. Click en **"Deploy"**
-6. Tu sitio estará en: `https://tu-proyecto.vercel.app`
+### Pasos para Desplegar
 
-**URLs importantes:**
-- Cliente: `https://tu-proyecto.vercel.app/`
-- Admin: `https://tu-proyecto.vercel.app/admin.html`
+1. **Instalar Firebase Tools** (si no lo has hecho):
+   ```bash
+   npm install -g firebase-tools
+   ```
 
-### Opción 2: Netlify
+2. **Login en Firebase**:
+   ```bash
+   firebase login
+   ```
 
-1. Ve a [Netlify](https://www.netlify.com/)
-2. Click en **"Add new site"** → **"Import an existing project"**
-3. Conecta tu repositorio de GitHub
-4. Netlify detectará automáticamente la configuración (gracias a `netlify.toml`)
-5. Click en **"Deploy site"**
-6. Tu sitio estará en: `https://tu-proyecto.netlify.app`
+3. **Inicializar Firebase** (si es primera vez):
+   ```bash
+   firebase init
+   ```
+   - Selecciona: **Hosting**, **Firestore**, **Storage**
+   - Usa directorio público: `.` (punto, directorio actual)
+   - **NO** configures como single-page app
+   - **NO** sobrescribas archivos existentes
 
-**URLs importantes:**
-- Cliente: `https://tu-proyecto.netlify.app/`
-- Admin: `https://tu-proyecto.netlify.app/admin.html`
+4. **Configurar `firebase-config.js`**:
+   - Copia tus credenciales reales de Firebase Console
+   - Edita `firebase-config.js` con tus datos
+   - **IMPORTANTE**: Este archivo NO se subirá a GitHub (está en .gitignore)
 
-### ⚠️ Importante después del despliegue
+5. **Desplegar**:
+   ```bash
+   firebase deploy
+   ```
 
-1. **Configura firebase-config.js** con tus credenciales reales
-2. **NO subas firebase-config.js** a GitHub (ya está en .gitignore)
-3. **Vuelve a desplegar** después de configurar
+6. **Tu sitio estará en**:
+   - URL: `https://tu-proyecto-id.web.app`
+   - O tu dominio custom si lo configuraste
+
+### URLs importantes:
+- **Cliente**: `https://tu-proyecto-id.web.app/`
+- **Admin**: `https://tu-proyecto-id.web.app/admin.html`
+
+### ⚠️ Seguridad Importante
+
+1. ✅ **firebase-config.js** ya está protegido en `.gitignore`
+2. ✅ **NO subas credenciales** a GitHub
+3. ✅ **Reglas de seguridad** ya están configuradas en `firestore.rules` y `storage.rules`
+4. ⚠️ **Cambia la contraseña de admin** antes de producción (en `firebase-config.js`)
 
 ## 🎯 Uso
 
 ### Para Administrador:
 
-1. Ve a `https://tu-proyecto.vercel.app/admin.html` (o tu URL de Netlify)
+1. Ve a `https://tu-proyecto-id.web.app/admin.html`
 2. Ingresa la contraseña configurada
 3. **Dashboard**:
    - Ve estadísticas en tiempo real
@@ -240,7 +258,7 @@ Agrega este script en `index.html` y `admin.html` antes del cierre de `</body>`:
 
 ### Para Clientes:
 
-1. Ve a `https://tu-proyecto.vercel.app/` (o tu URL de Netlify)
+1. Ve a `https://tu-proyecto-id.web.app/`
 2. Selecciona una fecha en el calendario
 3. Elige un horario disponible
 4. Completa el formulario multi-paso
@@ -261,8 +279,9 @@ ciaociao-citas/
 ├── calendar.js                     # Calendario interactivo (343 líneas)
 ├── firebase-config.js              # Configuración REAL (NO subir)
 ├── firebase-config.template.js     # Template para repo
-├── vercel.json                     # Configuración Vercel
-├── netlify.toml                    # Configuración Netlify
+├── firebase.json                   # Configuración Firebase Hosting
+├── firestore.rules                 # Reglas de seguridad Firestore
+├── storage.rules                   # Reglas de seguridad Storage
 ├── assets/icons/                   # 8 SVG icons profesionales
 ├── SETUP.md                        # Guía de configuración completa
 ├── MANUAL-USUARIO.md               # Manual de administración
@@ -283,19 +302,12 @@ ciaociao-citas/
    - Llena con tus credenciales reales
    - El archivo con credenciales NUNCA se subirá a GitHub
 
-3. **Headers de Seguridad** (automáticos):
-   - ✅ X-Content-Type-Options: nosniff
-   - ✅ X-Frame-Options: DENY
-   - ✅ X-XSS-Protection: 1; mode=block
-   - ✅ Referrer-Policy: strict-origin-when-cross-origin
-   - ✅ Cache-Control optimizado
-
-4. **Reglas de Firebase**:
+3. **Reglas de Firebase**:
    - ✅ Firestore: Clientes solo pueden crear citas, no leer ni modificar
    - ✅ Storage: Solo escritura de archivos < 5MB (imágenes/PDF)
    - ✅ Admin accede vía sesión protegida por contraseña
 
-5. **Contraseña de Admin**:
+4. **Contraseña de Admin**:
    - ⚠️ Almacenada en cliente (sessionStorage)
    - ✅ Para producción real, considera Firebase Auth
    - ✅ Suficiente para MVP y uso privado

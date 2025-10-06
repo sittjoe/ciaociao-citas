@@ -20,7 +20,7 @@ Guía completa para administrar el sistema de citas de tu joyería.
 
 ### 1.1 Iniciar Sesión
 
-1. Ve a: `https://tu-sitio.vercel.app/admin.html`
+1. Ve a: `https://tu-proyecto-id.web.app/admin.html`
 2. Ingresa tu contraseña de administrador
 3. Haz clic en **"Iniciar Sesión"**
 
@@ -436,7 +436,7 @@ Sí, funciona perfectamente en computadoras, tablets y teléfonos.
 1. 🔍 Revisa el archivo `SETUP.md` para problemas técnicos
 2. 📧 Revisa la consola del navegador (F12 → Console)
 3. 🔥 Verifica Firebase Console para errores de base de datos
-4. 📊 Revisa los logs de Vercel/Netlify
+4. 📊 Revisa los logs de Firebase Hosting
 
 ---
 
