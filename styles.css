@@ -779,6 +779,18 @@ h1, h2, h3, h4, h5, h6 {
     transform: scale(1.02);
 }
 
+.file-upload.error {
+    border-color: var(--error);
+    background: linear-gradient(135deg, rgba(198, 40, 40, 0.08), rgba(255, 255, 255, 0.9));
+    box-shadow: 0 10px 24px rgba(198, 40, 40, 0.15);
+}
+
+.file-upload.error .file-upload-icon,
+.file-upload.error .file-upload-label {
+    color: var(--error);
+    fill: var(--error);
+}
+
 .file-upload.dragover .file-upload-icon {
     fill: var(--gold-champagne);
     transform: scale(1.15);

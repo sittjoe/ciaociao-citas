@@ -26,6 +26,80 @@ let weekChart = null;
 let currentPagePending = 1;
 let currentPageConfirmed = 1;
 const itemsPerPage = 10;
+let appointmentHandlersBound = false;
+
+const normalizeText = (value, fallback = '') => {
+    if (value === undefined || value === null) return fallback;
+    return typeof value === 'string' ? value : String(value);
+};
+
+const escapeHtml = (value) => {
+    const text = normalizeText(value, '');
+    return text.replace(/[&<>"']/g, (char) => {
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        };
+        return map[char] || char;
+    });
+};
+
+const encodeData = (value) => encodeURIComponent(normalizeText(value, ''));
+const decodeData = (value) => {
+    try {
+        return decodeURIComponent(value || '');
+    } catch (error) {
+        return value || '';
+    }
+};
+const safeLower = (value) => normalizeText(value, '').toLowerCase();
+
+const formatDateTime = (value) => {
+    const date = value instanceof Date ? value : (value ? new Date(value) : null);
+    if (!date || Number.isNaN(date.getTime())) {
+        return { dateStr: 'Sin fecha', timeStr: 'Sin hora', date: null };
+    }
+    return {
+        dateStr: date.toLocaleDateString('es-ES', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }),
+        timeStr: date.toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit'
+        }),
+        date
+    };
+};
+
+const formatShortDateTime = (value) => {
+    const date = value instanceof Date ? value : (value ? new Date(value) : null);
+    if (!date || Number.isNaN(date.getTime())) {
+        return { dateStr: 'Sin fecha', timeStr: 'Sin hora', date: null };
+    }
+    return {
+        dateStr: date.toLocaleDateString('es-ES', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+        }),
+        timeStr: date.toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit'
+        }),
+        date
+    };
+};
+
+const csvEscape = (value) => {
+    const text = normalizeText(value, '').replace(/\r?\n/g, ' ');
+    return `"${text.replace(/"/g, '""')}"`;
+};
 
 // Load EmailJS
 const emailjsAvailable = typeof emailjs !== 'undefined';
@@ -150,7 +224,10 @@ function showToast(message, type = 'success') {
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' :
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
-    toast.innerHTML = `${icon}<span>${message}</span>`;
+    toast.innerHTML = icon;
+    const textEl = document.createElement('span');
+    textEl.textContent = normalizeText(message, '');
+    toast.appendChild(textEl);
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -247,10 +324,26 @@ async function loadSlots() {
 
         querySnapshot.forEach((doc) => {
             const slotData = doc.data();
+            const rawDatetime = slotData.datetime;
+            let datetime = null;
+
+            if (rawDatetime instanceof Date) {
+                datetime = rawDatetime;
+            } else if (rawDatetime && typeof rawDatetime.toDate === 'function') {
+                datetime = rawDatetime.toDate();
+            } else if (rawDatetime) {
+                datetime = new Date(rawDatetime);
+            }
+
+            if (!datetime || Number.isNaN(datetime.getTime())) {
+                console.warn('Slot sin datetime valido, se omite:', doc.id);
+                return;
+            }
+
             allSlots.push({
                 id: doc.id,
                 ...slotData,
-                datetime: slotData.datetime.toDate()
+                datetime
             });
         });
 
@@ -545,10 +638,11 @@ window.goToPageConfirmed = function(page) {
 // ============================================
 
 function generateAvatar(name) {
-    const words = name.trim().split(' ');
+    const safeName = normalizeText(name, '').trim();
+    const words = safeName.split(' ').filter(Boolean);
     const initials = words.length >= 2
         ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
-        : words[0].slice(0, 2).toUpperCase();
+        : (words[0]?.slice(0, 2).toUpperCase() || '??');
 
     // 6 color variations based on first letter
     const colors = [
@@ -560,7 +654,8 @@ function generateAvatar(name) {
         { bg: 'linear-gradient(135deg, #EC407A, #D81B60)', text: '#FFF' }  // Pink
     ];
 
-    const colorIndex = name.charCodeAt(0) % colors.length;
+    const baseChar = safeName ? safeName.charCodeAt(0) : 0;
+    const colorIndex = baseChar % colors.length;
     const color = colors[colorIndex];
 
     return `
@@ -571,15 +666,18 @@ function generateAvatar(name) {
 }
 
 function getRelativeTime(date) {
+    const normalized = date instanceof Date ? date : (date ? new Date(date) : null);
+    if (!normalized || Number.isNaN(normalized.getTime())) return '';
+
     const now = new Date();
-    const diff = now - date;
+    const diff = now - normalized;
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
 
     if (days > 7) {
-        return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+        return normalized.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
     } else if (days > 0) {
         return `Hace ${days} ${days === 1 ? 'día' : 'días'}`;
     } else if (hours > 0) {
@@ -942,15 +1040,9 @@ function displayUpcomingAppointments(appointments) {
     }
 
     container.innerHTML = upcoming.map(apt => {
-        const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric'
-        });
-        const timeStr = apt.slotDatetime.toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const { dateStr, timeStr } = formatShortDateTime(apt.slotDatetime);
+        const displayName = escapeHtml(normalizeText(apt.name, 'Sin nombre'));
+        const displayPhone = escapeHtml(normalizeText(apt.phone, 'Sin teléfono'));
 
         return `
             <div class="upcoming-item">
@@ -959,8 +1051,8 @@ function displayUpcomingAppointments(appointments) {
                     <span>${timeStr}</span>
                 </div>
                 <div class="upcoming-info">
-                    <strong>${apt.name}</strong>
-                    <span>${apt.phone}</span>
+                    <strong>${displayName}</strong>
+                    <span>${displayPhone}</span>
                 </div>
             </div>
         `;
@@ -975,29 +1067,38 @@ function displayPendingAppointments(appointments) {
     const container = document.getElementById('pendingAppointments');
 
     // Apply filters
-    const searchTerm = document.getElementById('searchPending')?.value.toLowerCase() || '';
+    const searchTerm = safeLower(document.getElementById('searchPending')?.value);
     const dateFrom = document.getElementById('filterDateFrom')?.value || '';
     const dateTo = document.getElementById('filterDateTo')?.value || '';
 
     let filtered = appointments;
 
     if (searchTerm) {
-        filtered = filtered.filter(apt =>
-            apt.name.toLowerCase().includes(searchTerm) ||
-            apt.email.toLowerCase().includes(searchTerm) ||
-            apt.phone.includes(searchTerm)
-        );
+        filtered = filtered.filter(apt => {
+            const name = safeLower(apt.name);
+            const email = safeLower(apt.email);
+            const phone = normalizeText(apt.phone, '');
+            return name.includes(searchTerm) ||
+                   email.includes(searchTerm) ||
+                   phone.includes(searchTerm);
+        });
     }
 
     if (dateFrom) {
         const fromDate = new Date(dateFrom);
-        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime >= fromDate);
+        filtered = filtered.filter(apt => {
+            const slotDate = apt.slotDatetime instanceof Date ? apt.slotDatetime : (apt.slotDatetime ? new Date(apt.slotDatetime) : null);
+            return slotDate && !Number.isNaN(slotDate.getTime()) && slotDate >= fromDate;
+        });
     }
 
     if (dateTo) {
         const toDate = new Date(dateTo);
         toDate.setHours(23, 59, 59, 999);
-        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime <= toDate);
+        filtered = filtered.filter(apt => {
+            const slotDate = apt.slotDatetime instanceof Date ? apt.slotDatetime : (apt.slotDatetime ? new Date(apt.slotDatetime) : null);
+            return slotDate && !Number.isNaN(slotDate.getTime()) && slotDate <= toDate;
+        });
     }
 
     if (filtered.length === 0) {
@@ -1014,35 +1115,35 @@ function displayPendingAppointments(appointments) {
     const paginated = paginateArray(filtered, currentPagePending);
 
     container.innerHTML = paginated.map(apt => {
-        const dateStr = apt.slotDatetime
-            ? apt.slotDatetime.toLocaleDateString('es-ES', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            })
-            : 'Sin fecha';
-        const timeStr = apt.slotDatetime
-            ? apt.slotDatetime.toLocaleTimeString('es-ES', {
-                hour: '2-digit',
-                minute: '2-digit'
-            })
-            : 'Sin hora';
-
+        const { dateStr, timeStr } = formatDateTime(apt.slotDatetime);
         const isSelected = selectedAppointments.has(apt.id);
         const timeAgo = apt.createdAt ? getRelativeTime(apt.createdAt) : '';
+        const displayName = escapeHtml(normalizeText(apt.name, 'Sin nombre'));
+        const displayEmail = escapeHtml(normalizeText(apt.email, 'Sin email'));
+        const displayPhone = escapeHtml(normalizeText(apt.phone, 'Sin teléfono'));
+        const notesText = normalizeText(apt.notes, '').trim();
+        const notesHtml = notesText ? `<p><strong>Notas:</strong> ${escapeHtml(notesText)}</p>` : '';
+        const dataAttrs = `
+            data-id="${encodeData(apt.id)}"
+            data-email="${encodeData(apt.email)}"
+            data-name="${encodeData(apt.name)}"
+            data-slot-id="${encodeData(apt.slotId)}"
+            data-date="${encodeData(dateStr)}"
+            data-time="${encodeData(timeStr)}"
+            data-id-url="${encodeData(apt.identificationUrl)}"
+        `;
 
         return `
-            <div class="appointment-card ${isSelected ? 'selected' : ''}">
+            <div class="appointment-card ${isSelected ? 'selected' : ''}" ${dataAttrs}>
                 <input type="checkbox" class="appointment-checkbox"
-                       data-id="${apt.id}"
-                       ${isSelected ? 'checked' : ''}
-                       onchange="toggleAppointmentSelection('${apt.id}')">
+                       data-action="select"
+                       data-id="${encodeData(apt.id)}"
+                       ${isSelected ? 'checked' : ''}>
                 <div class="appointment-header">
                     <div class="appointment-header-left">
                         ${generateAvatar(apt.name)}
                         <div class="appointment-header-info">
-                            <h3>${apt.name}</h3>
+                            <h3>${displayName}</h3>
                             <p style="color: var(--text-light);">${dateStr} - ${timeStr}</p>
                             ${timeAgo ? `<p class="appointment-time-ago">${timeAgo}</p>` : ''}
                         </div>
@@ -1050,14 +1151,14 @@ function displayPendingAppointments(appointments) {
                     <span class="appointment-status status-pending">Pendiente</span>
                 </div>
                 <div class="appointment-info">
-                    <p><strong>Email:</strong> ${apt.email}</p>
-                    <p><strong>Teléfono:</strong> ${apt.phone}</p>
-                    ${apt.notes ? `<p><strong>Notas:</strong> ${apt.notes}</p>` : ''}
+                    <p><strong>Email:</strong> ${displayEmail}</p>
+                    <p><strong>Teléfono:</strong> ${displayPhone}</p>
+                    ${notesHtml}
                 </div>
                 <div class="appointment-actions">
-                    <button class="accept-btn" onclick="acceptAppointment('${apt.id}', '${apt.email}', '${apt.name}', '${apt.slotId}', '${dateStr}', '${timeStr}')">Aceptar</button>
-                    <button class="reject-btn" onclick="rejectAppointment('${apt.id}', '${apt.email}', '${apt.name}', '${apt.slotId}')">Rechazar</button>
-                    ${apt.identificationUrl ? `<button class="view-id-btn" onclick="viewIdentification('${apt.identificationUrl}')">Ver Identificación</button>` : ''}
+                    <button class="accept-btn" data-action="accept">Aceptar</button>
+                    <button class="reject-btn" data-action="reject">Rechazar</button>
+                    ${apt.identificationUrl ? `<button class="view-id-btn" data-action="view-id">Ver Identificación</button>` : ''}
                 </div>
             </div>
         `;
@@ -1074,7 +1175,7 @@ function displayConfirmedAppointments(appointments) {
     const container = document.getElementById('confirmedAppointments');
 
     // Apply filters
-    const searchTerm = document.getElementById('searchConfirmed')?.value.toLowerCase() || '';
+    const searchTerm = safeLower(document.getElementById('searchConfirmed')?.value);
     const statusFilter = document.getElementById('filterStatus')?.value || '';
     const dateFrom = document.getElementById('filterDateFromConfirmed')?.value || '';
     const dateTo = document.getElementById('filterDateToConfirmed')?.value || '';
@@ -1082,11 +1183,14 @@ function displayConfirmedAppointments(appointments) {
     let filtered = appointments;
 
     if (searchTerm) {
-        filtered = filtered.filter(apt =>
-            apt.name.toLowerCase().includes(searchTerm) ||
-            apt.email.toLowerCase().includes(searchTerm) ||
-            apt.phone.includes(searchTerm)
-        );
+        filtered = filtered.filter(apt => {
+            const name = safeLower(apt.name);
+            const email = safeLower(apt.email);
+            const phone = normalizeText(apt.phone, '');
+            return name.includes(searchTerm) ||
+                   email.includes(searchTerm) ||
+                   phone.includes(searchTerm);
+        });
     }
 
     if (statusFilter) {
@@ -1095,13 +1199,19 @@ function displayConfirmedAppointments(appointments) {
 
     if (dateFrom) {
         const fromDate = new Date(dateFrom);
-        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime >= fromDate);
+        filtered = filtered.filter(apt => {
+            const slotDate = apt.slotDatetime instanceof Date ? apt.slotDatetime : (apt.slotDatetime ? new Date(apt.slotDatetime) : null);
+            return slotDate && !Number.isNaN(slotDate.getTime()) && slotDate >= fromDate;
+        });
     }
 
     if (dateTo) {
         const toDate = new Date(dateTo);
         toDate.setHours(23, 59, 59, 999);
-        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime <= toDate);
+        filtered = filtered.filter(apt => {
+            const slotDate = apt.slotDatetime instanceof Date ? apt.slotDatetime : (apt.slotDatetime ? new Date(apt.slotDatetime) : null);
+            return slotDate && !Number.isNaN(slotDate.getTime()) && slotDate <= toDate;
+        });
     }
 
     if (filtered.length === 0) {
@@ -1118,33 +1228,33 @@ function displayConfirmedAppointments(appointments) {
     const paginated = paginateArray(filtered, currentPageConfirmed);
 
     container.innerHTML = paginated.map(apt => {
-        const dateStr = apt.slotDatetime
-            ? apt.slotDatetime.toLocaleDateString('es-ES', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            })
-            : 'Sin fecha';
-        const timeStr = apt.slotDatetime
-            ? apt.slotDatetime.toLocaleTimeString('es-ES', {
-                hour: '2-digit',
-                minute: '2-digit'
-            })
-            : 'Sin hora';
-
+        const { dateStr, timeStr } = formatDateTime(apt.slotDatetime);
         const statusClass = apt.status === 'accepted' ? 'status-accepted' : 'status-rejected';
         const statusText = apt.status === 'accepted' ? 'Aceptada' : 'Rechazada';
         const cardClass = apt.status === 'accepted' ? 'accepted' : 'rejected';
         const timeAgo = apt.updatedAt ? getRelativeTime(apt.updatedAt) : '';
+        const displayName = escapeHtml(normalizeText(apt.name, 'Sin nombre'));
+        const displayEmail = escapeHtml(normalizeText(apt.email, 'Sin email'));
+        const displayPhone = escapeHtml(normalizeText(apt.phone, 'Sin teléfono'));
+        const notesText = normalizeText(apt.notes, '').trim();
+        const notesHtml = notesText ? `<p><strong>Notas:</strong> ${escapeHtml(notesText)}</p>` : '';
+        const dataAttrs = `
+            data-id="${encodeData(apt.id)}"
+            data-email="${encodeData(apt.email)}"
+            data-name="${encodeData(apt.name)}"
+            data-slot-id="${encodeData(apt.slotId)}"
+            data-date="${encodeData(dateStr)}"
+            data-time="${encodeData(timeStr)}"
+            data-id-url="${encodeData(apt.identificationUrl)}"
+        `;
 
         return `
-            <div class="appointment-card ${cardClass}">
+            <div class="appointment-card ${cardClass}" ${dataAttrs}>
                 <div class="appointment-header">
                     <div class="appointment-header-left">
                         ${generateAvatar(apt.name)}
                         <div class="appointment-header-info">
-                            <h3>${apt.name}</h3>
+                            <h3>${displayName}</h3>
                             <p style="color: var(--text-light);">${dateStr} - ${timeStr}</p>
                             ${timeAgo ? `<p class="appointment-time-ago">${statusText} ${timeAgo.toLowerCase()}</p>` : ''}
                         </div>
@@ -1152,11 +1262,11 @@ function displayConfirmedAppointments(appointments) {
                     <span class="appointment-status ${statusClass}">${statusText}</span>
                 </div>
                 <div class="appointment-info">
-                    <p><strong>Email:</strong> ${apt.email}</p>
-                    <p><strong>Teléfono:</strong> ${apt.phone}</p>
-                    ${apt.notes ? `<p><strong>Notas:</strong> ${apt.notes}</p>` : ''}
+                    <p><strong>Email:</strong> ${displayEmail}</p>
+                    <p><strong>Teléfono:</strong> ${displayPhone}</p>
+                    ${notesHtml}
                 </div>
-                ${apt.identificationUrl ? `<button class="view-id-btn" onclick="viewIdentification('${apt.identificationUrl}')">Ver Identificación</button>` : ''}
+                ${apt.identificationUrl ? `<button class="view-id-btn" data-action="view-id">Ver Identificación</button>` : ''}
             </div>
         `;
     }).join('') + createPagination('confirmedAppointments', filtered.length, currentPageConfirmed, 'goToPageConfirmed');
@@ -1236,6 +1346,81 @@ window.clearFilters = function(tab) {
     }
     filterAndDisplayAppointments();
 };
+
+function getAppointmentData(card) {
+    return {
+        id: decodeData(card.dataset.id),
+        email: decodeData(card.dataset.email),
+        name: decodeData(card.dataset.name),
+        slotId: decodeData(card.dataset.slotId),
+        dateStr: decodeData(card.dataset.date),
+        timeStr: decodeData(card.dataset.time),
+        idUrl: decodeData(card.dataset.idUrl)
+    };
+}
+
+function handlePendingActionClick(event) {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+
+    const action = button.dataset.action;
+    const card = button.closest('.appointment-card');
+    if (!card) return;
+
+    const data = getAppointmentData(card);
+    if (!data.id) {
+        showToast('No se pudo identificar la cita', 'error');
+        return;
+    }
+
+    if (action === 'accept') {
+        acceptAppointment(data.id, data.email, data.name, data.slotId, data.dateStr, data.timeStr);
+    } else if (action === 'reject') {
+        rejectAppointment(data.id, data.email, data.name, data.slotId);
+    } else if (action === 'view-id' && data.idUrl) {
+        viewIdentification(data.idUrl);
+    }
+}
+
+function handlePendingSelectionChange(event) {
+    const checkbox = event.target.closest('input[data-action="select"]');
+    if (!checkbox) return;
+
+    const appointmentId = decodeData(checkbox.dataset.id);
+    if (appointmentId) {
+        toggleAppointmentSelection(appointmentId);
+    }
+}
+
+function handleConfirmedActionClick(event) {
+    const button = event.target.closest('button[data-action="view-id"]');
+    if (!button) return;
+
+    const card = button.closest('.appointment-card');
+    if (!card) return;
+
+    const data = getAppointmentData(card);
+    if (data.idUrl) {
+        viewIdentification(data.idUrl);
+    }
+}
+
+function bindAppointmentEvents() {
+    if (appointmentHandlersBound) return;
+
+    const pendingContainer = document.getElementById('pendingAppointments');
+    if (pendingContainer) {
+        pendingContainer.addEventListener('click', handlePendingActionClick);
+        pendingContainer.addEventListener('change', handlePendingSelectionChange);
+    }
+
+    const confirmedContainer = document.getElementById('confirmedAppointments');
+    if (confirmedContainer) {
+        confirmedContainer.addEventListener('click', handleConfirmedActionClick);
+    }
+
+    appointmentHandlersBound = true;
+}
 
 // ============================================
 // ACCIONES EN LOTE (BULK ACTIONS)
@@ -1506,19 +1691,19 @@ function appointmentsToCSV(appointments) {
         const statusText = apt.status === 'pending' ? 'Pendiente' : apt.status === 'accepted' ? 'Aceptada' : 'Rechazada';
 
         return [
-            apt.name,
-            apt.email,
-            apt.phone,
+            normalizeText(apt.name, 'Sin nombre'),
+            normalizeText(apt.email, 'Sin email'),
+            normalizeText(apt.phone, 'Sin teléfono'),
             dateStr,
             timeStr,
             statusText,
-            apt.notes || ''
+            normalizeText(apt.notes, '')
         ];
     });
 
     let csv = headers.join(',') + '\n';
     rows.forEach(row => {
-        csv += row.map(cell => `"${cell}"`).join(',') + '\n';
+        csv += row.map(cell => csvEscape(cell)).join(',') + '\n';
     });
 
     return csv;
@@ -1818,4 +2003,5 @@ window.addWeekSlots = async function() {
 // ============================================
 
 // Initialize
+bindAppointmentEvents();
 checkAuth();

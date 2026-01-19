@@ -87,14 +87,14 @@ class StepManager {
         });
     }
 
-    canProceed(fromStep) {
+    canProceed(fromStep, showErrors = false) {
         switch (fromStep) {
             case 1:
                 return AppState.selectedDate !== null;
             case 2:
                 return AppState.selectedSlot !== null;
             case 3:
-                return this.validateStep3();
+                return this.validateStep3(showErrors);
             case 4:
                 return true;
             default:
@@ -102,12 +102,32 @@ class StepManager {
         }
     }
 
-    validateStep3() {
-        const { valid } = Validators.validateAll({
+    validateStep3(showErrors = false) {
+        const { valid, errors } = Validators.validateAll({
             name: document.getElementById('name').value,
             email: document.getElementById('email').value,
             phone: document.getElementById('phone').value
         }, AppState.uploadedFile);
+
+        if (showErrors) {
+            const fields = ['name', 'email', 'phone', 'identification'];
+            fields.forEach((field) => {
+                if (errors[field]) {
+                    Validators.showError(field, errors[field]);
+                } else {
+                    Validators.clearError(field);
+                }
+            });
+
+            const uploadZone = document.getElementById('fileUploadZone');
+            if (uploadZone) {
+                if (errors.identification) {
+                    uploadZone.classList.add('error');
+                } else {
+                    uploadZone.classList.remove('error');
+                }
+            }
+        }
 
         return valid;
     }
@@ -295,12 +315,14 @@ const formManager = new FormManager();
 class FileUploadManager {
     constructor() {
         this.file = null;
+        this.uploadZone = null;
     }
 
     init() {
         const uploadZone = document.getElementById('fileUploadZone');
         const fileInput = document.getElementById('identification');
         const removeBtn = document.getElementById('removeFile');
+        this.uploadZone = uploadZone;
 
         // Click to select
         uploadZone.addEventListener('click', () => fileInput.click());
@@ -342,12 +364,19 @@ class FileUploadManager {
         const validation = Validators.validateFile(file);
 
         if (!validation.valid) {
-            alert(validation.message);
+            Validators.showError('identification', validation.message);
+            if (this.uploadZone) {
+                this.uploadZone.classList.add('error');
+            }
             return;
         }
 
         this.file = file;
         AppState.uploadedFile = file;
+        Validators.clearError('identification');
+        if (this.uploadZone) {
+            this.uploadZone.classList.remove('error');
+        }
         this.showPreview(file);
         formManager.checkFormValidity();
     }
@@ -382,6 +411,9 @@ class FileUploadManager {
 
         document.getElementById('identification').value = '';
         document.getElementById('filePreview').classList.remove('show');
+        if (this.uploadZone) {
+            this.uploadZone.classList.remove('error');
+        }
 
         formManager.checkFormValidity();
     }
@@ -435,7 +467,7 @@ function showConfirmation() {
 
         <div style="background: var(--gray-light); padding: 20px; border-radius: var(--radius-md);">
             <h4 style="margin-bottom: 8px; color: var(--gold-champagne);">Identificación</h4>
-            <p>${AppState.uploadedFile.name} (${Validators.formatFileSize(AppState.uploadedFile.size)})</p>
+            <p>${AppState.uploadedFile ? `${AppState.uploadedFile.name} (${Validators.formatFileSize(AppState.uploadedFile.size)})` : 'Sin archivo adjunto'}</p>
         </div>
     `;
 }
@@ -601,7 +633,7 @@ function setupEventListeners() {
 
     // Step 3 -> Step 4
     document.getElementById('step3Next').addEventListener('click', () => {
-        if (stepManager.canProceed(3)) {
+        if (stepManager.canProceed(3, true)) {
             AppState.formData = formManager.getFormData();
             showConfirmation();
             stepManager.goToStep(4);
