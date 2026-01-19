@@ -6,6 +6,13 @@
 
 Sistema completo de agendamiento de citas para showroom de joyería, con diseño luxury y gestión avanzada.
 
+## Novedades (v1.1.0)
+
+- Calendario: fechas locales y sin listeners duplicados.
+- Cliente: limpieza de horario al cambiar fecha y validacion reactiva del boton continuar.
+- Admin: filtros/paginacion se reinician bien, CSV tolera citas sin fecha y EmailJS/Chart no bloquean el panel.
+- UI: variables base para cards, bordes y textos coherentes.
+
 ## 📋 Características
 
 ### Para Clientes:
