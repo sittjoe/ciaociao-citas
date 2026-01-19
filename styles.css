@@ -1912,6 +1912,17 @@ footer {
     border-bottom: 2px solid var(--gray-light);
 }
 
+.slot-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    align-items: end;
+}
+
+.slot-form .btn-primary {
+    justify-self: start;
+}
+
 /* ===== ADMIN PANEL: DASHBOARD & STATS ===== */
 
 .stats-grid {

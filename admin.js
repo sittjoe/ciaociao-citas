@@ -143,6 +143,16 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 function showDashboard() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('adminDashboard').style.display = 'block';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const slotDate = document.getElementById('slotDate');
+    const slotTime = document.getElementById('slotTime');
+    if (slotDate) {
+        slotDate.min = todayStr;
+        if (!slotDate.value) slotDate.value = todayStr;
+    }
+    if (slotTime && !slotTime.value) {
+        slotTime.value = '09:00';
+    }
     loadAllData();
     initKeyboardShortcuts();
 }
