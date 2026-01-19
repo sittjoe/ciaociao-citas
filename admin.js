@@ -187,45 +187,48 @@ window.switchTab = function(tabName) {
 // GESTIÓN DE HORARIOS
 // ============================================
 
-document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+const addSlotForm = document.getElementById('addSlotForm');
+if (addSlotForm) {
+    addSlotForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-    const date = document.getElementById('slotDate').value;
-    const time = document.getElementById('slotTime').value;
+        const date = document.getElementById('slotDate').value;
+        const time = document.getElementById('slotTime').value;
 
-    if (!date || !time) {
-        showToast('Por favor completa todos los campos', 'error');
-        return;
-    }
-
-    try {
-        const datetime = new Date(`${date}T${time}`);
-
-        // Check if it's in the future
-        if (datetime <= new Date()) {
-            showToast('La fecha y hora deben ser en el futuro', 'error');
+        if (!date || !time) {
+            showToast('Por favor completa todos los campos', 'error');
             return;
         }
 
-        const slotsRef = collection(db, 'slots');
-        await addDoc(slotsRef, {
-            datetime: Timestamp.fromDate(datetime),
-            available: true,
-            createdAt: serverTimestamp()
-        });
+        try {
+            const datetime = new Date(`${date}T${time}`);
 
-        // Reset form
-        document.getElementById('addSlotForm').reset();
+            // Check if it's in the future
+            if (datetime <= new Date()) {
+                showToast('La fecha y hora deben ser en el futuro', 'error');
+                return;
+            }
 
-        // Reload slots
-        await loadSlots();
+            const slotsRef = collection(db, 'slots');
+            await addDoc(slotsRef, {
+                datetime: Timestamp.fromDate(datetime),
+                available: true,
+                createdAt: serverTimestamp()
+            });
 
-        showToast('Horario agregado exitosamente');
-    } catch (error) {
-        console.error('Error adding slot:', error);
-        showToast('Error al agregar horario: ' + error.message, 'error');
-    }
-});
+            // Reset form
+            addSlotForm.reset();
+
+            // Reload slots
+            await loadSlots();
+
+            showToast('Horario agregado exitosamente');
+        } catch (error) {
+            console.error('Error adding slot:', error);
+            showToast('Error al agregar horario: ' + error.message, 'error');
+        }
+    });
+}
 
 async function loadSlots() {
     try {
@@ -693,12 +696,21 @@ async function loadAppointments() {
         const querySnapshot = await getDocs(q);
         allAppointments = [];
 
+        const toDateValue = (value) => {
+            if (!value) return null;
+            if (value instanceof Date) return value;
+            if (typeof value.toDate === 'function') return value.toDate();
+            return new Date(value);
+        };
+
         querySnapshot.forEach((doc) => {
             const appointmentData = doc.data();
             allAppointments.push({
                 id: doc.id,
                 ...appointmentData,
-                slotDatetime: appointmentData.slotDatetime.toDate()
+                slotDatetime: toDateValue(appointmentData.slotDatetime),
+                createdAt: toDateValue(appointmentData.createdAt),
+                updatedAt: toDateValue(appointmentData.updatedAt)
             });
         });
 
@@ -733,7 +745,7 @@ function updateDashboardStats() {
     today.setHours(0, 0, 0, 0);
     const acceptedToday = allAppointments.filter(apt => {
         if (apt.status === 'accepted' && apt.updatedAt) {
-            const aptDate = apt.updatedAt.toDate();
+            const aptDate = new Date(apt.updatedAt);
             aptDate.setHours(0, 0, 0, 0);
             return aptDate.getTime() === today.getTime();
         }
@@ -830,7 +842,7 @@ function updateWeekChart() {
         const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
         const dayCount = allAppointments.filter(apt => {
             if (apt.slotDatetime) {
-                const aptDate = new Date(apt.slotDatetime.toDate());
+                const aptDate = new Date(apt.slotDatetime);
                 aptDate.setHours(0, 0, 0, 0);
                 return aptDate.getTime() === date.getTime();
             }
@@ -913,7 +925,7 @@ function displayUpcomingAppointments(appointments) {
     const now = new Date();
 
     const upcoming = appointments
-        .filter(apt => apt.status === 'accepted' && apt.slotDatetime > now)
+        .filter(apt => apt.status === 'accepted' && apt.slotDatetime && apt.slotDatetime > now)
         .sort((a, b) => a.slotDatetime - b.slotDatetime)
         .slice(0, 5);
 
@@ -972,13 +984,13 @@ function displayPendingAppointments(appointments) {
 
     if (dateFrom) {
         const fromDate = new Date(dateFrom);
-        filtered = filtered.filter(apt => apt.slotDatetime >= fromDate);
+        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime >= fromDate);
     }
 
     if (dateTo) {
         const toDate = new Date(dateTo);
         toDate.setHours(23, 59, 59, 999);
-        filtered = filtered.filter(apt => apt.slotDatetime <= toDate);
+        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime <= toDate);
     }
 
     if (filtered.length === 0) {
@@ -991,19 +1003,23 @@ function displayPendingAppointments(appointments) {
     const paginated = paginateArray(filtered, currentPagePending);
 
     container.innerHTML = paginated.map(apt => {
-        const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-        const timeStr = apt.slotDatetime.toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const dateStr = apt.slotDatetime
+            ? apt.slotDatetime.toLocaleDateString('es-ES', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            })
+            : 'Sin fecha';
+        const timeStr = apt.slotDatetime
+            ? apt.slotDatetime.toLocaleTimeString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit'
+            })
+            : 'Sin hora';
 
         const isSelected = selectedAppointments.has(apt.id);
-        const timeAgo = apt.createdAt ? getRelativeTime(apt.createdAt.toDate()) : '';
+        const timeAgo = apt.createdAt ? getRelativeTime(apt.createdAt) : '';
 
         return `
             <div class="appointment-card ${isSelected ? 'selected' : ''}">
@@ -1068,13 +1084,13 @@ function displayConfirmedAppointments(appointments) {
 
     if (dateFrom) {
         const fromDate = new Date(dateFrom);
-        filtered = filtered.filter(apt => apt.slotDatetime >= fromDate);
+        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime >= fromDate);
     }
 
     if (dateTo) {
         const toDate = new Date(dateTo);
         toDate.setHours(23, 59, 59, 999);
-        filtered = filtered.filter(apt => apt.slotDatetime <= toDate);
+        filtered = filtered.filter(apt => apt.slotDatetime && apt.slotDatetime <= toDate);
     }
 
     if (filtered.length === 0) {
@@ -1087,21 +1103,25 @@ function displayConfirmedAppointments(appointments) {
     const paginated = paginateArray(filtered, currentPageConfirmed);
 
     container.innerHTML = paginated.map(apt => {
-        const dateStr = apt.slotDatetime.toLocaleDateString('es-ES', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-        const timeStr = apt.slotDatetime.toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const dateStr = apt.slotDatetime
+            ? apt.slotDatetime.toLocaleDateString('es-ES', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            })
+            : 'Sin fecha';
+        const timeStr = apt.slotDatetime
+            ? apt.slotDatetime.toLocaleTimeString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit'
+            })
+            : 'Sin hora';
 
         const statusClass = apt.status === 'accepted' ? 'status-accepted' : 'status-rejected';
         const statusText = apt.status === 'accepted' ? 'Aceptada' : 'Rechazada';
         const cardClass = apt.status === 'accepted' ? 'accepted' : 'rejected';
-        const timeAgo = apt.updatedAt ? getRelativeTime(apt.updatedAt.toDate()) : '';
+        const timeAgo = apt.updatedAt ? getRelativeTime(apt.updatedAt) : '';
 
         return `
             <div class="appointment-card ${cardClass}">
@@ -1683,7 +1703,8 @@ window.addWeekSlots = async function() {
     const confirmed = await showConfirmModal(
         '📅 Agregar Semana Completa',
         '¿Deseas agregar horarios para toda la próxima semana? (Lunes a Viernes, 9AM-5PM, cada hora)',
-        'confirm'
+        null,
+        'success'
     );
 
     if (!confirmed) return;
