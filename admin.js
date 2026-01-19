@@ -28,9 +28,12 @@ let currentPageConfirmed = 1;
 const itemsPerPage = 10;
 
 // Load EmailJS
-(function() {
+const emailjsAvailable = typeof emailjs !== 'undefined';
+if (emailjsAvailable) {
     emailjs.init(emailConfig.publicKey);
-})();
+} else {
+    console.warn('EmailJS no está disponible. Se omitirán las notificaciones por correo.');
+}
 
 // ============================================
 // AUTENTICACIÓN
@@ -767,6 +770,8 @@ function updateDashboardStats() {
 // ============================================
 
 function initializeCharts(pending, accepted, rejected) {
+    if (typeof Chart === 'undefined') return;
+
     // Status Pie Chart
     const statusCtx = document.getElementById('statusChart');
     if (!statusCtx) return;
@@ -826,6 +831,8 @@ function initializeCharts(pending, accepted, rejected) {
 }
 
 function updateWeekChart() {
+    if (typeof Chart === 'undefined') return;
+
     const weekCtx = document.getElementById('weekChart');
     if (!weekCtx) return;
 
@@ -1000,6 +1007,10 @@ function displayPendingAppointments(appointments) {
     }
 
     // Paginate
+    const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+    if (currentPagePending > totalPages) {
+        currentPagePending = totalPages;
+    }
     const paginated = paginateArray(filtered, currentPagePending);
 
     container.innerHTML = paginated.map(apt => {
@@ -1100,6 +1111,10 @@ function displayConfirmedAppointments(appointments) {
     }
 
     // Paginate
+    const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+    if (currentPageConfirmed > totalPages) {
+        currentPageConfirmed = totalPages;
+    }
     const paginated = paginateArray(filtered, currentPageConfirmed);
 
     container.innerHTML = paginated.map(apt => {
@@ -1173,15 +1188,36 @@ const debouncedFilter = debounce(() => {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         // Search inputs with debounce
-        document.getElementById('searchPending')?.addEventListener('input', debouncedFilter);
-        document.getElementById('searchConfirmed')?.addEventListener('input', debouncedFilter);
+        document.getElementById('searchPending')?.addEventListener('input', () => {
+            currentPagePending = 1;
+            debouncedFilter();
+        });
+        document.getElementById('searchConfirmed')?.addEventListener('input', () => {
+            currentPageConfirmed = 1;
+            debouncedFilter();
+        });
 
         // Date filters immediate
-        document.getElementById('filterDateFrom')?.addEventListener('change', filterAndDisplayAppointments);
-        document.getElementById('filterDateTo')?.addEventListener('change', filterAndDisplayAppointments);
-        document.getElementById('filterStatus')?.addEventListener('change', filterAndDisplayAppointments);
-        document.getElementById('filterDateFromConfirmed')?.addEventListener('change', filterAndDisplayAppointments);
-        document.getElementById('filterDateToConfirmed')?.addEventListener('change', filterAndDisplayAppointments);
+        document.getElementById('filterDateFrom')?.addEventListener('change', () => {
+            currentPagePending = 1;
+            filterAndDisplayAppointments();
+        });
+        document.getElementById('filterDateTo')?.addEventListener('change', () => {
+            currentPagePending = 1;
+            filterAndDisplayAppointments();
+        });
+        document.getElementById('filterStatus')?.addEventListener('change', () => {
+            currentPageConfirmed = 1;
+            filterAndDisplayAppointments();
+        });
+        document.getElementById('filterDateFromConfirmed')?.addEventListener('change', () => {
+            currentPageConfirmed = 1;
+            filterAndDisplayAppointments();
+        });
+        document.getElementById('filterDateToConfirmed')?.addEventListener('change', () => {
+            currentPageConfirmed = 1;
+            filterAndDisplayAppointments();
+        });
     }, 1000);
 });
 
@@ -1190,11 +1226,13 @@ window.clearFilters = function(tab) {
         document.getElementById('searchPending').value = '';
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
+        currentPagePending = 1;
     } else if (tab === 'confirmed') {
         document.getElementById('searchConfirmed').value = '';
         document.getElementById('filterStatus').value = '';
         document.getElementById('filterDateFromConfirmed').value = '';
         document.getElementById('filterDateToConfirmed').value = '';
+        currentPageConfirmed = 1;
     }
     filterAndDisplayAppointments();
 };
@@ -1350,30 +1388,39 @@ async function acceptAppointmentSilent(appointmentId, email, name, slotId, datet
     }
 
     // Send confirmation email
-    let dateStr, timeStr;
-    if (typeof datetimeInfo === 'object' && datetimeInfo.dateStr) {
+    let dateStr = 'Sin fecha';
+    let timeStr = 'Sin hora';
+    if (datetimeInfo && typeof datetimeInfo === 'object' && datetimeInfo.dateStr) {
         dateStr = datetimeInfo.dateStr;
         timeStr = datetimeInfo.timeStr;
-    } else {
-        const datetime = datetimeInfo;
-        dateStr = datetime.toLocaleDateString('es-ES', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-        timeStr = datetime.toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+    } else if (datetimeInfo) {
+        const datetime = new Date(datetimeInfo);
+        if (!Number.isNaN(datetime.getTime())) {
+            dateStr = datetime.toLocaleDateString('es-ES', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            timeStr = datetime.toLocaleTimeString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
     }
 
-    await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
-        to_email: email,
-        to_name: name,
-        subject: 'Cita Confirmada - Ciao Ciao',
-        message: `Hola ${name},\n\n¡Tu cita ha sido confirmada!\n\nFecha: ${dateStr}\nHora: ${timeStr}\n\nTe esperamos en nuestro showroom.\n\nCiao Ciao Joyería`
-    });
+    if (emailjsAvailable) {
+        try {
+            await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+                to_email: email,
+                to_name: name,
+                subject: 'Cita Confirmada - Ciao Ciao',
+                message: `Hola ${name},\n\n¡Tu cita ha sido confirmada!\n\nFecha: ${dateStr}\nHora: ${timeStr}\n\nTe esperamos en nuestro showroom.\n\nCiao Ciao Joyería`
+            });
+        } catch (error) {
+            console.error('Error sending confirmation email:', error);
+        }
+    }
 }
 
 window.rejectAppointment = async (appointmentId, email, name, slotId) => {
@@ -1406,12 +1453,18 @@ async function rejectAppointmentSilent(appointmentId, email, name, slotId) {
     // Slot remains available (don't update)
 
     // Send rejection email
-    await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
-        to_email: email,
-        to_name: name,
-        subject: 'Solicitud de Cita - Ciao Ciao',
-        message: `Hola ${name},\n\nLamentamos informarte que no podemos confirmar tu cita en el horario solicitado.\n\nPor favor, visita nuestra página para seleccionar otro horario disponible.\n\nCiao Ciao Joyería`
-    });
+    if (emailjsAvailable) {
+        try {
+            await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+                to_email: email,
+                to_name: name,
+                subject: 'Solicitud de Cita - Ciao Ciao',
+                message: `Hola ${name},\n\nLamentamos informarte que no podemos confirmar tu cita en el horario solicitado.\n\nPor favor, visita nuestra página para seleccionar otro horario disponible.\n\nCiao Ciao Joyería`
+            });
+        } catch (error) {
+            console.error('Error sending rejection email:', error);
+        }
+    }
 }
 
 // ============================================
@@ -1421,8 +1474,9 @@ async function rejectAppointmentSilent(appointmentId, email, name, slotId) {
 window.viewIdentification = (url) => {
     const modal = document.getElementById('idModal');
     const content = document.getElementById('idContent');
+    const isPdf = url.toLowerCase().includes('.pdf');
 
-    if (url.endsWith('.pdf')) {
+    if (isPdf) {
         content.innerHTML = `<iframe src="${url}" style="width: 100%; height: 600px; border: none;"></iframe>`;
     } else {
         content.innerHTML = `<img src="${url}" style="max-width: 100%; height: auto;">`;
@@ -1442,11 +1496,13 @@ window.closeIdModal = () => {
 function appointmentsToCSV(appointments) {
     const headers = ['Nombre', 'Email', 'Teléfono', 'Fecha', 'Hora', 'Estado', 'Notas'];
     const rows = appointments.map(apt => {
-        const dateStr = apt.slotDatetime.toLocaleDateString('es-ES');
-        const timeStr = apt.slotDatetime.toLocaleTimeString('es-ES', {
+        const slotDatetime = apt.slotDatetime ? new Date(apt.slotDatetime) : null;
+        const hasSlot = slotDatetime && !Number.isNaN(slotDatetime.getTime());
+        const dateStr = hasSlot ? slotDatetime.toLocaleDateString('es-ES') : 'Sin fecha';
+        const timeStr = hasSlot ? slotDatetime.toLocaleTimeString('es-ES', {
             hour: '2-digit',
             minute: '2-digit'
-        });
+        }) : 'Sin hora';
         const statusText = apt.status === 'pending' ? 'Pendiente' : apt.status === 'accepted' ? 'Aceptada' : 'Rechazada';
 
         return [
@@ -1609,7 +1665,13 @@ function updatePreview() {
     const previewSection = document.getElementById('previewSection');
     const previewList = document.getElementById('previewList');
     const confirmBtn = document.getElementById('confirmAddSlots');
-    const slotCount = document.getElementById('slotCount');
+    if (!confirmBtn) return;
+
+    let slotCount = document.getElementById('slotCount');
+    if (!slotCount) {
+        confirmBtn.innerHTML = 'Agregar <span id="slotCount">0</span> Horarios';
+        slotCount = document.getElementById('slotCount');
+    }
 
     if (selectedTimes.size === 0 || !selectedQuickDate) {
         previewSection.style.display = 'none';

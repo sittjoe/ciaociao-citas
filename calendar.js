@@ -11,6 +11,8 @@ export class CalendarManager {
         this.currentYear = new Date().getFullYear();
         this.selectedDate = null;
         this.daysWithSlots = new Set(); // Set de fechas con horarios disponibles
+        this.handleContainerClick = this.handleContainerClick.bind(this);
+        this.handleContainerKeydown = this.handleContainerKeydown.bind(this);
 
         this.monthNames = [
             'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -111,7 +113,7 @@ export class CalendarManager {
             daysHTML += `
                 <div
                     class="${classes.join(' ')}"
-                    data-date="${currentDate.toISOString()}"
+                    data-date="${this.getDateKey(currentDate)}"
                     ${isPast ? '' : `role="button" tabindex="0"`}
                 >
                     ${day}
@@ -139,29 +141,35 @@ export class CalendarManager {
         }
 
         // Click en días
-        this.container.addEventListener('click', (e) => {
-            const dayEl = e.target.closest('.calendar-day');
-            if (dayEl && !dayEl.classList.contains('disabled')) {
-                const dateStr = dayEl.dataset.date;
-                if (dateStr) {
-                    this.selectDate(new Date(dateStr));
-                }
-            }
-        });
+        this.container.removeEventListener('click', this.handleContainerClick);
+        this.container.addEventListener('click', this.handleContainerClick);
 
         // Soporte para teclado
-        this.container.addEventListener('keydown', (e) => {
-            const dayEl = e.target.closest('.calendar-day');
-            if (dayEl && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault();
-                if (!dayEl.classList.contains('disabled')) {
-                    const dateStr = dayEl.dataset.date;
-                    if (dateStr) {
-                        this.selectDate(new Date(dateStr));
-                    }
+        this.container.removeEventListener('keydown', this.handleContainerKeydown);
+        this.container.addEventListener('keydown', this.handleContainerKeydown);
+    }
+
+    handleContainerClick(e) {
+        const dayEl = e.target.closest('.calendar-day');
+        if (dayEl && !dayEl.classList.contains('disabled')) {
+            const dateKey = dayEl.dataset.date;
+            if (dateKey) {
+                this.selectDate(this.parseDateKey(dateKey));
+            }
+        }
+    }
+
+    handleContainerKeydown(e) {
+        const dayEl = e.target.closest('.calendar-day');
+        if (dayEl && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            if (!dayEl.classList.contains('disabled')) {
+                const dateKey = dayEl.dataset.date;
+                if (dateKey) {
+                    this.selectDate(this.parseDateKey(dateKey));
                 }
             }
-        });
+        }
     }
 
     /**
@@ -242,6 +250,16 @@ export class CalendarManager {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    }
+
+    /**
+     * Parsea una clave de fecha (YYYY-MM-DD) a Date en horario local
+     * @param {string} dateKey
+     * @returns {Date}
+     */
+    parseDateKey(dateKey) {
+        const [year, month, day] = dateKey.split('-').map(Number);
+        return new Date(year, month - 1, day);
     }
 
     /**

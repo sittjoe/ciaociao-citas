@@ -18,7 +18,12 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 
 // Initialize EmailJS
-emailjs.init(emailConfig.publicKey);
+const emailjsAvailable = typeof emailjs !== 'undefined';
+if (emailjsAvailable) {
+    emailjs.init(emailConfig.publicKey);
+} else {
+    console.warn('EmailJS no está disponible. Se omitirán las notificaciones por correo.');
+}
 
 // ===================
 // STATE MANAGEMENT
@@ -120,6 +125,8 @@ function initCalendar() {
 
     calendarManager = new CalendarManager(container, (selectedDate) => {
         AppState.selectedDate = selectedDate;
+        AppState.selectedSlot = null;
+        document.getElementById('step2Next').disabled = true;
         document.getElementById('step1Next').disabled = false;
     });
 
@@ -132,6 +139,9 @@ function initCalendar() {
 // ===================
 class TimeSlotManager {
     renderSlotsForDate(date) {
+        AppState.selectedSlot = null;
+        document.getElementById('step2Next').disabled = true;
+
         // Filtrar slots para la fecha seleccionada
         AppState.slotsForSelectedDate = AppState.allSlots.filter(slot => {
             const slotDate = slot.datetime instanceof Date ? slot.datetime : slot.datetime.toDate();
@@ -219,6 +229,7 @@ class FormManager {
             if (nameInput.value.length > 0) {
                 Validators.clearError('name');
             }
+            this.checkFormValidity();
         });
 
         // Email
@@ -237,6 +248,7 @@ class FormManager {
             if (emailInput.value.length > 0) {
                 Validators.clearError('email');
             }
+            this.checkFormValidity();
         });
 
         // Teléfono con auto-formateo
@@ -244,6 +256,7 @@ class FormManager {
         phoneInput.addEventListener('input', (e) => {
             e.target.value = Validators.formatPhone(e.target.value);
             Validators.clearError('phone');
+            this.checkFormValidity();
         });
 
         phoneInput.addEventListener('blur', () => {
@@ -476,6 +489,8 @@ async function createAppointment() {
 }
 
 async function sendConfirmationEmails(appointmentData, appointmentId) {
+    if (!emailjsAvailable) return;
+
     const slotDate = appointmentData.slotDatetime instanceof Date
         ? appointmentData.slotDatetime
         : appointmentData.slotDatetime.toDate();

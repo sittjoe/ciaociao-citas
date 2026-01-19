@@ -23,6 +23,11 @@
     --success: #2E7D32;
     --error: #C62828;
     --warning: #F57C00;
+    --text-primary: var(--black-rich);
+    --text-light: var(--gray-medium);
+    --border-color: rgba(13, 13, 13, 0.08);
+    --card-bg: var(--white-warm);
+    --error-color: var(--error);
 
     /* Espaciado */
     --spacing-xs: 8px;
