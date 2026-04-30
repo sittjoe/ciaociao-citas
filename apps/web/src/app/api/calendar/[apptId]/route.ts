@@ -6,10 +6,9 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ 'apptId.ics': string }> }
+  { params }: { params: Promise<{ apptId: string }> }
 ) {
-  const raw   = (await params)['apptId.ics']
-  const apptId = raw.replace(/\.ics$/, '')
+  const { apptId } = await params
 
   const snap = await adminDb.collection('appointments').doc(apptId).get()
   if (!snap.exists) return new NextResponse('Not found', { status: 404 })

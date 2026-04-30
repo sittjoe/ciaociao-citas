@@ -79,7 +79,7 @@ export default async function ReservaPage({ params }: PageProps) {
 
         {appt.status === 'accepted' && (
           <a
-            href={`/api/calendar/${appt.id}.ics`}
+            href={`/api/calendar/${appt.id}`}
             className="flex items-center justify-center gap-2 w-full py-2.5 px-5 rounded-xl border border-gold-500 text-gold-500 text-sm font-medium hover:bg-gold-500/10 transition-colors"
           >
             Agregar a mi calendario (.ics)
