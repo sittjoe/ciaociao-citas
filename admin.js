@@ -3,14 +3,19 @@
  * Gestión avanzada de citas con dashboard, filtros, búsqueda y exportación
  */
 
-import { firebaseConfig, ADMIN_PASSWORD, emailConfig } from './config-inline.js';
+import { firebaseConfig, emailConfig } from './config-inline.js';
 
 // Initialize Firebase
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getFirestore, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js';
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+const functions = getFunctions(app, 'us-central1');
+const adminLoginFn = httpsCallable(functions, 'adminLogin');
 
 // Estado global
 let isAuthenticated = false;
@@ -110,33 +115,53 @@ if (emailjsAvailable) {
 }
 
 // ============================================
-// AUTENTICACIÓN
+// AUTENTICACIÓN (Firebase Auth + Cloud Function)
 // ============================================
 
-function checkAuth() {
-    const authToken = sessionStorage.getItem('adminAuth');
-    if (authToken === 'authenticated') {
-        isAuthenticated = true;
-        showDashboard();
-    }
-}
-
-document.getElementById('loginForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const password = document.getElementById('adminPassword').value;
-
-    if (password === ADMIN_PASSWORD) {
-        sessionStorage.setItem('adminAuth', 'authenticated');
-        isAuthenticated = true;
-        showDashboard();
+// Observar estado de autenticación al cargar
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        const tokenResult = await user.getIdTokenResult();
+        if (tokenResult.claims.admin) {
+            isAuthenticated = true;
+            showDashboard();
+        } else {
+            // Sesión válida pero sin claim admin — no debería ocurrir
+            await signOut(auth);
+        }
     } else {
-        document.getElementById('loginError').textContent = 'Contraseña incorrecta';
-        document.getElementById('loginError').style.display = 'block';
+        isAuthenticated = false;
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('adminDashboard').style.display = 'none';
     }
 });
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
-    sessionStorage.removeItem('adminAuth');
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = document.getElementById('adminPassword').value;
+    const loginError = document.getElementById('loginError');
+    const submitBtn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('button');
+
+    loginError.style.display = 'none';
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Verificando...'; }
+
+    try {
+        const result = await adminLoginFn({ password });
+        await signInWithCustomToken(auth, result.data.token);
+        // onAuthStateChanged se encarga de llamar showDashboard()
+    } catch (error) {
+        const msg = error.message || 'Error de autenticación';
+        loginError.textContent = msg.includes('resource-exhausted')
+            ? msg
+            : 'Contraseña incorrecta. Verifica e intenta de nuevo.';
+        loginError.style.display = 'block';
+    } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Entrar'; }
+    }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await signOut(auth);
     location.reload();
 });
 
@@ -2014,4 +2039,4 @@ window.addWeekSlots = async function() {
 
 // Initialize
 bindAppointmentEvents();
-checkAuth();
+// Auth state is managed by onAuthStateChanged (defined above)

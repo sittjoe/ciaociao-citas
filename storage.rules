@@ -3,24 +3,26 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
     // ============================================
-    // IDENTIFICATIONS: Archivos de identificación
+    // IDENTIFICATIONS: Archivos de identificación de clientes
     // ============================================
-    // - Clientes: pueden subir archivos (hasta 5MB)
-    // - Admin: puede leer todos los archivos
     match /identifications/{fileName} {
-      // Permitir subida de archivos con límite de 5MB
-      // Validar tipos de archivo permitidos: images y PDF
+      // Clientes pueden subir archivos sin autenticación (se requiere durante el booking)
+      // Límite: 5MB, solo imágenes y PDF
       allow write: if request.resource.size < 5 * 1024 * 1024
                    && (request.resource.contentType.matches('image/.*')
                    || request.resource.contentType == 'application/pdf');
 
-      // Permitir lectura de archivos (para admin revisar identificaciones)
-      allow read: if true;
+      // Solo admin autenticado puede leer identificaciones (PII protegida)
+      allow read: if isAdmin();
     }
 
     // ============================================
-    // OTROS ARCHIVOS (bloqueados por defecto)
+    // TODOS LOS DEMÁS ARCHIVOS: Bloqueados por defecto
     // ============================================
     match /{allPaths=**} {
       allow read, write: if false;
