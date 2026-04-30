@@ -1,0 +1,16 @@
+import type { Metadata } from 'next'
+import { SlotManager } from '@/components/admin/SlotManager'
+
+export const metadata: Metadata = { title: 'Slots' }
+
+export default function SlotsPage() {
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h1 className="font-serif text-2xl text-gold-400">Slots</h1>
+        <p className="text-sm text-gold-700 mt-1">Crea y gestiona los horarios disponibles para visitas</p>
+      </div>
+      <SlotManager />
+    </div>
+  )
+}

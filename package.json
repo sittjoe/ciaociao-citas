@@ -4,6 +4,7 @@
     "firebase-tools": "^14.17.0"
   },
   "dependencies": {
-    "@upstash/context7-mcp": "^1.0.20"
+    "@upstash/context7-mcp": "^1.0.20",
+    "bcryptjs": "^3.0.3"
   }
 }
