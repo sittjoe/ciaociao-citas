@@ -2,6 +2,24 @@ import type { Timestamp } from 'firebase/firestore'
 
 export type SlotStatus = 'available' | 'held' | 'booked'
 export type AppointmentStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled'
+export type GuestStatus = 'pending' | 'verified' | 'expired' | 'excluded'
+
+export interface Guest {
+  id: string
+  appointmentId: string
+  name: string
+  email: string
+  status: GuestStatus
+  verifyToken: string
+  identificationUrl: string | null
+  invitedAt: Date
+  verifiedAt: Date | null
+  expiredAt: Date | null
+  excludedAt: Date | null
+  excludedBy: string | null
+  reminder48Sent: boolean
+  reminder24Sent: boolean
+}
 
 export interface Slot {
   id: string
@@ -31,6 +49,8 @@ export interface Appointment {
   decidedBy?: string | null
   decidedAt?: Date | null
   adminNote?: string | null
+  guestCount?: number
+  guestsAllVerified?: boolean
   createdAt: Date
   updatedAt?: Date
 }

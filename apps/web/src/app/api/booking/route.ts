@@ -1,10 +1,12 @@
 import { NextResponse, after } from 'next/server'
 import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { bookingPayloadSchema } from '@/lib/schemas'
+import { z } from 'zod'
+import { bookingPayloadSchema, guestInputSchema } from '@/lib/schemas'
 import { generateCode, sanitize } from '@/lib/utils'
-import { sendBookingConfirmation } from '@/lib/email'
+import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
 import { releaseExpiredHolds } from '@/lib/holds'
+import { createGuestsForAppointment } from '@/lib/guests'
 import type { Appointment } from '@/types'
 import { randomUUID } from 'crypto'
 
@@ -47,6 +49,16 @@ export async function POST(request: Request) {
     }
 
     const { slotId, name, email, phone, notes, whatsapp } = parsed.data
+
+    // Parse optional guests array (JSON-encoded in FormData)
+    const guestsRaw = formData.get('guests')
+    const guestsParsed = guestsRaw
+      ? z.array(guestInputSchema).max(3).safeParse(JSON.parse(String(guestsRaw)))
+      : { success: true as const, data: [] }
+    if (!guestsParsed.success) {
+      return NextResponse.json({ error: 'Datos de invitados inválidos' }, { status: 422 })
+    }
+    const guestList = guestsParsed.data
 
     // Upload ID first (outside transaction — idempotent with UUID path)
     const fileExt       = idFile.name.split('.').pop() ?? 'jpg'
@@ -102,13 +114,15 @@ export async function POST(request: Request) {
         notes:        sanitize(notes ?? ''),
         whatsapp:     whatsapp ?? false,
         identificationUrl,
-        status:           'pending',
+        status:              'pending',
         confirmationCode,
         cancelToken,
-        reminder24Sent:   false,
-        reminder2Sent:    false,
-        createdAt:        FieldValue.serverTimestamp(),
-        updatedAt:        FieldValue.serverTimestamp(),
+        reminder24Sent:      false,
+        reminder2Sent:       false,
+        guestCount:          guestList.length,
+        guestsAllVerified:   guestList.length === 0,
+        createdAt:           FieldValue.serverTimestamp(),
+        updatedAt:           FieldValue.serverTimestamp(),
       })
 
       tx.update(slotRef, {
@@ -118,7 +132,11 @@ export async function POST(request: Request) {
       })
     })
 
-    // Send emails async (don't fail the booking if email fails)
+    // Create guest subdocs (outside transaction — idempotent by nature)
+    const createdGuests = guestList.length > 0
+      ? await createGuestsForAppointment(appointmentId, guestList)
+      : []
+
     const apptForEmail: Appointment = {
       id: appointmentId,
       slotId,
@@ -128,18 +146,31 @@ export async function POST(request: Request) {
       phone:  phone.trim(),
       notes:  sanitize(notes ?? ''),
       identificationUrl,
-      status: 'pending',
+      status:            'pending',
       confirmationCode,
       cancelToken,
-      reminder24Sent: false,
-      reminder2Sent:  false,
+      reminder24Sent:    false,
+      reminder2Sent:     false,
+      guestCount:        guestList.length,
+      guestsAllVerified: guestList.length === 0,
       googleCalendarEventId: null,
       createdAt: new Date(),
     }
 
-    after(sendBookingConfirmation(apptForEmail).catch(err =>
-      console.error('Email send failed (non-fatal):', err)
-    ))
+    after(async () => {
+      try {
+        await sendBookingConfirmation(apptForEmail, createdGuests.map(g => g.name))
+      } catch (err) {
+        console.error('Booking email failed (non-fatal):', err)
+      }
+      for (const g of createdGuests) {
+        try {
+          await sendGuestInvitation({ guest: g, appointment: apptForEmail, hostName: apptForEmail.name })
+        } catch (err) {
+          console.error(`Guest invitation email failed for ${g.email} (non-fatal):`, err)
+        }
+      }
+    })
 
     return NextResponse.json({ confirmationCode }, { status: 201 })
   } catch (err: unknown) {

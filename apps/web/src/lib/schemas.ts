@@ -53,3 +53,22 @@ export const bulkSlotsSchema = z.object({
   dates: z.array(z.string()).min(1),
   times: z.array(z.string()).min(1),
 })
+
+export const guestInputSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Mínimo 2 caracteres')
+    .max(100, 'Máximo 100 caracteres')
+    .regex(/^[\p{L}\s'.,-]+$/u, 'Solo letras y caracteres comunes'),
+  email: z.string().email('Email inválido').max(200),
+})
+
+export type GuestInput = z.infer<typeof guestInputSchema>
+
+export const guestVerifySchema = z.object({
+  identificationUrl: z.string().min(1, 'URL requerida'),
+})
+
+export const adminGuestActionSchema = z.object({
+  action: z.enum(['verify', 'exclude']),
+})

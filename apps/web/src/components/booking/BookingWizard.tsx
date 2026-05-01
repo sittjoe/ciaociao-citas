@@ -10,9 +10,10 @@ import { toast } from 'sonner'
 import { CalendarView } from './CalendarView'
 import { SlotPicker } from './SlotPicker'
 import { IDUploader } from './IDUploader'
+import { GuestsField } from './GuestsField'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
-import { bookingFormSchema, type BookingFormInput } from '@/lib/schemas'
+import { bookingFormSchema, type BookingFormInput, type GuestInput } from '@/lib/schemas'
 import { cn, formatDate, formatTime } from '@/lib/utils'
 
 interface Slot { id: string; datetime: string }
@@ -29,6 +30,7 @@ export function BookingWizard() {
   const [selectedDate, setSelectedDate]= useState<Date | null>(null)
   const [selectedSlot, setSelectedSlot]= useState<Slot | null>(null)
   const [idFile,       setIdFile]      = useState<File | null>(null)
+  const [guests,       setGuests]      = useState<GuestInput[]>([])
   const [submitting,   setSubmitting]  = useState(false)
   const [confirmCode,  setConfirmCode] = useState('')
 
@@ -75,6 +77,9 @@ export function BookingWizard() {
     fd.append('notes',    data.notes ?? '')
     fd.append('whatsapp', String(data.whatsapp))
     fd.append('idFile',   idFile)
+    if (guests.length > 0) {
+      fd.append('guests', JSON.stringify(guests))
+    }
 
     try {
       const res  = await fetch('/api/booking', { method: 'POST', body: fd })
@@ -249,6 +254,10 @@ export function BookingWizard() {
             </span>
           </label>
 
+          <div className="border-t border-stone-100 pt-4">
+            <GuestsField value={guests} onChange={setGuests} />
+          </div>
+
           <Button type="submit" className="w-full">Continuar →</Button>
         </form>
       )}
@@ -302,6 +311,14 @@ export function BookingWizard() {
                 <span className="text-ink text-right max-w-[60%] truncate">{value}</span>
               </div>
             ))}
+            {guests.length > 0 && (
+              <div className="py-2.5 text-sm">
+                <p className="text-ink-muted mb-1.5">Invitados ({guests.length})</p>
+                {guests.map((g, i) => (
+                  <p key={i} className="text-ink text-right truncate">· {g.name} — {g.email}</p>
+                ))}
+              </div>
+            )}
           </div>
 
           <p className="text-xs text-ink-muted leading-relaxed">

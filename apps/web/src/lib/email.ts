@@ -8,7 +8,7 @@ const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
 const SHOWROOM_ADDRESS = process.env.SHOWROOM_ADDRESS || 'Ciudad de México'
 
-type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'calendar_error'
+type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'calendar_error' | 'guest_invitation' | 'guest_reminder'
 
 let resendClient: Resend | null = null
 
@@ -168,10 +168,21 @@ function details(rows: [string, string][]): string {
   ).join('')
 }
 
-export async function sendBookingConfirmation(appt: Appointment) {
+export async function sendBookingConfirmation(
+  appt: Appointment,
+  guestNames: string[] = [],
+) {
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
   const url = `${SITE}/reserva/${appt.confirmationCode}`
+
+  const guestBlock = guestNames.length > 0
+    ? `<div style="margin:16px 0;padding:14px 16px;background:#FAF7F2;border-radius:12px;border:1px solid #E7E2D7;">
+        <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px;font-weight:600;">Invitados agregados</p>
+        ${guestNames.map(n => `<p style="font-size:13px;color:#1A1A1A;margin:2px 0;">· ${escapeHtml(n)}</p>`).join('')}
+        <p style="font-size:11px;color:#6B6B6B;margin:10px 0 0;">Cada uno recibirá un correo con su link de verificación. Solo las personas verificadas podrán ingresar al showroom.</p>
+       </div>`
+    : ''
 
   await sendTracked({
     kind: 'booking_client',
@@ -189,6 +200,7 @@ export async function sendBookingConfirmation(appt: Appointment) {
           ['Código', appt.confirmationCode],
         ])}
       </div>
+      ${guestBlock}
       <p style="text-align:center"><a class="btn" href="${url}">Ver estado de tu cita</a></p>
     `),
   })
@@ -311,6 +323,80 @@ export async function sendCalendarError(appt: Appointment, errorMessage: string)
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Ver en panel</a></p>
+    `),
+  })
+}
+
+export async function sendGuestInvitation(params: {
+  guest: { id: string; name: string; email: string; verifyToken: string }
+  appointment: Appointment
+  hostName: string
+}) {
+  const { guest, appointment, hostName } = params
+  const dateStr  = formatDate(appointment.slotDatetime)
+  const timeStr  = formatTime(appointment.slotDatetime)
+  const deadline = new Date(appointment.slotDatetime.getTime() - 24 * 60 * 60 * 1000)
+  const deadlineStr = `${formatDate(deadline)} a las ${formatTime(deadline)}`
+  const link = `${SITE}/invitado/${guest.verifyToken}`
+
+  await sendTracked({
+    kind: 'guest_invitation',
+    appointmentId: appointment.id,
+    from: `Ciao Ciao Joyería <${FROM}>`,
+    to: guest.email,
+    subject: `Verifica tu identidad para tu visita a Ciao Ciao`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Visita al showroom privado</p>
+        <p class="copy">
+          ${escapeHtml(hostName)} te ha invitado a su visita privada al showroom de Ciao Ciao Joyería.
+          Para poder ingresar, necesitamos verificar tu identidad antes del ${escapeHtml(deadlineStr)}.
+        </p>
+        ${details([
+          ['Fecha', dateStr],
+          ['Hora', timeStr],
+          ['Invitado por', hostName],
+        ])}
+      </div>
+      <div style="background:#FFF8F0;border:1px solid #E7E2D7;border-radius:12px;padding:14px 18px;margin:20px 0;text-align:center;">
+        <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 4px;font-weight:600;">Importante</p>
+        <p style="font-size:13px;color:#1A1A1A;margin:0;">Solo las personas con identificación verificada podrán ingresar al showroom.</p>
+      </div>
+      <p style="text-align:center"><a class="btn" href="${link}">Verificar mi identidad</a></p>
+      <p style="text-align:center;font-size:12px;color:#8B8B8B;margin-top:8px;">Válido hasta el ${escapeHtml(deadlineStr)}</p>
+    `),
+  })
+}
+
+export async function sendGuestReminder(params: {
+  guest: { name: string; email: string; verifyToken: string }
+  appointment: Appointment
+  hoursAhead: 48 | 24
+}) {
+  const { guest, appointment, hoursAhead } = params
+  const dateStr = formatDate(appointment.slotDatetime)
+  const timeStr = formatTime(appointment.slotDatetime)
+  const label   = hoursAhead === 48 ? '48 horas' : '24 horas'
+  const link    = `${SITE}/invitado/${guest.verifyToken}`
+
+  await sendTracked({
+    kind: 'guest_reminder',
+    appointmentId: appointment.id,
+    from: `Ciao Ciao Joyería <${FROM}>`,
+    to: guest.email,
+    subject: `Recordatorio: verifica tu identidad para ingresar al showroom`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Faltan ${escapeHtml(label)} para tu visita</p>
+        <p class="copy">
+          Todavía no hemos recibido tu identificación. Sin verificación no podrás ingresar al showroom privado de Ciao Ciao.
+        </p>
+        ${details([
+          ['Fecha', dateStr],
+          ['Hora', timeStr],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${link}">Verificar ahora</a></p>
     `),
   })
 }

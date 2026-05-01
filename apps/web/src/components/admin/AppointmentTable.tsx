@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Download, ChevronDown, Search } from 'lucide-react'
+import { CheckCircle, XCircle, Download, ChevronDown, Search, Users } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { GuestsList } from './GuestsList'
 import { formatShortDate, csvRow, cn } from '@/lib/utils'
 import type { Appointment, AppointmentStatus } from '@/types'
 
@@ -161,7 +162,17 @@ export function AppointmentTable() {
                   {formatShortDate(appt.slotDatetime)}
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 text-ink-muted text-xs">{appt.email}</td>
-                <td className="px-4 py-3"><StatusBadge status={appt.status} /></td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <StatusBadge status={appt.status} />
+                    {(appt.guestCount ?? 0) > 0 && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-stone-100 text-stone-500">
+                        <Users size={9} />
+                        {appt.guestCount}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   {appt.status === 'pending' && (
                     <button
@@ -233,6 +244,15 @@ export function AppointmentTable() {
                 </div>
               ))}
             </div>
+
+            {(selected.guestCount ?? 0) > 0 && (
+              <div className="pt-2">
+                <p className="text-xs text-ink-muted font-semibold tracking-widest uppercase mb-2">
+                  Invitados ({selected.guestCount})
+                </p>
+                <GuestsList appointmentId={selected.id} />
+              </div>
+            )}
 
             {selected.status === 'pending' && (
               <div className="space-y-3 pt-2">

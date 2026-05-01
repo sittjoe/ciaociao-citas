@@ -50,6 +50,16 @@ service cloud.firestore {
     }
 
     // ============================================
+    // GUESTS: Invitados de citas (subcolección)
+    // ============================================
+    match /appointments/{appointmentId}/guests/{guestId} {
+      // All writes go through Admin SDK (server-side), which bypasses these rules.
+      allow write: if false;
+      // Only authenticated admins can read guest data (contains PII + ID URLs)
+      allow read: if isAdmin();
+    }
+
+    // ============================================
     // LOGIN ATTEMPTS: Protección rate-limit (solo Cloud Functions via Admin SDK)
     // ============================================
     match /loginAttempts/{ip} {
