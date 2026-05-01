@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { bookingPayloadSchema } from '@/lib/schemas'
@@ -137,9 +137,9 @@ export async function POST(request: Request) {
       createdAt: new Date(),
     }
 
-    sendBookingConfirmation(apptForEmail).catch(err =>
+    after(sendBookingConfirmation(apptForEmail).catch(err =>
       console.error('Email send failed (non-fatal):', err)
-    )
+    ))
 
     return NextResponse.json({ confirmationCode }, { status: 201 })
   } catch (err: unknown) {

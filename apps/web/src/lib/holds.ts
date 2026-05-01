@@ -20,7 +20,8 @@ export async function releaseExpiredHolds(limit = 50): Promise<number> {
 
     const apptRef = adminDb.collection('appointments').doc(slot.bookedBy)
     const apptSnap = await apptRef.get()
-    if (!apptSnap.exists || apptSnap.data()?.status !== 'pending') continue
+    // Only release orphaned holds — never cancel a valid pending appointment
+    if (apptSnap.exists && apptSnap.data()?.status === 'pending') continue
 
     batch.update(slotDoc.ref, {
       available: true,

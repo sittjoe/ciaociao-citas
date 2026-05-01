@@ -6,7 +6,7 @@ import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
-// Called by Cloud Scheduler (or Vercel cron) every 30 minutes
+// Called by Vercel cron every hour (see vercel.json: "0 * * * *")
 export async function GET(request: Request) {
   const authHeader = request.headers.get('Authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

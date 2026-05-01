@@ -11,11 +11,9 @@ service firebase.storage {
     // IDENTIFICATIONS: Archivos de identificación de clientes
     // ============================================
     match /identifications/{fileName} {
-      // Clientes pueden subir archivos sin autenticación (se requiere durante el booking)
-      // Límite: 5MB, solo imágenes y PDF
-      allow write: if request.resource.size < 5 * 1024 * 1024
-                   && (request.resource.contentType.matches('image/.*')
-                   || request.resource.contentType == 'application/pdf');
+      // Writes go through Admin SDK (server-side) which bypasses these rules.
+      // Deny all client-side writes to prevent anonymous spam uploads.
+      allow write: if false;
 
       // Solo admin autenticado puede leer identificaciones (PII protegida)
       allow read: if isAdmin();

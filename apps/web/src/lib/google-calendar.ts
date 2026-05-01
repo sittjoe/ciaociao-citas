@@ -1,6 +1,7 @@
 import { google, calendar_v3 } from 'googleapis'
 import { adminDb } from './firebase-admin'
 import { formatDate, formatTime } from './utils'
+import { getActiveAdminEmails } from './email'
 import type { Appointment } from '@/types'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID
@@ -80,7 +81,10 @@ export async function createAppointmentCalendarEvent(appt: Appointment): Promise
         ].filter(Boolean).join('\n'),
         start: { dateTime: start.toISOString(), timeZone: 'America/Mexico_City' },
         end: { dateTime: end.toISOString(), timeZone: 'America/Mexico_City' },
-        attendees: [{ email: appt.email, displayName: appt.name }],
+        attendees: [
+          { email: appt.email, displayName: appt.name },
+          ...(await getActiveAdminEmails()).map(email => ({ email })),
+        ],
         reminders: {
           useDefault: false,
           overrides: [

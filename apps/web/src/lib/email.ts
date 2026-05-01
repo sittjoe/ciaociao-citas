@@ -155,7 +155,6 @@ function baseTemplate(body: string): string {
   ${body}
   <div class="footer">
     <p>Ciao Ciao Joyería · Showroom Privado</p>
-    <p>${SHOWROOM_ADDRESS}</p>
     <p>Dudas: <a href="mailto:hola@ciaociao.mx" style="color:#9A7E50;">hola@ciaociao.mx</a></p>
   </div>
 </div>
@@ -229,15 +228,21 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
     ? [{ filename: 'cita-ciaociao.ics', content: Buffer.from(icsContent).toString('base64') }]
     : []
 
+  const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(SHOWROOM_ADDRESS)}`
   const body = accepted
     ? `<div class="card">
         <p class="title">Tu cita está confirmada</p>
-        <p class="copy">Te esperamos en nuestro showroom privado.</p>
+        <p class="copy">Te esperamos en nuestro showroom privado. Encontrarás el .ics adjunto para agregar la cita a tu calendario.</p>
         ${details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
         ])}
+       </div>
+       <div style="text-align:center;margin:20px 0;padding:18px 20px;background:#FAF7F2;border-radius:14px;border:1px solid #E7E2D7;">
+         <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px;">Ubicación del showroom</p>
+         <p style="font-size:14px;color:#1A1A1A;font-weight:600;margin:0 0 4px;">${escapeHtml(SHOWROOM_ADDRESS)}</p>
+         <a href="${mapsUrl}" style="font-size:12px;color:#9A7E50;text-decoration:none;">Ver en Google Maps →</a>
        </div>
        <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>`
     : `<div class="card">
@@ -278,6 +283,34 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver detalles</a></p>
+    `),
+  })
+}
+
+export async function sendCalendarError(appt: Appointment, errorMessage: string) {
+  const adminRecipients = await getActiveAdminEmails()
+  if (adminRecipients.length === 0) return
+
+  const dateStr = formatDate(appt.slotDatetime)
+  const timeStr = formatTime(appt.slotDatetime)
+
+  await sendTracked({
+    kind: 'calendar_error',
+    appointmentId: appt.id,
+    from: `Sistema Citas <${FROM}>`,
+    to: adminRecipients,
+    subject: `⚠ Error Calendar — ${escapeHtml(appt.name)} ${dateStr}`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Error al crear evento en Calendar</p>
+        <p class="copy">La cita de <strong>${escapeHtml(appt.name)}</strong> fue aprobada pero no se pudo sincronizar con Google Calendar. La cita sigue confirmada.</p>
+        ${details([
+          ['Cliente', appt.name],
+          ['Fecha', `${dateStr} ${timeStr}`],
+          ['Error', errorMessage],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Ver en panel</a></p>
     `),
   })
 }

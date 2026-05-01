@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { appointmentDecisionSchema } from '@/lib/schemas'
-import { sendStatusUpdate } from '@/lib/email'
+import { sendStatusUpdate, sendCalendarError } from '@/lib/email'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { createAppointmentCalendarEvent } from '@/lib/google-calendar'
 import type { Appointment, AppointmentStatus } from '@/types'
@@ -85,9 +85,9 @@ export async function POST(
       appointment = mapAppointment(id, freshData, newStatus)
     })
 
-    sendStatusUpdate(appointment, action, reason).catch(err =>
+    after(sendStatusUpdate(appointment!, action, reason).catch(err =>
       console.error('Status email failed (non-fatal):', err)
-    )
+    ))
 
     if (action === 'accept') {
       try {
@@ -96,6 +96,7 @@ export async function POST(
       } catch (err) {
         console.error('Google Calendar create failed (non-fatal):', err)
         await adminDb.collection('appointments').doc(id).update({ calendarSyncFailed: true }).catch(() => {})
+        after(sendCalendarError(appointment!, err instanceof Error ? err.message : String(err)).catch(() => {}))
         return NextResponse.json({ ok: true, googleCalendarEventId: null, calendarSyncFailed: true })
       }
     }
