@@ -147,6 +147,9 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                   <ExternalLink size={13} strokeWidth={1.5} />
                 </a>
               )}
+              {!g.identificationUrl && (
+                <span className="text-[10px] text-ink-subtle whitespace-nowrap">Sin ID</span>
+              )}
 
               {(g.status === 'pending' || g.status === 'expired') && (
                 <button

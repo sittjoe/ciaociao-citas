@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { UserPlus, X } from 'lucide-react'
 import { motion, AnimatePresence } from '@/components/motion'
 import { Field } from '@/components/ui/Field'
@@ -22,10 +22,12 @@ const EMPTY: GuestInput = { name: '', email: '' }
 export function GuestsField({ value, onChange, hostEmail }: GuestsFieldProps) {
   const [errors,   setErrors]   = useState<Record<number, FieldErrors>>({})
   const [guestIds, setGuestIds] = useState<string[]>([])
+  const nextGuestId = useRef(0)
 
   const addGuest = () => {
     if (value.length >= MAX_GUESTS) return
-    setGuestIds(prev => [...prev, crypto.randomUUID()])
+    nextGuestId.current += 1
+    setGuestIds(prev => [...prev, `guest-${nextGuestId.current}`])
     onChange([...value, { ...EMPTY }])
   }
 

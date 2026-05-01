@@ -47,6 +47,8 @@ export function BookingWizard() {
     register,
     handleSubmit,
     getValues,
+    trigger,
+    watch,
     formState: { errors },
   } = useForm<BookingFormInput>({
     resolver: zodResolver(bookingFormSchema),
@@ -63,6 +65,7 @@ export function BookingWizard() {
 
   const stepIndex = STEPS.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
+  const hostEmail = watch('email') ?? ''
 
   const goTo = useCallback((next: Step) => {
     const nextIdx = STEPS.indexOf(next)
@@ -209,8 +212,13 @@ export function BookingWizard() {
           {step === 'form' && (
             <form
               className="space-y-4"
-              onSubmit={e => {
+              onSubmit={async e => {
                 e.preventDefault()
+                const formOk = await trigger(['name', 'email', 'phone', 'notes', 'whatsapp'])
+                if (!formOk) {
+                  toast.error('Completa tus datos antes de continuar')
+                  return
+                }
                 if (guests.length > 0) {
                   const emails    = guests.map(g => g.email.trim().toLowerCase())
                   const hostEmail = getValues('email').trim().toLowerCase()
@@ -302,7 +310,7 @@ export function BookingWizard() {
                   <GuestsField
                     value={guests}
                     onChange={setGuests}
-                    hostEmail={getValues('email')}
+                    hostEmail={hostEmail}
                   />
                 </div>
 

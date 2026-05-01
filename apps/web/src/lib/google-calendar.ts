@@ -4,17 +4,44 @@ import { formatDate, formatTime } from './utils'
 import { getActiveAdminEmails } from './email'
 import type { Appointment } from '@/types'
 
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID
 const DEFAULT_LOCATION = process.env.GOOGLE_CALENDAR_LOCATION || 'Showroom Ciao Ciao Joyería'
 
 let calendarClient: calendar_v3.Calendar | null = null
 
+function readCalendarCredentials() {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID?.trim()
+  const clientEmail = (
+    process.env.GOOGLE_CLIENT_EMAIL
+    || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+  )?.trim()
+  const privateKey = (
+    process.env.GOOGLE_PRIVATE_KEY
+    || process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+  )?.replace(/\\n/g, '\n').trim()
+
+  return { calendarId, clientEmail, privateKey }
+}
+
+export function getGoogleCalendarConfigStatus() {
+  const { calendarId, clientEmail, privateKey } = readCalendarCredentials()
+  const configured = Boolean(calendarId && clientEmail && privateKey)
+
+  return {
+    configured,
+    calendarId: Boolean(calendarId),
+    clientEmail: Boolean(clientEmail),
+    privateKey: Boolean(privateKey),
+    usingDedicatedCredentials: Boolean(clientEmail && privateKey),
+    missing: [
+      !calendarId ? 'GOOGLE_CALENDAR_ID' : null,
+      !clientEmail ? 'GOOGLE_CLIENT_EMAIL or GOOGLE_SERVICE_ACCOUNT_EMAIL' : null,
+      !privateKey ? 'GOOGLE_PRIVATE_KEY or GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY' : null,
+    ].filter(Boolean),
+  }
+}
+
 export function isGoogleCalendarConfigured(): boolean {
-  return Boolean(
-    CALENDAR_ID &&
-    (process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL) &&
-    (process.env.GOOGLE_PRIVATE_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY)
-  )
+  return getGoogleCalendarConfigStatus().configured
 }
 
 function getCalendar(): calendar_v3.Calendar {
@@ -23,14 +50,7 @@ function getCalendar(): calendar_v3.Calendar {
   }
   if (calendarClient) return calendarClient
 
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL
-    || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-    || process.env.FIREBASE_CLIENT_EMAIL
-  const privateKey = (
-    process.env.GOOGLE_PRIVATE_KEY
-    || process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
-    || process.env.FIREBASE_PRIVATE_KEY
-  )?.replace(/\\n/g, '\n')
+  const { clientEmail, privateKey } = readCalendarCredentials()
 
   const auth = new google.auth.JWT({
     email: clientEmail,
@@ -60,13 +80,14 @@ async function recordCalendarEvent(data: {
 }
 
 export async function createAppointmentCalendarEvent(appt: Appointment): Promise<string> {
+  const { calendarId } = readCalendarCredentials()
   const start = appt.slotDatetime
   const end = new Date(start.getTime() + 60 * 60 * 1000)
   const summary = `Ciao Ciao - ${appt.name}`
 
   try {
     const response = await getCalendar().events.insert({
-      calendarId: CALENDAR_ID!,
+      calendarId: calendarId!,
       sendUpdates: 'all',
       requestBody: {
         summary,
@@ -118,10 +139,11 @@ export async function createAppointmentCalendarEvent(appt: Appointment): Promise
 
 export async function deleteAppointmentCalendarEvent(appt: Appointment): Promise<void> {
   if (!appt.googleCalendarEventId) return
+  const { calendarId } = readCalendarCredentials()
 
   try {
     await getCalendar().events.delete({
-      calendarId: CALENDAR_ID!,
+      calendarId: calendarId!,
       eventId: appt.googleCalendarEventId,
       sendUpdates: 'all',
     })

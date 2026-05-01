@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { adminStorage } from '@/lib/firebase-admin'
 import { requireAdminSession } from '@/lib/admin-auth'
+import { normalizeIdentificationPath } from '@/lib/identifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,13 +16,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'path requerido' }, { status: 400 })
   }
 
-  // Only allow paths within the identifications/ prefix to prevent path traversal
-  if (!path.startsWith('identifications/')) {
+  const storagePath = normalizeIdentificationPath(path)
+  if (!storagePath) {
     return NextResponse.json({ error: 'Ruta no permitida' }, { status: 403 })
   }
 
   try {
-    const [url] = await adminStorage.bucket().file(path).getSignedUrl({
+    const [url] = await adminStorage.bucket().file(storagePath).getSignedUrl({
       action: 'read',
       expires: Date.now() + 5 * 60 * 1000, // 5 min
     })

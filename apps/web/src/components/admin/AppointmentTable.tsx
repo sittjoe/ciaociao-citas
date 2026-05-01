@@ -10,7 +10,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users } from 'lucide-react'
+import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -297,7 +297,7 @@ export function AppointmentTable() {
                 ['Calendar',  selected.googleCalendarEventId
                   ? 'Sincronizado'
                   : (selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed
-                    ? '⚠ Error de sincronización'
+                    ? 'Error de sincronización'
                     : 'Pendiente'],
                 ...(selected.decidedBy ? [['Aprobado por', selected.decidedBy]] : []),
                 ...(selected.decidedAt ? [['Fecha decisión', formatShortDate(selected.decidedAt)]] : []),
@@ -314,6 +314,35 @@ export function AppointmentTable() {
                 <dd><StatusBadge status={selected.status} /></dd>
               </div>
             </dl>
+
+            {(selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                La cita quedó confirmada, pero Google Calendar no pudo crear el evento. Revisa diagnósticos y vuelve a intentarlo manualmente si hace falta.
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-ink-line bg-cream-soft px-3 py-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText size={16} strokeWidth={1.5} className="text-champagne shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">Identificación titular</p>
+                  <p className="text-xs text-ink-muted truncate">
+                    {selected.identificationUrl ? 'Archivo protegido' : 'Sin archivo'}
+                  </p>
+                </div>
+              </div>
+              {selected.identificationUrl && (
+                <a
+                  href={`/api/admin/id-url?path=${encodeURIComponent(selected.identificationUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne hover:bg-champagne-soft transition-colors"
+                >
+                  <ExternalLink size={13} strokeWidth={1.5} />
+                  Ver
+                </a>
+              )}
+            </div>
 
             {(selected.guestCount ?? 0) > 0 && (
               <div className="pt-1">
