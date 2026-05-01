@@ -2,105 +2,135 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Light Apple-clean palette ─────────────────────────────────────────── */
 :root {
-  --gold:         #C9A55A;
-  --gold-dark:    #A88B49;
-  --gold-light:   #E8D5A8;
-  --black-rich:   #0D0D0D;
-  --black-soft:   #1A1A1A;
-  --black-muted:  #2A2A2A;
-  --black-subtle: #3D3D3D;
+  --background:     #FAFAF7;
+  --surface:        #FFFFFF;
+  --surface-soft:   #F4F2EC;
+  --ink:            #1A1A1A;
+  --ink-muted:      #6B6B6B;
+  --ink-subtle:     #A8A8A8;
+  --champagne:      #B89968;
+  --champagne-deep: #9A7E50;
+  --champagne-soft: #EFE6D3;
+  --ease:           cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html {
-  color-scheme: dark;
   scroll-behavior: smooth;
 }
 
 body {
-  background-color: var(--black-rich);
-  color: var(--gold-light);
+  background-color: var(--background);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar luxury */
+/* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--black-soft); }
-::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 3px; }
+::-webkit-scrollbar-track { background: var(--surface-soft); }
+::-webkit-scrollbar-thumb { background: var(--champagne-soft); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--champagne); }
 
 /* Selection */
-::selection { background: rgba(201,165,90,0.3); color: var(--gold-light); }
+::selection { background: rgba(184,153,104,0.18); color: var(--ink); }
 
 /* Focus ring */
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--champagne);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Input base */
 input, textarea, select {
-  background-color: var(--black-muted);
-  border: 1px solid var(--black-subtle);
-  color: var(--gold-light);
-  border-radius: 8px;
-  transition: border-color 0.2s;
+  background-color: var(--surface);
+  border: 1px solid rgba(0,0,0,0.1);
+  color: var(--ink);
+  border-radius: 10px;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
 input:focus, textarea:focus, select:focus {
-  border-color: var(--gold);
+  border-color: var(--champagne);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(201,165,90,0.15);
+  box-shadow: 0 0 0 3px rgba(184,153,104,0.15);
 }
-input::placeholder, textarea::placeholder { color: #525252; }
+input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
 
 @layer components {
-  .btn-gold {
-    @apply bg-gold text-rich-black font-semibold py-3 px-6 rounded-xl
-           hover:bg-gold-dark transition-colors duration-200
-           disabled:opacity-50 disabled:cursor-not-allowed;
+  /* ── Public (light) components ─────────────────────────────────────────── */
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-champagne text-white font-semibold
+           py-3 px-6 rounded-xl
+           hover:bg-champagne-deep hover:-translate-y-px hover:shadow-pop
+           active:scale-[0.98]
+           transition-all duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed;
   }
-  .btn-outline {
-    @apply border border-gold text-gold font-medium py-3 px-6 rounded-xl
-           hover:bg-gold/10 transition-colors duration-200
-           disabled:opacity-50 disabled:cursor-not-allowed;
+
+  .btn-outline-light {
+    @apply inline-flex items-center justify-center gap-2
+           border border-champagne text-champagne font-medium
+           py-2.5 px-5 rounded-xl
+           hover:bg-champagne-soft
+           active:scale-[0.98]
+           transition-all duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed;
   }
-  .card-luxury {
-    @apply bg-rich-soft border border-rich-muted rounded-2xl p-6
-           shadow-gold;
+
+  .card-soft {
+    @apply bg-white rounded-2xl p-6 border border-stone-100 shadow-soft;
   }
-  .input-luxury {
-    @apply w-full bg-rich-muted border border-rich-subtle rounded-xl px-4 py-3
-           text-gold-light placeholder:text-rich-subtle
-           focus:border-gold focus:ring-2 focus:ring-gold/20 outline-none
+
+  .input-clean {
+    @apply w-full bg-white border border-stone-200 rounded-xl px-4 py-3
+           text-ink placeholder:text-ink-subtle
+           focus:border-champagne focus:ring-2 focus:ring-champagne/20 outline-none
            transition-all duration-200;
   }
-  .label-luxury {
-    @apply block text-xs font-medium tracking-widest uppercase text-gold-dark mb-2;
+
+  .label-clean {
+    @apply block text-xs font-semibold tracking-widest uppercase text-ink-muted mb-1.5;
   }
-  .status-pending  { @apply bg-amber-900/30 text-amber-400 border border-amber-700/40; }
-  .status-accepted { @apply bg-emerald-900/30 text-emerald-400 border border-emerald-700/40; }
-  .status-rejected { @apply bg-red-900/30 text-red-400 border border-red-700/40; }
-  .status-cancelled{ @apply bg-stone-800/30 text-stone-400 border border-stone-700/40; }
+
+  /* Status badges – light pastel (public pages) */
+  .status-pending  { @apply bg-amber-50   text-amber-700   border border-amber-200; }
+  .status-accepted { @apply bg-emerald-50 text-emerald-700 border border-emerald-200; }
+  .status-rejected { @apply bg-red-50     text-red-600     border border-red-200; }
+  .status-cancelled{ @apply bg-stone-100  text-stone-500   border border-stone-200; }
+
 }
 
-/* Animations */
-@keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
-.shimmer {
-  background: linear-gradient(90deg, transparent 25%, rgba(201,165,90,0.1) 50%, transparent 75%);
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite;
-}
-
+/* ─── Keyframes ──────────────────────────────────────────────────────────── */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.fade-up { animation: fadeUp 0.4s ease both; }
+.fade-up { animation: fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) both; }
 
-@keyframes pulse-gold {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(201,165,90,0); }
-  50%       { box-shadow: 0 0 0 8px rgba(201,165,90,0.15); }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-.pulse-gold { animation: pulse-gold 2s infinite; }
+.fade-in { animation: fadeIn 0.6s cubic-bezier(0.16,1,0.3,1) both; }
+
+/* Shimmer skeleton – light version */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #F4F2EC 25%, #FFFFFF 50%, #F4F2EC 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite;
+}
+
+/* Accessibility: respect reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

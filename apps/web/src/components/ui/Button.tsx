@@ -13,10 +13,30 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<Variant, string> = {
-  gold:    'bg-gold-500 text-rich-black font-semibold hover:bg-gold-600 disabled:opacity-50',
-  outline: 'border border-gold-500 text-gold-500 hover:bg-gold-500/10 disabled:opacity-50',
-  ghost:   'text-gold-400 hover:text-gold-300 hover:bg-white/5 disabled:opacity-40',
-  danger:  'bg-red-900/30 text-red-400 border border-red-700/40 hover:bg-red-900/50 disabled:opacity-50',
+  gold: [
+    'bg-champagne text-white font-semibold',
+    'hover:bg-champagne-deep hover:-translate-y-px hover:shadow-pop',
+    'active:scale-[0.98]',
+    'disabled:opacity-40',
+  ].join(' '),
+  outline: [
+    'border border-champagne text-champagne',
+    'hover:bg-champagne-soft',
+    'active:scale-[0.98]',
+    'disabled:opacity-40',
+  ].join(' '),
+  ghost: [
+    'text-ink-muted',
+    'hover:text-ink hover:bg-cream-soft',
+    'active:scale-[0.98]',
+    'disabled:opacity-40',
+  ].join(' '),
+  danger: [
+    'bg-red-50 text-red-600 border border-red-200',
+    'hover:bg-red-100',
+    'active:scale-[0.98]',
+    'disabled:opacity-40',
+  ].join(' '),
 }
 
 const sizeClasses: Record<Size, string> = {
@@ -31,7 +51,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 font-medium transition-colors duration-200 cursor-pointer',
+        'inline-flex items-center justify-center gap-2 font-medium',
+        'transition-all duration-200 cursor-pointer',
         'disabled:cursor-not-allowed',
         variantClasses[variant],
         sizeClasses[size],

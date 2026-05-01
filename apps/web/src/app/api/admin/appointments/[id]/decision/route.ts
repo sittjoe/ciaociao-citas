@@ -1,23 +1,17 @@
 import { NextResponse } from 'next/server'
-import { adminDb, adminAuth } from '@/lib/firebase-admin'
+import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { cookies } from 'next/headers'
 import { appointmentDecisionSchema } from '@/lib/schemas'
 import { sendStatusUpdate } from '@/lib/email'
+import { verifySession } from '@/lib/admin-session'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
 async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const session     = cookieStore.get('__session')?.value
-  if (!session) return false
-  try {
-    const decoded = await adminAuth.verifySessionCookie(session, true)
-    return decoded.admin === true
-  } catch {
-    return false
-  }
+  const session = (await cookies()).get('__session')?.value
+  return verifySession(session)
 }
 
 export async function POST(

@@ -10,15 +10,15 @@ interface FieldProps {
 
 export function Field({ label, error, required, children, className }: FieldProps) {
   return (
-    <div className={cn('space-y-1', className)}>
-      <label className="label-luxury">
+    <label className={cn('block space-y-1', className)}>
+      <span className="label-clean">
         {label}
-        {required && <span className="text-gold-500 ml-1">*</span>}
-      </label>
+        {required && <span className="text-champagne ml-1" aria-hidden="true">*</span>}
+      </span>
       {children}
       {error && (
-        <p className="text-xs text-red-400 mt-1">{error}</p>
+        <p className="text-xs text-red-500 mt-1" role="alert">{error}</p>
       )}
-    </div>
+    </label>
   )
 }

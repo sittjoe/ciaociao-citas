@@ -33,7 +33,11 @@ export function SlotManager() {
   const fetchSlots = useCallback(async () => {
     setLoading(true)
     try {
-      const res  = await fetch('/api/admin/slots')
+      const res = await fetch('/api/admin/slots')
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/slots'
+        return
+      }
       const data = await res.json() as { slots: SlotRow[] }
       setSlots(data.slots ?? [])
     } catch {
@@ -120,19 +124,19 @@ export function SlotManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-serif text-xl text-gold-400">Slots disponibles</h2>
+        <h2 className="font-serif text-xl text-ink">Slots disponibles</h2>
         <Button size="sm" onClick={() => setShowAdd(true)}>
           <Plus size={14} /> Agregar slots
         </Button>
       </div>
 
       {/* Slots list */}
-      <div className="overflow-x-auto rounded-2xl border border-rich-muted">
+      <div className="overflow-x-auto rounded-2xl border border-stone-100 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-rich-muted">
+            <tr className="border-b border-stone-100">
               {['Fecha y hora', 'Estado', 'Acciones'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs text-gold-700 tracking-widest uppercase font-medium">
+                <th key={h} className="px-4 py-3 text-left text-xs text-ink-muted tracking-widest uppercase font-semibold">
                   {h}
                 </th>
               ))}
@@ -140,22 +144,22 @@ export function SlotManager() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={3} className="px-4 py-8 text-center text-gold-700">Cargando…</td></tr>
+              <tr><td colSpan={3} className="px-4 py-8 text-center text-ink-muted">Cargando…</td></tr>
             )}
             {!loading && slots.length === 0 && (
-              <tr><td colSpan={3} className="px-4 py-8 text-center text-gold-700">Sin slots creados</td></tr>
+              <tr><td colSpan={3} className="px-4 py-8 text-center text-ink-muted">Sin slots creados</td></tr>
             )}
             {slots.map(slot => (
-              <tr key={slot.id} className="border-b border-rich-muted/50 hover:bg-white/2 transition-colors">
-                <td className="px-4 py-3 text-gold-light">
+              <tr key={slot.id} className="border-b border-stone-100 hover:bg-cream-soft transition-colors">
+                <td className="px-4 py-3 text-ink">
                   {formatShortDate(slot.datetime)}
                 </td>
                 <td className="px-4 py-3">
                   <span className={cn(
                     'text-xs px-2 py-0.5 rounded-full',
                     slot.available
-                      ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-700/40'
-                      : 'bg-stone-800/30 text-stone-400 border border-stone-700/40',
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-stone-100 text-stone-500 border border-stone-200',
                   )}>
                     {slot.available ? 'Disponible' : 'Reservado'}
                   </span>
@@ -165,7 +169,7 @@ export function SlotManager() {
                     <button
                       onClick={() => deleteSlot(slot.id)}
                       disabled={deleting === slot.id}
-                      className="text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-40"
+                      className="text-red-400/60 hover:text-red-500 transition-colors disabled:opacity-40"
                       aria-label="Eliminar slot"
                     >
                       <Trash2 size={15} />
@@ -182,7 +186,7 @@ export function SlotManager() {
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Agregar slots" size="lg">
         <div className="space-y-5">
           <div>
-            <p className="label-luxury mb-3">Selecciona fechas</p>
+            <p className="label-clean mb-3">Selecciona fechas</p>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
               {nextDays.map(d => {
                 const date    = new Date(d + 'T12:00:00')
@@ -194,8 +198,8 @@ export function SlotManager() {
                     className={cn(
                       'flex flex-col items-center py-2 px-1 rounded-xl text-xs border transition-all',
                       isSel
-                        ? 'bg-gold-500 text-rich-black border-gold-500'
-                        : 'border-rich-muted text-gold-light hover:border-gold-700',
+                        ? 'bg-champagne text-white border-champagne shadow-pop'
+                        : 'border-stone-200 text-ink hover:border-champagne hover:bg-cream-soft',
                     )}
                   >
                     <span className="uppercase opacity-70">{format(date, 'EEE', { locale: es })}</span>
@@ -208,13 +212,13 @@ export function SlotManager() {
           </div>
 
           <div>
-            <p className="label-luxury mb-3">Selecciona horarios</p>
+            <p className="label-clean mb-3">Selecciona horarios</p>
             <div className="flex flex-wrap gap-2">
               {[...selectedTimes].sort().map(t => (
                 <button
                   key={t}
                   onClick={() => toggleTime(t)}
-                  className="px-3 py-1.5 rounded-lg text-sm border bg-gold-500 text-rich-black border-gold-500"
+                  className="px-3 py-1.5 rounded-lg text-sm border bg-champagne text-white border-champagne"
                 >
                   {t} ✕
                 </button>
@@ -225,7 +229,7 @@ export function SlotManager() {
                 value={customTime}
                 onChange={e => setCustomTime(e.target.value)}
                 placeholder="HH:MM"
-                className="input-luxury w-24"
+                className="input-clean w-24"
                 pattern="\d{2}:\d{2}"
               />
               <Button variant="outline" size="sm" onClick={addCustomTime}>
@@ -234,11 +238,11 @@ export function SlotManager() {
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-2 border-t border-rich-muted">
-            <p className="text-xs text-gold-700">
+          <div className="flex justify-between items-center pt-2 border-t border-stone-100">
+            <p className="text-xs text-ink-muted">
               {selectedDates.size} fecha{selectedDates.size !== 1 ? 's' : ''} ×{' '}
               {selectedTimes.size} horario{selectedTimes.size !== 1 ? 's' : ''} ={' '}
-              <strong className="text-gold-400">{selectedDates.size * selectedTimes.size} slots</strong>
+              <strong className="text-champagne">{selectedDates.size * selectedTimes.size} slots</strong>
             </p>
             <Button loading={creating} onClick={createSlots}>
               <Calendar size={14} /> Crear slots

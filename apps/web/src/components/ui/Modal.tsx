@@ -36,7 +36,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/25 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -44,17 +44,17 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       {/* Panel */}
       <div
         className={cn(
-          'relative w-full bg-rich-soft border border-rich-muted rounded-2xl shadow-gold',
+          'relative w-full bg-white border border-stone-100 rounded-2xl shadow-lift',
           'p-6 fade-up',
           sizeMap[size],
         )}
       >
         {title && (
           <div className="flex items-center justify-between mb-5">
-            <h2 className="font-serif text-xl text-gold-400">{title}</h2>
+            <h2 className="font-serif text-xl text-ink">{title}</h2>
             <button
               onClick={onClose}
-              className="text-gold-700 hover:text-gold-400 transition-colors p-1 rounded-lg hover:bg-white/5"
+              className="text-ink-muted hover:text-ink transition-colors p-1.5 rounded-lg hover:bg-cream-soft"
               aria-label="Cerrar"
             >
               <X size={18} />
@@ -64,7 +64,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
         {!title && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gold-700 hover:text-gold-400 transition-colors p-1 rounded-lg hover:bg-white/5"
+            className="absolute top-4 right-4 text-ink-muted hover:text-ink transition-colors p-1.5 rounded-lg hover:bg-cream-soft"
             aria-label="Cerrar"
           >
             <X size={18} />

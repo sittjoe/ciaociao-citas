@@ -34,6 +34,10 @@ export function AppointmentTable() {
 
     try {
       const res  = await fetch(`/api/admin/appointments?${params}`)
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/citas'
+        return
+      }
       if (!res.ok) throw new Error()
       const data = await res.json() as { appointments: SerialAppt[]; nextCursor: string | null }
       setAppointments(reset ? data.appointments : prev => [...prev, ...data.appointments])
@@ -79,7 +83,7 @@ export function AppointmentTable() {
       a.name,
       a.email,
       a.phone,
-      new Date(a.slotDatetime).toLocaleString('es-MX'),
+      new Date(a.slotDatetime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }),
       a.status,
       a.notes,
     ]))
@@ -98,18 +102,18 @@ export function AppointmentTable() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gold-700" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar nombre, email o código…"
-            className="input-luxury pl-9"
+            className="input-clean pl-9"
           />
         </div>
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as AppointmentStatus | '')}
-          className="input-luxury sm:w-40"
+          className="input-clean sm:w-40"
         >
           <option value="">Todos</option>
           <option value="pending">Pendientes</option>
@@ -123,12 +127,12 @@ export function AppointmentTable() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-rich-muted">
+      <div className="overflow-x-auto rounded-2xl border border-stone-100 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-rich-muted">
+            <tr className="border-b border-stone-100">
               {['Nombre', 'Fecha/Hora', 'Email', 'Estado', 'Acciones'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs text-gold-700 tracking-widest uppercase font-medium">
+                <th key={h} className="px-4 py-3 text-left text-xs text-ink-muted tracking-widest uppercase font-semibold">
                   {h}
                 </th>
               ))}
@@ -137,30 +141,30 @@ export function AppointmentTable() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gold-700">Cargando…</td>
+                <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">Cargando…</td>
               </tr>
             )}
             {!loading && appointments.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gold-700">Sin resultados</td>
+                <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">Sin resultados</td>
               </tr>
             )}
             {appointments.map(appt => (
               <tr
                 key={appt.id}
-                className="border-b border-rich-muted/50 hover:bg-white/2 transition-colors"
+                className="border-b border-stone-100 hover:bg-cream-soft transition-colors"
               >
-                <td className="px-4 py-3 text-gold-light font-medium">{appt.name}</td>
-                <td className="px-4 py-3 text-gold-700 whitespace-nowrap">
+                <td className="px-4 py-3 text-ink font-medium">{appt.name}</td>
+                <td className="px-4 py-3 text-ink-muted whitespace-nowrap">
                   {formatShortDate(appt.slotDatetime)}
                 </td>
-                <td className="px-4 py-3 text-gold-700 text-xs">{appt.email}</td>
+                <td className="px-4 py-3 text-ink-muted text-xs">{appt.email}</td>
                 <td className="px-4 py-3"><StatusBadge status={appt.status} /></td>
                 <td className="px-4 py-3">
                   {appt.status === 'pending' && (
                     <button
                       onClick={() => setSelected(appt)}
-                      className="text-xs text-gold-400 hover:text-gold-200 underline"
+                      className="text-xs text-champagne hover:text-champagne-deep underline"
                     >
                       Gestionar
                     </button>
@@ -168,7 +172,7 @@ export function AppointmentTable() {
                   {appt.status !== 'pending' && (
                     <button
                       onClick={() => setSelected(appt)}
-                      className="text-xs text-gold-700 hover:text-gold-400"
+                      className="text-xs text-ink-muted hover:text-ink"
                     >
                       Ver
                     </button>
@@ -198,7 +202,7 @@ export function AppointmentTable() {
       >
         {selected && (
           <div className="space-y-4">
-            <div className="divide-y divide-rich-muted text-sm">
+            <div className="divide-y divide-stone-100 text-sm">
               {[
                 ['Código',    selected.confirmationCode],
                 ['Nombre',    selected.name],
@@ -209,9 +213,9 @@ export function AppointmentTable() {
                 ...(selected.notes ? [['Notas', selected.notes]] : []),
               ].map(([label, value]) => (
                 <div key={label as string} className="flex justify-between py-2">
-                  <span className="text-gold-700">{label}</span>
+                  <span className="text-ink-muted">{label}</span>
                   {value !== null
-                    ? <span className="text-gold-light max-w-[60%] text-right">{value}</span>
+                    ? <span className="text-ink max-w-[60%] text-right">{value}</span>
                     : <StatusBadge status={selected.status} />
                   }
                 </div>
@@ -221,12 +225,12 @@ export function AppointmentTable() {
             {selected.status === 'pending' && (
               <div className="space-y-3 pt-2">
                 <div>
-                  <label className="label-luxury">Motivo de rechazo (opcional)</label>
+                  <label className="label-clean">Motivo de rechazo (opcional)</label>
                   <input
                     value={rejectReason}
                     onChange={e => setRejectReason(e.target.value)}
                     placeholder="Ej: Sin disponibilidad en esa fecha"
-                    className="input-luxury"
+                    className="input-clean"
                   />
                 </div>
                 <div className="flex gap-2">

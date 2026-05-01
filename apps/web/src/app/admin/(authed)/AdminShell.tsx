@@ -13,7 +13,7 @@ const navItems = [
   { href: '/admin/slots',  label: 'Slots',      Icon: Settings        },
 ]
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname  = usePathname()
   const router    = useRouter()
   const [open, setOpen] = useState(false)
@@ -27,9 +27,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const NavContent = () => (
     <>
-      <div className="px-6 py-6 border-b border-rich-muted">
-        <p className="font-serif text-lg text-gold-400 tracking-widest uppercase">Ciao Ciao</p>
-        <p className="text-xs text-gold-800 tracking-widest mt-0.5">Admin</p>
+      <div className="px-6 py-6 border-b border-stone-100">
+        <p className="font-serif text-lg text-ink tracking-widest uppercase">Ciao Ciao</p>
+        <p className="text-xs text-ink-subtle tracking-widest mt-0.5">Admin</p>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
@@ -43,8 +43,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all',
                 active
-                  ? 'bg-gold-500/15 text-gold-300 font-medium'
-                  : 'text-gold-700 hover:text-gold-400 hover:bg-white/5',
+                  ? 'bg-champagne-soft text-champagne font-medium'
+                  : 'text-ink-muted hover:text-ink hover:bg-cream-soft',
               )}
             >
               <Icon size={16} />
@@ -54,10 +54,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         })}
       </nav>
 
-      <div className="p-4 border-t border-rich-muted">
+      <div className="p-4 border-t border-stone-100">
         <button
           onClick={logout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gold-800 hover:text-red-400 hover:bg-red-900/10 transition-all w-full"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full"
         >
           <LogOut size={16} /> Cerrar sesión
         </button>
@@ -66,18 +66,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   )
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-cream text-ink">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 bg-rich-soft border-r border-rich-muted fixed inset-y-0 left-0">
+      <aside className="hidden lg:flex flex-col w-56 bg-white border-r border-stone-100 fixed inset-y-0 left-0">
         <NavContent />
       </aside>
 
       {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-rich-soft border-b border-rich-muted">
-        <p className="font-serif text-gold-400 tracking-widest uppercase">Ciao Ciao</p>
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-white border-b border-stone-100">
+        <p className="font-serif text-ink tracking-widest uppercase">Ciao Ciao</p>
         <button
           onClick={() => setOpen(!open)}
-          className="text-gold-600 hover:text-gold-400 transition-colors p-1"
+          className="text-ink-muted hover:text-ink transition-colors p-1"
           aria-label="Menú"
         >
           {open ? <X size={20} /> : <Menu size={20} />}
@@ -87,8 +87,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile drawer */}
       {open && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setOpen(false)} />
-          <aside className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-rich-soft border-r border-rich-muted lg:hidden">
+          <div className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm lg:hidden" onClick={() => setOpen(false)} />
+          <aside className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-white border-r border-stone-100 lg:hidden">
             <NavContent />
           </aside>
         </>

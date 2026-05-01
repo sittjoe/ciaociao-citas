@@ -41,12 +41,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen font-sans antialiased">
         {children}
         <Toaster
-          theme="dark"
+          theme="light"
           toastOptions={{
             style: {
-              background: '#1A1A1A',
-              border: '1px solid #2A2A2A',
-              color: '#E8D5A8',
+              background: '#FFFFFF',
+              border: '1px solid rgba(0,0,0,0.08)',
+              color: '#1A1A1A',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08)',
             },
           }}
         />

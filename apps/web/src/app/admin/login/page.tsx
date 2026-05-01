@@ -51,17 +51,17 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4">
+    <main className="min-h-screen flex items-center justify-center px-4 bg-cream">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="font-serif text-3xl text-gold-400 tracking-widest uppercase">Ciao Ciao</h1>
-          <p className="text-xs text-gold-700 tracking-[0.4em] uppercase mt-2">Panel de Administración</p>
+          <h1 className="font-serif text-3xl text-ink tracking-widest uppercase">Ciao Ciao</h1>
+          <p className="text-xs text-ink-muted tracking-[0.4em] uppercase mt-2 font-semibold">Panel de Administración</p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="card-luxury space-y-5">
+        <form onSubmit={handleSubmit(onSubmit)} className="card-soft space-y-5">
           <div className="flex justify-center mb-2">
-            <div className="w-12 h-12 rounded-full bg-rich-muted border border-rich-muted flex items-center justify-center">
-              <Lock size={20} className="text-gold-600" />
+            <div className="w-12 h-12 rounded-full bg-cream-soft border border-stone-100 flex items-center justify-center">
+              <Lock size={20} className="text-champagne" />
             </div>
           </div>
 
@@ -69,7 +69,7 @@ export default function AdminLoginPage() {
             <input
               {...register('password')}
               type="password"
-              className="input-luxury"
+              className="input-clean"
               placeholder="••••••••••••"
               autoComplete="current-password"
               autoFocus

@@ -5,27 +5,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        gold: {
-          '50':  '#fdf8ee',
-          '100': '#f8edce',
-          '200': '#f0d99d',
-          '300': '#e8c56c',
-          '400': '#d9ab47',
-          '500': '#C9A55A',
-          '600': '#A88B49',
-          '700': '#8a7039',
-          '800': '#6c572c',
-          '900': '#4e3f1f',
-          DEFAULT: '#C9A55A',
-          light: '#E8D5A8',
-          dark:  '#A88B49',
+        champagne: {
+          DEFAULT: '#B89968',
+          deep:    '#9A7E50',
+          soft:    '#EFE6D3',
         },
-        rich: {
+        ink: {
           DEFAULT: '#1A1A1A',
-          black:   '#0D0D0D',
-          soft:    '#2A2A2A',
-          muted:   '#3D3D3D',
-          subtle:  '#525252',
+          muted:   '#6B6B6B',
+          subtle:  '#A8A8A8',
+        },
+        cream: {
+          DEFAULT: '#FAFAF7',
+          soft:    '#F4F2EC',
         },
       },
       fontFamily: {
@@ -34,11 +26,9 @@ const config: Config = {
         display: ['var(--font-cormorant)', 'Georgia', 'serif'],
       },
       boxShadow: {
-        gold:    '0 4px 30px rgba(201,165,90,0.15)',
-        'gold-lg': '0 8px 50px rgba(201,165,90,0.25)',
-      },
-      backgroundImage: {
-        'gold-gradient': 'linear-gradient(135deg, #C9A55A 0%, #E8D5A8 50%, #C9A55A 100%)',
+        soft: '0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04)',
+        lift: '0 2px 4px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08)',
+        pop:  '0 8px 24px rgba(184,153,104,0.18)',
       },
     },
   },

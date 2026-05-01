@@ -27,21 +27,21 @@ export default function CancelButton({ token }: { token: string }) {
   }
 
   if (cancelled) {
-    return <p className="text-sm text-stone-400 text-center">Cita cancelada.</p>
+    return <p className="text-sm text-ink-subtle text-center">Cita cancelada.</p>
   }
 
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className="w-full text-xs text-red-400/60 hover:text-red-400 transition-colors py-1"
+        className="w-full text-xs text-red-400/60 hover:text-red-500 transition-colors py-1"
       >
         Cancelar esta cita
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="¿Cancelar cita?" size="sm">
         <div className="space-y-4">
-          <p className="text-sm text-gold-700">
+          <p className="text-sm text-ink-muted">
             ¿Estás seguro de que deseas cancelar? Esta acción no se puede deshacer.
           </p>
           <div className="flex gap-2">

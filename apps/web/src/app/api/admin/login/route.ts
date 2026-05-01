@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server'
-import { adminAuth } from '@/lib/firebase-admin'
+import bcrypt from 'bcryptjs'
 import { adminLoginSchema } from '@/lib/schemas'
+import { signSession, SESSION_TTL_SECONDS } from '@/lib/admin-session'
 
 export const dynamic = 'force-dynamic'
 
-// Calls the adminLogin Cloud Function and exchanges the custom token
-// for an ID token that we store as an httpOnly session cookie.
+const MAX_ATTEMPTS = 5
+const LOCKOUT_MS   = 15 * 60 * 1000
+
+const attempts = new Map<string, { count: number; firstAt: number }>()
+
+function getIp(req: Request): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
+}
+
 export async function POST(request: Request) {
   try {
     const body   = await request.json()
@@ -15,56 +23,48 @@ export async function POST(request: Request) {
     }
 
     const { password } = parsed.data
+    const ip  = getIp(request)
+    const now = Date.now()
 
-    // Call the adminLogin Cloud Function REST endpoint
-    const projectId = process.env.FIREBASE_PROJECT_ID!
-    const region    = 'us-central1'
-    const fnUrl     = `https://${region}-${projectId}.cloudfunctions.net/adminLogin`
-
-    const cfRes = await fetch(fnUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: { password } }),
-    })
-
-    if (!cfRes.ok) {
-      const errBody = await cfRes.json().catch(() => ({}))
-      const status  = cfRes.status === 429 ? 429 : 401
-      const message = (errBody as { error?: { message?: string } })?.error?.message ?? 'Credenciales inválidas'
-      return NextResponse.json({ error: message }, { status })
-    }
-
-    const cfData = await cfRes.json() as { result: { token: string } }
-    const customToken = cfData.result.token
-
-    // Exchange custom token → ID token via Firebase REST API
-    const apiKey   = process.env.NEXT_PUBLIC_FIREBASE_API_KEY!
-    const exchRes  = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+    const rec = attempts.get(ip)
+    if (rec) {
+      const windowEnd = rec.firstAt + LOCKOUT_MS
+      if (rec.count >= MAX_ATTEMPTS && now < windowEnd) {
+        const minutesLeft = Math.ceil((windowEnd - now) / 60000)
+        return NextResponse.json(
+          { error: `Demasiados intentos. Espera ${minutesLeft} minuto(s).` },
+          { status: 429 }
+        )
       }
-    )
-
-    if (!exchRes.ok) {
-      return NextResponse.json({ error: 'Error al crear sesión' }, { status: 500 })
+      if (now >= windowEnd) attempts.delete(ip)
     }
 
-    const exchData = await exchRes.json() as { idToken: string; expiresIn: string }
-    const idToken  = exchData.idToken
+    const hash = process.env.ADMIN_PASSWORD_HASH?.trim()
+    if (!hash) {
+      console.error('ADMIN_PASSWORD_HASH env var not set')
+      return NextResponse.json({ error: 'Error de configuración del servidor' }, { status: 500 })
+    }
 
-    // Verify the ID token and create a session cookie (4h TTL)
-    const expiresIn = 4 * 60 * 60 * 1000
-    const cookie    = await adminAuth.createSessionCookie(idToken, { expiresIn })
+    const valid = await bcrypt.compare(password, hash)
+    if (!valid) {
+      const cur = attempts.get(ip)
+      if (!cur || now >= cur.firstAt + LOCKOUT_MS) {
+        attempts.set(ip, { count: 1, firstAt: now })
+      } else {
+        attempts.set(ip, { count: cur.count + 1, firstAt: cur.firstAt })
+      }
+      return NextResponse.json({ error: 'Contraseña incorrecta' }, { status: 401 })
+    }
 
+    attempts.delete(ip)
+
+    const token    = signSession()
     const response = NextResponse.json({ ok: true })
-    response.cookies.set('__session', cookie, {
+    response.cookies.set('__session', token, {
       httpOnly: true,
       secure:   process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge:   expiresIn / 1000,
+      maxAge:   SESSION_TTL_SECONDS,
       path:     '/',
     })
 

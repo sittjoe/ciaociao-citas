@@ -1,32 +1,37 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { format, formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns'
+import { formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
+
+export const BUSINESS_TZ = 'America/Mexico_City'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+function toDate(date: Date | string): Date {
+  return typeof date === 'string' ? parseISO(date) : date
+}
+
 export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, "EEEE d 'de' MMMM, yyyy", { locale: es })
+  return formatInTimeZone(toDate(date), BUSINESS_TZ, "EEEE d 'de' MMMM, yyyy", { locale: es })
 }
 
 export function formatTime(date: Date | string): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'HH:mm', { locale: es })
+  return formatInTimeZone(toDate(date), BUSINESS_TZ, 'HH:mm', { locale: es })
 }
 
 export function formatShortDate(date: Date | string): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  if (isToday(d)) return `Hoy, ${format(d, 'HH:mm')}`
-  if (isTomorrow(d)) return `Mañana, ${format(d, 'HH:mm')}`
-  return format(d, "EEE d MMM, HH:mm", { locale: es })
+  const d = toDate(date)
+  const time = formatInTimeZone(d, BUSINESS_TZ, 'HH:mm')
+  if (isToday(d))    return `Hoy, ${time}`
+  if (isTomorrow(d)) return `Mañana, ${time}`
+  return formatInTimeZone(d, BUSINESS_TZ, 'EEE d MMM, HH:mm', { locale: es })
 }
 
 export function formatRelative(date: Date | string): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return formatDistanceToNow(d, { addSuffix: true, locale: es })
+  return formatDistanceToNow(toDate(date), { addSuffix: true, locale: es })
 }
 
 export function generateCode(length = 8): string {
@@ -39,7 +44,7 @@ export function generateCode(length = 8): string {
 
 export function groupByDate<T extends { datetime: Date }>(items: T[]): Record<string, T[]> {
   return items.reduce<Record<string, T[]>>((acc, item) => {
-    const key = format(item.datetime, 'yyyy-MM-dd')
+    const key = formatInTimeZone(item.datetime, BUSINESS_TZ, 'yyyy-MM-dd')
     if (!acc[key]) acc[key] = []
     acc[key].push(item)
     return acc

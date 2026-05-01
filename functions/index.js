@@ -16,9 +16,9 @@ const LOCKOUT_MS = 15 * 60 * 1000;
 
 exports.adminLogin = onCall(
   {
-    // El secret se inyecta automáticamente como process.env.ADMIN_PASSWORD_HASH en runtime
     secrets: ['ADMIN_PASSWORD_HASH'],
     region: 'us-central1',
+    invoker: 'public',
   },
   async (request) => {
     const { password } = request.data;

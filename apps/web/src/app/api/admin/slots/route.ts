@@ -1,21 +1,17 @@
 import { NextResponse } from 'next/server'
-import { adminDb, adminAuth } from '@/lib/firebase-admin'
+import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { cookies } from 'next/headers'
+import { fromZonedTime } from 'date-fns-tz'
 import { bulkSlotsSchema } from '@/lib/schemas'
+import { verifySession } from '@/lib/admin-session'
+import { BUSINESS_TZ } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
 async function verifyAdmin(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const session     = cookieStore.get('__session')?.value
-  if (!session) return false
-  try {
-    const decoded = await adminAuth.verifySessionCookie(session, true)
-    return decoded.admin === true
-  } catch {
-    return false
-  }
+  const session = (await cookies()).get('__session')?.value
+  return verifySession(session)
 }
 
 // GET — list all slots (admin view, no available filter)
@@ -32,10 +28,10 @@ export async function GET(request: Request) {
     let query = adminDb.collection('slots').orderBy('datetime') as FirebaseFirestore.Query
 
     if (dateFrom) {
-      query = query.where('datetime', '>=', Timestamp.fromDate(new Date(dateFrom)))
+      query = query.where('datetime', '>=', Timestamp.fromDate(fromZonedTime(`${dateFrom}T00:00:00`, BUSINESS_TZ)))
     }
     if (dateTo) {
-      query = query.where('datetime', '<=', Timestamp.fromDate(new Date(dateTo)))
+      query = query.where('datetime', '<=', Timestamp.fromDate(fromZonedTime(`${dateTo}T23:59:59`, BUSINESS_TZ)))
     } else {
       // Default: 60 days ahead
       const end = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
@@ -82,7 +78,7 @@ export async function POST(request: Request) {
 
     for (const date of dates) {
       for (const time of times) {
-        const dt = new Date(`${date}T${time}:00`)
+        const dt = fromZonedTime(`${date}T${time}:00`, BUSINESS_TZ)
         if (isNaN(dt.getTime())) { skipped.push(`${date}T${time}`); continue }
 
         // Skip past slots
