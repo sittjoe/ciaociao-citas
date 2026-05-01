@@ -43,10 +43,14 @@ export function AdminUsersPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       })
-      const data = await res.json() as { error?: string }
+      const data = await res.json() as { error?: string; tempPassword?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo agregar')
       setEmail('')
-      toast.success('Admin agregado')
+      if (data.tempPassword) {
+        toast.success(`Admin creado. Contraseña temporal: ${data.tempPassword}`, { duration: 15000 })
+      } else {
+        toast.success('Admin agregado')
+      }
       await load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo agregar')

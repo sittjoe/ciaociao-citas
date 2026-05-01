@@ -12,12 +12,20 @@ interface IDUploaderProps {
 
 export function IDUploader({ value, onChange, error }: IDUploaderProps) {
   const [dragging, setDragging] = useState(false)
+  const [internalError, setInternalError] = useState<string | null>(null)
 
   const handleFile = useCallback((file: File | null) => {
     if (!file) return
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-    if (!allowed.includes(file.type)) return
-    if (file.size > 5 * 1024 * 1024) return
+    if (!allowed.includes(file.type)) {
+      setInternalError('Formato no permitido. Usa JPG, PNG, WebP o PDF.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setInternalError('El archivo supera 5 MB.')
+      return
+    }
+    setInternalError(null)
     onChange(file)
   }, [onChange])
 
@@ -82,7 +90,7 @@ export function IDUploader({ value, onChange, error }: IDUploaderProps) {
           </div>
         </label>
       )}
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {(internalError ?? error) && <p className="text-xs text-red-500">{internalError ?? error}</p>}
     </div>
   )
 }

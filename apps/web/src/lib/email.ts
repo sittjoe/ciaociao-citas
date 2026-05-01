@@ -6,6 +6,7 @@ import type { Appointment } from '@/types'
 
 const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
+const SHOWROOM_ADDRESS = process.env.SHOWROOM_ADDRESS || 'Ciudad de México'
 
 type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'calendar_error'
 
@@ -79,7 +80,14 @@ async function sendTracked(params: {
   attachments?: { filename: string; content: string }[]
 }) {
   try {
-    const result = await getResend().emails.send(params)
+    const result = await getResend().emails.send({
+      from: params.from,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      ...(params.attachments ? { attachments: params.attachments } : {}),
+      headers: { 'List-Unsubscribe': `<mailto:${FROM}?subject=Baja>` },
+    })
     await recordEmailEvent({
       kind: params.kind,
       to: params.to,
@@ -147,6 +155,7 @@ function baseTemplate(body: string): string {
   ${body}
   <div class="footer">
     <p>Ciao Ciao Joyería · Showroom Privado</p>
+    <p>${SHOWROOM_ADDRESS}</p>
     <p>Dudas: <a href="mailto:hola@ciaociao.mx" style="color:#9A7E50;">hola@ciaociao.mx</a></p>
   </div>
 </div>

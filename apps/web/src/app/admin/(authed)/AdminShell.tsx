@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, CalendarDays, Settings, LogOut, Menu, X, Users } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, Settings, LogOut, Menu, X, Users, KeyRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -12,6 +12,7 @@ const navItems = [
   { href: '/admin/citas',  label: 'Citas',      Icon: CalendarDays    },
   { href: '/admin/slots',  label: 'Slots',      Icon: Settings        },
   { href: '/admin/admins', label: 'Admins',     Icon: Users           },
+  { href: '/admin/cuenta', label: 'Mi cuenta',  Icon: KeyRound        },
 ]
 
 export function AdminShell({ children, adminEmail }: { children: React.ReactNode; adminEmail: string }) {

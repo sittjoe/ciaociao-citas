@@ -9,10 +9,11 @@ import { Modal } from '@/components/ui/Modal'
 import { formatShortDate, csvRow } from '@/lib/utils'
 import type { Appointment, AppointmentStatus } from '@/types'
 
-type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt'> & {
+type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt'> & {
   slotDatetime: string
   createdAt: string
   updatedAt?: string
+  decidedAt?: string | null
 }
 
 export function AppointmentTable() {
@@ -77,7 +78,7 @@ export function AppointmentTable() {
 
   const exportCSV = useCallback(() => {
     const BOM  = '﻿'
-    const head = csvRow(['Código', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Notas'])
+    const head = csvRow(['Código', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Notas', 'Aprobado por'])
     const rows = appointments.map(a => csvRow([
       a.confirmationCode,
       a.name,
@@ -85,7 +86,8 @@ export function AppointmentTable() {
       a.phone,
       new Date(a.slotDatetime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }),
       a.status,
-      a.notes,
+      a.notes ?? '',
+      a.decidedBy ?? '',
     ]))
     const csv  = BOM + [head, ...rows].join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -209,9 +211,16 @@ export function AppointmentTable() {
                 ['Email',     selected.email],
                 ['Teléfono',  selected.phone],
                 ['Fecha',     formatShortDate(selected.slotDatetime)],
-                ['Calendar',  selected.googleCalendarEventId ? 'Sincronizado' : 'Pendiente'],
+                ['Calendar',  selected.googleCalendarEventId
+                  ? 'Sincronizado'
+                  : selected.calendarSyncFailed
+                    ? '⚠ Error de sincronización'
+                    : 'Pendiente'],
                 ['Estado',    null],
-                ...(selected.notes ? [['Notas', selected.notes]] : []),
+                ...(selected.decidedBy ? [['Aprobado por', selected.decidedBy]] : []),
+                ...(selected.decidedAt ? [['Fecha decisión', formatShortDate(selected.decidedAt)]] : []),
+                ...(selected.adminNote ? [['Nota', selected.adminNote]] : []),
+                ...(selected.notes ? [['Notas cliente', selected.notes]] : []),
               ].map(([label, value]) => (
                 <div key={label as string} className="flex justify-between py-2">
                   <span className="text-ink-muted">{label}</span>

@@ -27,6 +27,10 @@ export interface Appointment {
   reminder24Sent: boolean
   reminder2Sent: boolean
   googleCalendarEventId?: string | null
+  calendarSyncFailed?: boolean | null
+  decidedBy?: string | null
+  decidedAt?: Date | null
+  adminNote?: string | null
   createdAt: Date
   updatedAt?: Date
 }

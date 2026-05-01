@@ -4,7 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { appointmentDecisionSchema } from '@/lib/schemas'
 import { sendStatusUpdate } from '@/lib/email'
 import { requireAdminSession } from '@/lib/admin-auth'
-import { createAppointmentCalendarEvent, deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
+import { createAppointmentCalendarEvent } from '@/lib/google-calendar'
 import type { Appointment, AppointmentStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -59,18 +59,6 @@ export async function POST(
 
     appointment = mapAppointment(id, apptData, action === 'accept' ? 'accepted' : 'rejected')
 
-    if (action === 'accept') {
-      try {
-        googleCalendarEventId = await createAppointmentCalendarEvent(appointment)
-      } catch (err) {
-        console.error('Google Calendar create failed:', err)
-        return NextResponse.json(
-          { error: 'No se pudo crear el evento en Google Calendar. La cita sigue pendiente.' },
-          { status: 502 }
-        )
-      }
-    }
-
     await adminDb.runTransaction(async tx => {
       const freshSnap = await tx.get(apptRef)
       if (!freshSnap.exists) throw new Error('NOT_FOUND')
@@ -81,9 +69,9 @@ export async function POST(
       tx.update(apptRef, {
         status: newStatus,
         updatedAt: FieldValue.serverTimestamp(),
+        decidedAt: FieldValue.serverTimestamp(),
         decidedBy: admin.email,
         ...(reason ? { adminNote: reason } : {}),
-        ...(googleCalendarEventId ? { googleCalendarEventId } : {}),
       })
 
       if (action === 'reject') {
@@ -94,23 +82,26 @@ export async function POST(
         })
       }
 
-      appointment = {
-        ...mapAppointment(id, freshData, newStatus),
-        googleCalendarEventId,
-      }
+      appointment = mapAppointment(id, freshData, newStatus)
     })
 
     sendStatusUpdate(appointment, action, reason).catch(err =>
       console.error('Status email failed (non-fatal):', err)
     )
 
+    if (action === 'accept') {
+      try {
+        googleCalendarEventId = await createAppointmentCalendarEvent(appointment!)
+        await adminDb.collection('appointments').doc(id).update({ googleCalendarEventId })
+      } catch (err) {
+        console.error('Google Calendar create failed (non-fatal):', err)
+        await adminDb.collection('appointments').doc(id).update({ calendarSyncFailed: true }).catch(() => {})
+        return NextResponse.json({ ok: true, googleCalendarEventId: null, calendarSyncFailed: true })
+      }
+    }
+
     return NextResponse.json({ ok: true, googleCalendarEventId })
   } catch (err: unknown) {
-    if (action === 'accept' && appointment && googleCalendarEventId) {
-      deleteAppointmentCalendarEvent({ ...appointment, googleCalendarEventId }).catch(cleanupErr =>
-        console.error('Google Calendar cleanup failed:', cleanupErr)
-      )
-    }
     const msg = err instanceof Error ? err.message : ''
     if (msg === 'NOT_FOUND') return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
     if (msg === 'ALREADY_PROCESSED') return NextResponse.json({ error: 'Esta cita ya fue procesada' }, { status: 409 })
