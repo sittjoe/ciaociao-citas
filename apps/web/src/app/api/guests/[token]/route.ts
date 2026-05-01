@@ -33,10 +33,10 @@ export async function GET(
 
   const data = guestDoc.data()
   if (data.status === 'expired') {
-    return NextResponse.json({ error: 'El plazo de verificación ha vencido' }, { status: 410 })
+    return NextResponse.json({ error: 'El plazo de verificación ha vencido', reason: 'expired' }, { status: 410 })
   }
   if (data.status === 'excluded') {
-    return NextResponse.json({ error: 'Este link ya no está activo' }, { status: 410 })
+    return NextResponse.json({ error: 'Esta invitación ya no está activa', reason: 'excluded' }, { status: 403 })
   }
 
   const apptDoc = await adminDb
@@ -100,7 +100,10 @@ export async function POST(
     return NextResponse.json({ error: 'Formato no permitido. Usa JPG, PNG, WebP o PDF.' }, { status: 422 })
   }
 
-  const fileExt        = idFile.name.split('.').pop() ?? 'jpg'
+  const extByMime: Record<string, string> = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf',
+  }
+  const fileExt        = extByMime[idFile.type] ?? 'bin'
   const storageKey     = `identifications/guest_${guestDoc.id}_${randomUUID()}.${fileExt}`
   const fileBuffer     = Buffer.from(await idFile.arrayBuffer())
   await adminStorage.bucket().file(storageKey).save(fileBuffer, {
@@ -112,7 +115,7 @@ export async function POST(
     status:            'verified',
     identificationUrl: storageKey,
     verifiedAt:        FieldValue.serverTimestamp(),
-    verifyToken:       '',
+    verifyToken:       FieldValue.delete(),
   })
 
   await recomputeGuestsAllVerified(data.appointmentId)

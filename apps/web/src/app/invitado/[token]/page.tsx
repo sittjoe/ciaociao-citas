@@ -20,7 +20,7 @@ interface AppointmentInfo {
   hostName: string
 }
 
-type PageState = 'loading' | 'ready' | 'already_verified' | 'expired' | 'error' | 'done'
+type PageState = 'loading' | 'ready' | 'already_verified' | 'expired' | 'revoked' | 'error' | 'done'
 
 export default function InvitadoPage() {
   const { token }  = useParams<{ token: string }>()
@@ -34,6 +34,7 @@ export default function InvitadoPage() {
     fetch(`/api/guests/${token}`)
       .then(async res => {
         if (res.status === 410) { setPageState('expired'); return }
+        if (res.status === 403) { setPageState('revoked'); return }
         if (!res.ok)            { setPageState('error');   return }
         const data = await res.json() as { guest: GuestInfo; appointment: AppointmentInfo }
         setGuest(data.guest)
@@ -51,6 +52,9 @@ export default function InvitadoPage() {
       fd.append('idFile', idFile)
       const res = await fetch(`/api/guests/${token}`, { method: 'POST', body: fd })
       if (!res.ok) {
+        if (res.status === 410) { setPageState('expired'); return }
+        if (res.status === 403) { setPageState('revoked'); return }
+        if (res.status === 404) { setPageState('error');   return }
         const data = await res.json() as { error?: string }
         throw new Error(data.error ?? 'Error al verificar')
       }
@@ -97,6 +101,17 @@ export default function InvitadoPage() {
               El plazo para verificar tu identidad ha vencido. Contacta a{' '}
               <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>{' '}
               para que el equipo pueda ayudarte.
+            </p>
+          </div>
+        )}
+
+        {pageState === 'revoked' && (
+          <div className="card-soft text-center space-y-3 py-8">
+            <AlertCircle size={36} className="text-stone-400 mx-auto" />
+            <h2 className="font-serif text-xl text-ink">Invitación no activa</h2>
+            <p className="text-sm text-ink-muted leading-relaxed">
+              Esta invitación ya no está activa. Si crees que es un error, contacta a{' '}
+              <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
             </p>
           </div>
         )}

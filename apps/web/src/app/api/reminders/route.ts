@@ -163,7 +163,16 @@ export async function GET(request: Request) {
       }
     }
 
-    // Guest reminders — 24h window: also expire pending guests past the deadline
+    // Expire guests whose verification deadline (slotDatetime - 24h) has already passed.
+    // Run BEFORE sending 24h reminders so expired guests are skipped by the pending query.
+    const expiryBefore = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    try {
+      expiredCount = await expirePendingGuests(expiryBefore)
+    } catch (err) {
+      errors.push(`Guest expiration failed: ${err}`)
+    }
+
+    // Guest reminders — 24h window (runs after expiration so expired guests are excluded)
     const from24g = new Date(now.getTime() + 23 * 60 * 60 * 1000)
     const to24g   = new Date(now.getTime() + 25 * 60 * 60 * 1000)
 
@@ -216,14 +225,6 @@ export async function GET(request: Request) {
           errors.push(`24h guest reminder failed for ${gDoc.id}: ${err}`)
         }
       }
-    }
-
-    // Expire guests whose deadline (slotDatetime - 24h) has passed
-    const expiryBefore = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-    try {
-      expiredCount = await expirePendingGuests(expiryBefore)
-    } catch (err) {
-      errors.push(`Guest expiration failed: ${err}`)
     }
 
     return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, errors })

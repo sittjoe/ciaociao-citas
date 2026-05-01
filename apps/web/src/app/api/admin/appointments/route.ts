@@ -79,6 +79,8 @@ export async function GET(request: Request) {
         createdAt:        (d.createdAt as Timestamp)?.toDate().toISOString(),
         updatedAt:        (d.updatedAt as Timestamp)?.toDate().toISOString(),
         identificationUrl: d.identificationUrl,
+        guestCount:          d.guestCount ?? 0,
+        guestsAllVerified:   d.guestsAllVerified ?? false,
       }
     })
 

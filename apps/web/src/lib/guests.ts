@@ -62,18 +62,14 @@ export async function createGuestsForAppointment(
 }
 
 export async function recomputeGuestsAllVerified(appointmentId: string): Promise<void> {
-  const snap = await adminDb
-    .collection('appointments')
-    .doc(appointmentId)
-    .collection('guests')
-    .get()
+  const apptRef    = adminDb.collection('appointments').doc(appointmentId)
+  const guestsRef  = apptRef.collection('guests')
 
-  const active = snap.docs.filter(d => d.data().status !== 'excluded')
-  const allVerified = active.length === 0 || active.every(d => d.data().status === 'verified')
-
-  await adminDb.collection('appointments').doc(appointmentId).update({
-    guestsAllVerified: allVerified,
-    updatedAt: FieldValue.serverTimestamp(),
+  await adminDb.runTransaction(async tx => {
+    const snap       = await tx.get(guestsRef)
+    const active     = snap.docs.filter(d => d.data().status !== 'excluded')
+    const allVerified = active.length === 0 || active.every(d => d.data().status === 'verified')
+    tx.update(apptRef, { guestsAllVerified: allVerified, updatedAt: FieldValue.serverTimestamp() })
   })
 }
 

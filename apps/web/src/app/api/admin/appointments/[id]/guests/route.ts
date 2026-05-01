@@ -24,11 +24,15 @@ export async function GET(
   const guests = snap.docs.map(doc => {
     const g = mapGuest(doc.id, doc.data())
     return {
-      id: g.id,
-      name: g.name,
-      email: g.email,
-      status: g.status,
+      id:                g.id,
+      name:              g.name,
+      email:             g.email,
+      status:            g.status,
       identificationUrl: g.identificationUrl,
+      verifiedAt:        g.verifiedAt?.toISOString()  ?? null,
+      expiredAt:         g.expiredAt?.toISOString()   ?? null,
+      excludedAt:        g.excludedAt?.toISOString()  ?? null,
+      excludedBy:        g.excludedBy,
     }
   })
 

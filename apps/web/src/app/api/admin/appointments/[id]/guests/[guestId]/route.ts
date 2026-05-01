@@ -34,6 +34,11 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invitado no encontrado' }, { status: 404 })
   }
 
+  const currentStatus = guestSnap.data()!.status as string
+  if (!['pending', 'expired'].includes(currentStatus)) {
+    return NextResponse.json({ error: 'Transición de estado no permitida' }, { status: 422 })
+  }
+
   if (action === 'verify') {
     await guestRef.update({
       status: 'verified',
@@ -47,7 +52,11 @@ export async function PATCH(
     })
   }
 
-  await recomputeGuestsAllVerified(id)
+  try {
+    await recomputeGuestsAllVerified(id)
+  } catch (err) {
+    console.error('recomputeGuestsAllVerified failed after admin action:', err)
+  }
 
   return NextResponse.json({ ok: true })
 }

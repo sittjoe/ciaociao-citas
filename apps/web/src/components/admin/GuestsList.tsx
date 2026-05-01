@@ -102,6 +102,7 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                 rel="noopener noreferrer"
                 className="text-ink-muted hover:text-champagne transition-colors"
                 title="Ver identificación"
+                aria-label="Ver identificación"
               >
                 <ExternalLink size={13} />
               </a>
@@ -113,6 +114,7 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                 disabled={acting === g.id}
                 className="text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40"
                 title="Verificar manualmente"
+                aria-label={`Verificar manualmente a ${g.name}`}
               >
                 <ShieldCheck size={14} />
               </button>
@@ -124,6 +126,7 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                 disabled={acting === g.id}
                 className="text-red-400 hover:text-red-500 transition-colors disabled:opacity-40"
                 title="Excluir invitado"
+                aria-label={`Excluir a ${g.name}`}
               >
                 <UserX size={14} />
               </button>

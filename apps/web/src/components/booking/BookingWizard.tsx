@@ -78,7 +78,9 @@ export function BookingWizard() {
     fd.append('whatsapp', String(data.whatsapp))
     fd.append('idFile',   idFile)
     if (guests.length > 0) {
-      fd.append('guests', JSON.stringify(guests))
+      fd.append('guests', JSON.stringify(
+        guests.map(g => ({ name: g.name.trim(), email: g.email.trim().toLowerCase() }))
+      ))
     }
 
     try {
@@ -201,7 +203,26 @@ export function BookingWizard() {
       {step === 'form' && (
         <form
           className="card-soft fade-up space-y-4"
-          onSubmit={e => { e.preventDefault(); setStep('upload') }}
+          onSubmit={e => {
+            e.preventDefault()
+            if (guests.length > 0) {
+              const emails    = guests.map(g => g.email.trim().toLowerCase())
+              const hostEmail = getValues('email').trim().toLowerCase()
+              if (guests.some(g => !g.name.trim() || !g.email.trim())) {
+                toast.error('Completa el nombre y email de todos los invitados')
+                return
+              }
+              if (new Set(emails).size < emails.length) {
+                toast.error('Hay emails duplicados entre los invitados')
+                return
+              }
+              if (emails.includes(hostEmail)) {
+                toast.error('Un invitado no puede tener el mismo email que el titular')
+                return
+              }
+            }
+            setStep('upload')
+          }}
         >
           <h2 className="font-serif text-xl text-ink">Tus datos</h2>
 
@@ -255,7 +276,11 @@ export function BookingWizard() {
           </label>
 
           <div className="border-t border-stone-100 pt-4">
-            <GuestsField value={guests} onChange={setGuests} />
+            <GuestsField
+              value={guests}
+              onChange={setGuests}
+              hostEmail={getValues('email')}
+            />
           </div>
 
           <Button type="submit" className="w-full">Continuar →</Button>
