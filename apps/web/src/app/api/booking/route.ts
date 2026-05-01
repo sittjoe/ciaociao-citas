@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { bookingSchema } from '@/lib/schemas'
+import { bookingPayloadSchema } from '@/lib/schemas'
 import { generateCode, sanitize } from '@/lib/utils'
 import { sendBookingConfirmation } from '@/lib/email'
 import type { Appointment } from '@/types'
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       whatsapp: formData.get('whatsapp') === 'true',
     }
 
-    const parsed = bookingSchema.safeParse(raw)
+    const parsed = bookingPayloadSchema.safeParse(raw)
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 422 })
     }
@@ -73,13 +73,14 @@ export async function POST(request: Request) {
 
       if (!slotData.available) throw new Error('SLOT_UNAVAILABLE')
 
-      // Check for existing pending/accepted appointments on this slot
-      const existingSnap = await adminDb
+      // Check for existing pending/accepted appointments on this slot.
+      // Use tx.get(query) so the read participates in the transaction snapshot.
+      const existingQuery = adminDb
         .collection('appointments')
         .where('slotId', '==', slotId)
         .where('status', 'in', ['pending', 'accepted'])
         .limit(1)
-        .get()
+      const existingSnap = await tx.get(existingQuery)
 
       if (!existingSnap.empty) throw new Error('SLOT_UNAVAILABLE')
 

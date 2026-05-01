@@ -12,7 +12,7 @@ import { SlotPicker } from './SlotPicker'
 import { IDUploader } from './IDUploader'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
-import { bookingSchema, type BookingInput } from '@/lib/schemas'
+import { bookingFormSchema, type BookingFormInput } from '@/lib/schemas'
 import { cn, formatDate, formatTime } from '@/lib/utils'
 
 interface Slot { id: string; datetime: string }
@@ -23,22 +23,22 @@ const STEPS: Step[] = ['calendar', 'slots', 'form', 'upload', 'review', 'done']
 const STEP_LABELS   = ['Fecha', 'Horario', 'Datos', 'Identificación', 'Confirmar', '']
 
 export function BookingWizard() {
-  const [step,        setStep]        = useState<Step>('calendar')
-  const [slots,       setSlots]       = useState<Slot[]>([])
-  const [loadingSlots,setLoadingSlots]= useState(true)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
-  const [idFile,      setIdFile]      = useState<File | null>(null)
-  const [submitting,  setSubmitting]  = useState(false)
-  const [confirmCode, setConfirmCode] = useState('')
+  const [step,         setStep]        = useState<Step>('calendar')
+  const [slots,        setSlots]       = useState<Slot[]>([])
+  const [loadingSlots, setLoadingSlots]= useState(true)
+  const [selectedDate, setSelectedDate]= useState<Date | null>(null)
+  const [selectedSlot, setSelectedSlot]= useState<Slot | null>(null)
+  const [idFile,       setIdFile]      = useState<File | null>(null)
+  const [submitting,   setSubmitting]  = useState(false)
+  const [confirmCode,  setConfirmCode] = useState('')
 
   const {
     register,
     handleSubmit,
     getValues,
     formState: { errors },
-  } = useForm<BookingInput>({
-    resolver: zodResolver(bookingSchema),
+  } = useForm<BookingFormInput>({
+    resolver: zodResolver(bookingFormSchema),
     defaultValues: { whatsapp: false },
   })
 
@@ -50,12 +50,21 @@ export function BookingWizard() {
       .finally(() => setLoadingSlots(false))
   }, [])
 
-  const stepIndex    = STEPS.indexOf(step)
-  const canGoBack    = stepIndex > 0 && step !== 'done'
-  const goBack       = useCallback(() => setStep(STEPS[stepIndex - 1]), [stepIndex])
+  const stepIndex = STEPS.indexOf(step)
+  const canGoBack = stepIndex > 0 && step !== 'done'
+  const goBack    = useCallback(() => setStep(STEPS[stepIndex - 1]), [stepIndex])
 
-  const onSubmit = useCallback(async (data: BookingInput) => {
-    if (!selectedSlot || !idFile) return
+  const onSubmit = useCallback(async (data: BookingFormInput) => {
+    if (!selectedSlot) {
+      toast.error('Selecciona un horario antes de continuar')
+      setStep('calendar')
+      return
+    }
+    if (!idFile) {
+      toast.error('Sube tu identificación antes de continuar')
+      setStep('upload')
+      return
+    }
     setSubmitting(true)
 
     const fd = new FormData()
@@ -69,18 +78,25 @@ export function BookingWizard() {
 
     try {
       const res  = await fetch('/api/booking', { method: 'POST', body: fd })
-      const json = await res.json() as { confirmationCode?: string; error?: unknown }
+      const text = await res.text()
+      let json: { confirmationCode?: string; error?: unknown } = {}
+      try { json = text ? JSON.parse(text) : {} } catch { /* respuesta no-JSON */ }
 
       if (!res.ok) {
         const msg = res.status === 409
           ? 'Este horario ya fue tomado. Por favor selecciona otro.'
-          : typeof json.error === 'string' ? json.error : 'Error al enviar solicitud'
+          : typeof json.error === 'string' ? json.error
+          : `Error al enviar solicitud (${res.status})`
         toast.error(msg)
         if (res.status === 409) { setStep('calendar'); setSelectedSlot(null) }
         return
       }
 
-      setConfirmCode(json.confirmationCode ?? '')
+      if (!json.confirmationCode) {
+        toast.error('Respuesta inesperada del servidor')
+        return
+      }
+      setConfirmCode(json.confirmationCode)
       setStep('done')
     } catch {
       toast.error('Error de conexión. Por favor intenta de nuevo.')
@@ -99,13 +115,15 @@ export function BookingWizard() {
               <div
                 key={s}
                 className={cn(
-                  'h-0.5 flex-1 rounded-full transition-all duration-300',
-                  i < stepIndex ? 'bg-gold-500' : i === stepIndex ? 'bg-gold-700' : 'bg-rich-muted',
+                  'h-0.5 flex-1 rounded-full transition-all duration-500',
+                  i < stepIndex  ? 'bg-champagne'
+                  : i === stepIndex ? 'bg-champagne/40'
+                  : 'bg-stone-200',
                 )}
               />
             ))}
           </div>
-          <p className="text-xs text-gold-700 text-right tracking-widest uppercase">
+          <p className="text-[0.65rem] text-ink-muted text-right tracking-widest uppercase font-semibold">
             {STEP_LABELS[stepIndex]}
           </p>
         </div>
@@ -115,7 +133,7 @@ export function BookingWizard() {
       {canGoBack && (
         <button
           onClick={goBack}
-          className="flex items-center gap-1 text-gold-700 hover:text-gold-400 text-sm mb-4 transition-colors"
+          className="flex items-center gap-1 text-ink-muted hover:text-ink text-sm mb-4 transition-colors duration-150"
         >
           <ChevronLeft size={16} /> Volver
         </button>
@@ -123,10 +141,20 @@ export function BookingWizard() {
 
       {/* STEP: Calendar */}
       {step === 'calendar' && (
-        <div className="card-luxury fade-up">
-          <h2 className="font-serif text-xl text-gold-400 mb-5">Selecciona una fecha</h2>
+        <div className="card-soft fade-up">
+          <h2 className="font-serif text-xl text-ink mb-5">Selecciona una fecha</h2>
           {loadingSlots ? (
             <div className="h-64 shimmer rounded-xl" />
+          ) : slots.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
+                En este momento no tenemos horarios disponibles. Te invitamos a regresar pronto o escribirnos a{' '}
+                <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">
+                  hola@ciaociao.mx
+                </a>
+                .
+              </p>
+            </div>
           ) : (
             <CalendarView
               slots={slots}
@@ -143,8 +171,8 @@ export function BookingWizard() {
 
       {/* STEP: Slot picker */}
       {step === 'slots' && selectedDate && (
-        <div className="card-luxury fade-up space-y-4">
-          <h2 className="font-serif text-xl text-gold-400">
+        <div className="card-soft fade-up space-y-4">
+          <h2 className="font-serif text-xl text-ink capitalize">
             {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
           </h2>
           <SlotPicker
@@ -167,15 +195,15 @@ export function BookingWizard() {
       {/* STEP: Contact form */}
       {step === 'form' && (
         <form
-          className="card-luxury fade-up space-y-4"
+          className="card-soft fade-up space-y-4"
           onSubmit={e => { e.preventDefault(); setStep('upload') }}
         >
-          <h2 className="font-serif text-xl text-gold-400">Tus datos</h2>
+          <h2 className="font-serif text-xl text-ink">Tus datos</h2>
 
           <Field label="Nombre completo" required error={errors.name?.message}>
             <input
               {...register('name')}
-              className="input-luxury"
+              className="input-clean"
               placeholder="María García"
               autoComplete="name"
             />
@@ -185,7 +213,7 @@ export function BookingWizard() {
             <input
               {...register('email')}
               type="email"
-              className="input-luxury"
+              className="input-clean"
               placeholder="maria@ejemplo.com"
               autoComplete="email"
             />
@@ -195,7 +223,7 @@ export function BookingWizard() {
             <input
               {...register('phone')}
               type="tel"
-              className="input-luxury"
+              className="input-clean"
               placeholder="+52 55 1234 5678"
               autoComplete="tel"
             />
@@ -204,7 +232,7 @@ export function BookingWizard() {
           <Field label="Notas adicionales" error={errors.notes?.message}>
             <textarea
               {...register('notes')}
-              className="input-luxury resize-none"
+              className="input-clean resize-none"
               rows={3}
               placeholder="¿Hay algo que quieras contarnos antes de tu visita?"
             />
@@ -214,9 +242,9 @@ export function BookingWizard() {
             <input
               {...register('whatsapp')}
               type="checkbox"
-              className="w-4 h-4 rounded border-rich-subtle bg-rich-muted accent-gold-500"
+              className="w-4 h-4 rounded border-stone-300 accent-champagne"
             />
-            <span className="text-sm text-gold-light">
+            <span className="text-sm text-ink-muted">
               Deseo recibir recordatorios por WhatsApp
             </span>
           </label>
@@ -227,18 +255,15 @@ export function BookingWizard() {
 
       {/* STEP: ID upload */}
       {step === 'upload' && (
-        <div className="card-luxury fade-up space-y-4">
+        <div className="card-soft fade-up space-y-4">
           <div>
-            <h2 className="font-serif text-xl text-gold-400">Identificación oficial</h2>
-            <p className="text-sm text-gold-700 mt-1">
+            <h2 className="font-serif text-xl text-ink">Identificación oficial</h2>
+            <p className="text-sm text-ink-muted mt-1">
               Requerida para confirmar tu visita al showroom privado.
             </p>
           </div>
 
-          <IDUploader
-            value={idFile}
-            onChange={setIdFile}
-          />
+          <IDUploader value={idFile} onChange={setIdFile} />
 
           <Button
             className="w-full"
@@ -252,10 +277,17 @@ export function BookingWizard() {
 
       {/* STEP: Review */}
       {step === 'review' && selectedSlot && (
-        <form className="card-luxury fade-up space-y-5" onSubmit={handleSubmit(onSubmit)}>
-          <h2 className="font-serif text-xl text-gold-400">Confirmar solicitud</h2>
+        <form
+          className="card-soft fade-up space-y-5"
+          onSubmit={handleSubmit(onSubmit, errs => {
+            const first = Object.values(errs)[0]?.message
+            toast.error(first ?? 'Revisa los datos del formulario')
+            if (errs.name || errs.email || errs.phone || errs.notes) setStep('form')
+          })}
+        >
+          <h2 className="font-serif text-xl text-ink">Confirmar solicitud</h2>
 
-          <div className="divide-y divide-rich-muted">
+          <div className="divide-y divide-stone-100">
             {[
               ['Fecha',      formatDate(selectedSlot.datetime)],
               ['Hora',       formatTime(selectedSlot.datetime)],
@@ -266,13 +298,13 @@ export function BookingWizard() {
               ['Identificación', idFile?.name ?? ''],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between py-2.5 text-sm">
-                <span className="text-gold-700">{label}</span>
-                <span className="text-gold-light text-right max-w-[60%] truncate">{value}</span>
+                <span className="text-ink-muted">{label}</span>
+                <span className="text-ink text-right max-w-[60%] truncate">{value}</span>
               </div>
             ))}
           </div>
 
-          <p className="text-xs text-gold-700 leading-relaxed">
+          <p className="text-xs text-ink-muted leading-relaxed">
             Al confirmar, tu solicitud será revisada por nuestro equipo y recibirás un email con la confirmación o actualización.
           </p>
 
@@ -284,24 +316,21 @@ export function BookingWizard() {
 
       {/* STEP: Done */}
       {step === 'done' && (
-        <div className="card-luxury fade-up text-center space-y-4">
+        <div className="card-soft fade-up text-center space-y-4">
           <div className="flex justify-center">
-            <CheckCircle2 size={48} className="text-gold-400" />
+            <CheckCircle2 size={48} className="text-champagne" />
           </div>
-          <h2 className="font-serif text-2xl text-gold-400">¡Solicitud recibida!</h2>
-          <p className="text-sm text-gold-700 leading-relaxed">
+          <h2 className="font-serif text-2xl text-ink">¡Solicitud recibida!</h2>
+          <p className="text-sm text-ink-muted leading-relaxed">
             Revisaremos tu solicitud y te notificaremos a la brevedad por email. Guarda tu código de referencia:
           </p>
-          <div className="bg-rich-muted border border-rich-subtle rounded-xl py-4 px-6 inline-block mx-auto">
-            <p className="text-xs text-gold-700 tracking-widest uppercase mb-1">Código</p>
-            <p className="font-mono text-2xl font-bold text-gold-400 tracking-widest">{confirmCode}</p>
+          <div className="bg-cream-soft border border-stone-100 rounded-xl py-4 px-6 inline-block mx-auto">
+            <p className="text-[0.65rem] text-ink-muted tracking-widest uppercase mb-1 font-semibold">Código</p>
+            <p className="font-mono text-2xl font-bold text-champagne tracking-widest">{confirmCode}</p>
           </div>
-          <p className="text-xs text-gold-700">
+          <p className="text-xs text-ink-muted">
             También puedes ver el estado en{' '}
-            <a
-              href={`/reserva/${confirmCode}`}
-              className="text-gold-400 hover:underline"
-            >
+            <a href={`/reserva/${confirmCode}`} className="text-champagne hover:underline">
               /reserva/{confirmCode}
             </a>
           </p>

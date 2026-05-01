@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
-export const bookingSchema = z.object({
-  slotId: z.string().min(1, 'Selecciona un horario'),
+export const bookingFormSchema = z.object({
   name: z
     .string()
     .min(3, 'Mínimo 3 caracteres')
@@ -24,7 +23,13 @@ export const bookingSchema = z.object({
   whatsapp: z.boolean().default(false),
 })
 
-export type BookingInput = z.infer<typeof bookingSchema>
+export type BookingFormInput = z.infer<typeof bookingFormSchema>
+
+export const bookingPayloadSchema = bookingFormSchema.extend({
+  slotId: z.string().min(1, 'Selecciona un horario'),
+})
+
+export type BookingPayloadInput = z.infer<typeof bookingPayloadSchema>
 
 export const adminLoginSchema = z.object({
   password: z.string().min(1, 'Contraseña requerida').max(200),
