@@ -63,7 +63,12 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
       </nav>
 
       <div className="p-4 border-t border-stone-100">
-        <p className="px-3 pb-2 text-[0.68rem] text-ink-subtle truncate">{adminEmail}</p>
+        <div className="flex items-center gap-2 px-3 pb-2">
+          <span className="w-8 h-8 rounded-full bg-champagne-soft flex items-center justify-center text-xs font-semibold text-champagne-deep shrink-0">
+            {adminEmail.charAt(0).toUpperCase()}
+          </span>
+          <span className="text-[0.68rem] text-ink-subtle truncate">{adminEmail}</span>
+        </div>
         <button
           onClick={logout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"

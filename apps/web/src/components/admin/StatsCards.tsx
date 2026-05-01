@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CalendarCheck, Clock, Gem, XCircle } from 'lucide-react'
+import { CalendarCheck, Clock, Gem, XCircle, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AdminStats } from '@/types'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -11,10 +11,11 @@ export function StatsCards({ stats }: { stats: AdminStats }) {
     { label: 'Confirmadas hoy',   value: stats.acceptedToday,  color: 'text-emerald-600', Icon: CalendarCheck },
     { label: 'Total confirmadas', value: stats.totalAccepted,  color: 'text-champagne-deep', Icon: Gem },
     { label: 'Rechazadas',        value: stats.totalRejected,  color: 'text-red-500',     Icon: XCircle },
+    { label: 'Slots próx. semana', value: stats.upcomingSlots, color: 'text-blue-600',    Icon: CalendarDays },
   ]
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
       {cards.map(card => (
         <div key={card.label} className="card-soft flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">

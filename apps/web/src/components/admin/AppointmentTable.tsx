@@ -6,7 +6,7 @@ import { CheckCircle, XCircle, Download, ChevronDown, Search } from 'lucide-reac
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { formatShortDate, csvRow } from '@/lib/utils'
+import { formatShortDate, csvRow, cn } from '@/lib/utils'
 import type { Appointment, AppointmentStatus } from '@/types'
 
 type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt'> & {
@@ -134,7 +134,7 @@ export function AppointmentTable() {
           <thead>
             <tr className="border-b border-stone-100">
               {['Nombre', 'Fecha/Hora', 'Email', 'Estado', 'Acciones'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs text-ink-muted tracking-widest uppercase font-semibold">
+                <th key={h} className={cn('px-4 py-3 text-left text-xs text-ink-muted tracking-widest uppercase font-semibold', h === 'Email' && 'hidden sm:table-cell')}>
                   {h}
                 </th>
               ))}
@@ -160,7 +160,7 @@ export function AppointmentTable() {
                 <td className="px-4 py-3 text-ink-muted whitespace-nowrap">
                   {formatShortDate(appt.slotDatetime)}
                 </td>
-                <td className="px-4 py-3 text-ink-muted text-xs">{appt.email}</td>
+                <td className="hidden sm:table-cell px-4 py-3 text-ink-muted text-xs">{appt.email}</td>
                 <td className="px-4 py-3"><StatusBadge status={appt.status} /></td>
                 <td className="px-4 py-3">
                   {appt.status === 'pending' && (

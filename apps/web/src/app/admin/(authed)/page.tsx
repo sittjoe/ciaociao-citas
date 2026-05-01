@@ -73,8 +73,8 @@ export default async function AdminDashboard() {
   return (
     <div className="space-y-8 max-w-5xl">
       <div>
-        <h1 className="font-serif text-2xl text-ink">Dashboard</h1>
-        <p className="text-sm text-ink-muted mt-1">Resumen de la actividad del showroom</p>
+        <h1 className="font-serif text-3xl font-light tracking-tight text-ink">Dashboard</h1>
+        <p className="text-sm text-ink-muted mt-1 italic">Resumen de la actividad del showroom</p>
       </div>
 
       <StatsCards stats={stats} />

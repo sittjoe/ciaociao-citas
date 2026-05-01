@@ -25,6 +25,7 @@ export function SlotManager() {
   const [creating,      setCreating]      = useState(false)
   const [deleting,      setDeleting]      = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [futureOnly,    setFutureOnly]    = useState(true)
 
   // Bulk create form state
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
@@ -126,13 +127,30 @@ export function SlotManager() {
     }
   }, [])
 
+  const visibleSlots = futureOnly
+    ? slots.filter(s => new Date(s.datetime) >= new Date())
+    : slots
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-xl text-ink">Slots disponibles</h2>
-        <Button size="sm" onClick={() => setShowAdd(true)}>
-          <Plus size={14} /> Agregar slots
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFutureOnly(v => !v)}
+            className={cn(
+              'text-xs px-3 py-1.5 rounded-lg border transition-all',
+              futureOnly
+                ? 'bg-champagne-soft text-champagne-deep border-champagne-soft'
+                : 'text-ink-muted border-stone-200 hover:border-champagne-soft',
+            )}
+          >
+            {futureOnly ? 'Solo futuros' : 'Todos'}
+          </button>
+          <Button size="sm" onClick={() => setShowAdd(true)}>
+            <Plus size={14} /> Agregar slots
+          </Button>
+        </div>
       </div>
 
       {/* Slots list */}
@@ -151,10 +169,12 @@ export function SlotManager() {
             {loading && (
               <tr><td colSpan={3} className="px-4 py-8 text-center text-ink-muted">Cargando…</td></tr>
             )}
-            {!loading && slots.length === 0 && (
-              <tr><td colSpan={3} className="px-4 py-8 text-center text-ink-muted">Sin slots creados</td></tr>
+            {!loading && visibleSlots.length === 0 && (
+              <tr><td colSpan={3} className="px-4 py-8 text-center text-ink-muted">
+                {futureOnly ? 'Sin slots futuros' : 'Sin slots creados'}
+              </td></tr>
             )}
-            {slots.map(slot => (
+            {visibleSlots.map(slot => (
               <tr key={slot.id} className="border-b border-stone-100 hover:bg-cream-soft transition-colors">
                 <td className="px-4 py-3 text-ink">
                   {formatShortDate(slot.datetime)}
