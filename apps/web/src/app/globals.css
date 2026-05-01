@@ -2,18 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Light Apple-clean palette ─────────────────────────────────────────── */
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
 :root {
   --background:     #FAFAF7;
   --surface:        #FFFFFF;
   --surface-soft:   #F4F2EC;
+  --vellum:         #F7F2E8;
   --ink:            #1A1A1A;
   --ink-muted:      #6B6B6B;
   --ink-subtle:     #A8A8A8;
+  --ink-line:       #E8E2D4;
   --champagne:      #B89968;
   --champagne-deep: #9A7E50;
   --champagne-soft: #EFE6D3;
+  --champagne-tint: #FAF6EE;
   --ease:           cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-quart:     cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 html {
@@ -26,26 +30,26 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar */
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--surface-soft); }
 ::-webkit-scrollbar-thumb { background: var(--champagne-soft); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--champagne); }
 
-/* Selection */
-::selection { background: rgba(184,153,104,0.18); color: var(--ink); }
+/* ─── Selection ──────────────────────────────────────────────────────────── */
+::selection { background: var(--champagne-tint); color: var(--ink); }
 
-/* Focus ring */
+/* ─── Focus ring — soft champagne glow, not a harsh outline ─────────────── */
 :focus-visible {
-  outline: 2px solid var(--champagne);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(184,153,104,0.18), 0 0 0 1px rgba(184,153,104,0.7);
+  border-radius: 6px;
 }
 
-/* Input base */
+/* ─── Input base ──────────────────────────────────────────────────────────── */
 input, textarea, select {
   background-color: var(--surface);
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 1px solid var(--ink-line);
   color: var(--ink);
   border-radius: 10px;
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
@@ -53,12 +57,13 @@ input, textarea, select {
 input:focus, textarea:focus, select:focus {
   border-color: var(--champagne);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(184,153,104,0.15);
+  box-shadow: 0 0 0 3px rgba(184,153,104,0.18), 0 0 0 1px rgba(184,153,104,0.6);
 }
 input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
 
 @layer components {
-  /* ── Public (light) components ─────────────────────────────────────────── */
+
+  /* ── Reusable component classes ─────────────────────────────────────────── */
 
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2
@@ -80,26 +85,41 @@ input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
+  /* card-soft kept for backward compat — new code uses <Card> component */
   .card-soft {
-    @apply bg-white rounded-2xl p-6 border border-stone-100 shadow-soft;
+    @apply bg-white rounded-2xl p-6 border border-ink-line shadow-soft;
   }
 
   .input-clean {
-    @apply w-full bg-white border border-stone-200 rounded-xl px-4 py-3
+    @apply w-full bg-white border border-ink-line rounded-xl px-4 py-3
            text-ink placeholder:text-ink-subtle
-           focus:border-champagne focus:ring-2 focus:ring-champagne/20 outline-none
+           focus:border-champagne focus:shadow-focus-ring outline-none
            transition-all duration-200;
   }
 
   .label-clean {
-    @apply block text-xs font-semibold tracking-widest uppercase text-ink-muted mb-1.5;
+    @apply block text-11 font-semibold tracking-eyebrow uppercase text-ink-muted mb-1.5;
   }
 
-  /* Status badges – light pastel (public pages) */
+  /* ── Typography utilities ─────────────────────────────────────────────── */
+
+  .h-display {
+    @apply font-serif font-light tracking-tight text-ink;
+  }
+
+  .h-eyebrow {
+    @apply font-sans text-11 font-semibold tracking-eyebrow uppercase text-ink-muted;
+  }
+
+  .h-numeric {
+    @apply font-serif font-light tabular-nums text-ink;
+  }
+
+  /* ── Status badges ────────────────────────────────────────────────────── */
   .status-pending  { @apply bg-amber-50   text-amber-700   border border-amber-200; }
   .status-accepted { @apply bg-emerald-50 text-emerald-700 border border-emerald-200; }
   .status-rejected { @apply bg-red-50     text-red-600     border border-red-200; }
-  .status-cancelled{ @apply bg-stone-100  text-stone-500   border border-stone-200; }
+  .status-cancelled{ @apply bg-ink-line/40 text-ink-muted  border border-ink-line; }
 
 }
 
@@ -116,18 +136,18 @@ input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
 }
 .fade-in { animation: fadeIn 0.6s cubic-bezier(0.16,1,0.3,1) both; }
 
-/* Shimmer skeleton – light version */
+/* Shimmer — warm cream, not cool gray */
 @keyframes shimmer {
   0%   { background-position: -200% center; }
   100% { background-position:  200% center; }
 }
 .shimmer {
-  background: linear-gradient(90deg, #F4F2EC 25%, #FFFFFF 50%, #F4F2EC 75%);
+  background: linear-gradient(90deg, #F7F2E8 25%, #FAFAF7 50%, #F7F2E8 75%);
   background-size: 200% 100%;
   animation: shimmer 1.8s infinite;
 }
 
-/* Accessibility: respect reduced-motion */
+/* ─── Reduced motion ─────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

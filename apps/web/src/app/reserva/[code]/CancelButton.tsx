@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
+import { AlertDialog } from '@/components/ui/AlertDialog'
 
 export default function CancelButton({ token }: { token: string }) {
   const [open,      setOpen]      = useState(false)
@@ -39,21 +38,17 @@ export default function CancelButton({ token }: { token: string }) {
         Cancelar esta cita
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="¿Cancelar cita?" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-ink-muted">
-            ¿Estás seguro de que deseas cancelar? Esta acción no se puede deshacer.
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>
-              No, mantener
-            </Button>
-            <Button variant="danger" className="flex-1" loading={loading} onClick={cancel}>
-              Sí, cancelar
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <AlertDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onConfirm={cancel}
+        title="¿Cancelar cita?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Sí, cancelar"
+        cancelLabel="No, mantener"
+        variant="danger"
+        loading={loading}
+      />
     </>
   )
 }

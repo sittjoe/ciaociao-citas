@@ -40,7 +40,7 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot }
               'py-2.5 rounded-xl text-sm font-medium border transition-all duration-150',
               selected
                 ? 'bg-champagne text-white border-champagne shadow-pop scale-[1.03]'
-                : 'border-stone-200 text-ink hover:border-champagne hover:bg-champagne-soft hover:scale-[1.02]',
+                : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-soft hover:scale-[1.02]',
             )}
           >
             {formatInTimeZone(parseISO(slot.datetime), BUSINESS_TZ, 'HH:mm')}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { StatsCards, UpcomingList } from '@/components/admin/StatsCards'
+import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import type { AdminStats, Appointment, AppointmentStatus } from '@/types'
 
 export const dynamic  = 'force-dynamic'
@@ -73,16 +74,20 @@ export default async function AdminDashboard() {
   return (
     <div className="space-y-8 max-w-5xl">
       <div>
-        <h1 className="font-serif text-3xl font-light tracking-tight text-ink">Dashboard</h1>
+        <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Dashboard</h1>
         <p className="text-sm text-ink-muted mt-1 italic">Resumen de la actividad del showroom</p>
       </div>
 
       <StatsCards stats={stats} />
 
-      <div className="card-soft">
-        <h2 className="font-serif text-lg text-ink mb-4">Próximas citas</h2>
-        <UpcomingList appointments={stats.nextAppointments} />
-      </div>
+      <Card variant="soft">
+        <CardHeader>
+          <h2 className="font-serif text-lg font-light text-ink">Próximas citas</h2>
+        </CardHeader>
+        <CardBody className="pt-0">
+          <UpcomingList appointments={stats.nextAppointments} />
+        </CardBody>
+      </Card>
     </div>
   )
 }

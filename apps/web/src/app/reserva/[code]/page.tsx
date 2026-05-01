@@ -4,6 +4,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { formatDate, formatTime } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/Badge'
+import { Card } from '@/components/ui/Card'
 import type { AppointmentStatus } from '@/types'
 import CancelButton from './CancelButton'
 
@@ -48,23 +49,24 @@ export default async function ReservaPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen flex flex-col items-center px-4 py-12 sm:py-20 bg-cream">
+      {/* Brand header */}
       <header className="text-center mb-10">
-        <h1 className="font-serif text-4xl text-ink tracking-tight leading-none">Ciao Ciao</h1>
-        <p className="text-xs text-ink-muted tracking-[0.35em] uppercase mt-2 font-semibold">
-          Joyería · Showroom Privado
-        </p>
-        <div className="w-12 h-px bg-champagne-soft mx-auto mt-5" />
+        <h1 className="font-serif font-light text-4xl text-ink tracking-tight leading-none">
+          Ciao Ciao
+        </h1>
+        <div className="w-8 h-px bg-champagne mx-auto my-3" />
+        <p className="h-eyebrow">Joyería · Showroom Privado</p>
       </header>
 
-      <div className="w-full max-w-md card-soft fade-up space-y-5">
+      <Card variant="soft" className="w-full max-w-md space-y-5">
         <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl text-ink">Tu cita</h2>
+          <h2 className="font-serif font-light text-xl text-ink">Tu cita</h2>
           <StatusBadge status={appt.status} />
         </div>
 
         <p className="text-sm text-ink-muted">{STATUS_MESSAGES[appt.status]}</p>
 
-        <div className="divide-y divide-stone-100 text-sm">
+        <div className="divide-y divide-ink-line text-sm">
           {([
             ['Código',  appt.confirmationCode],
             ['Nombre',  appt.name],
@@ -92,12 +94,12 @@ export default async function ReservaPage({ params }: PageProps) {
 
         {canCancel && <CancelButton token={appt.cancelToken} />}
 
-        <div className="pt-2 border-t border-stone-100 text-center">
+        <div className="pt-2 border-t border-ink-line text-center">
           <a href="/" className="text-xs text-ink-muted hover:text-champagne transition-colors">
             Agendar nueva cita →
           </a>
         </div>
-      </div>
+      </Card>
     </main>
   )
 }

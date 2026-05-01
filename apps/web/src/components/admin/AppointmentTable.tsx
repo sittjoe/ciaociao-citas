@@ -1,11 +1,22 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  createColumnHelper,
+  flexRender,
+  type SortingState,
+} from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Download, ChevronDown, Search, Users } from 'lucide-react'
+import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { TableSkeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Textarea } from '@/components/ui/Input'
 import { GuestsList } from './GuestsList'
 import { formatShortDate, csvRow, cn } from '@/lib/utils'
 import type { Appointment, AppointmentStatus } from '@/types'
@@ -17,12 +28,55 @@ type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' |
   decidedAt?: string | null
 }
 
+const col = createColumnHelper<SerialAppt>()
+
+const columns = [
+  col.accessor('name', {
+    header: 'Nombre',
+    cell: info => <span className="font-medium text-ink">{info.getValue()}</span>,
+  }),
+  col.accessor('slotDatetime', {
+    header: 'Fecha',
+    cell: info => <span className="text-ink-muted whitespace-nowrap">{formatShortDate(info.getValue())}</span>,
+  }),
+  col.accessor('email', {
+    header: 'Email',
+    enableSorting: false,
+    cell: info => <span className="text-ink-muted text-xs">{info.getValue()}</span>,
+  }),
+  col.accessor('status', {
+    header: 'Estado',
+    enableSorting: false,
+    cell: info => {
+      const row = info.row.original
+      return (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <StatusBadge status={info.getValue()} />
+          {(row.guestCount ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-champagne-tint text-champagne-deep border border-champagne-soft">
+              <Users size={9} strokeWidth={1.5} />
+              {row.guestCount}
+            </span>
+          )}
+        </div>
+      )
+    },
+  }),
+]
+
+function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
+  if (sorted === 'asc')  return <ChevronUp size={13} className="text-champagne" />
+  if (sorted === 'desc') return <ChevronDown size={13} className="text-champagne" />
+  return <ChevronsUpDown size={13} className="text-ink-subtle opacity-50" />
+}
+
 export function AppointmentTable() {
   const [appointments, setAppointments] = useState<SerialAppt[]>([])
   const [loading,     setLoading]       = useState(true)
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
   const [search,      setSearch]        = useState('')
   const [statusFilter,setStatusFilter]  = useState<AppointmentStatus | ''>('')
+  const [sorting,     setSorting]       = useState<SortingState>([])
   const [selected,    setSelected]      = useState<SerialAppt | null>(null)
   const [deciding,    setDeciding]      = useState(false)
   const [rejectReason,setRejectReason]  = useState('')
@@ -100,6 +154,15 @@ export function AppointmentTable() {
     URL.revokeObjectURL(url)
   }, [appointments])
 
+  const table = useReactTable({
+    data: appointments,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -116,94 +179,101 @@ export function AppointmentTable() {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as AppointmentStatus | '')}
-          className="input-clean sm:w-40"
+          className="input-clean sm:w-44"
         >
-          <option value="">Todos</option>
+          <option value="">Todos los estados</option>
           <option value="pending">Pendientes</option>
           <option value="accepted">Confirmadas</option>
           <option value="rejected">Rechazadas</option>
           <option value="cancelled">Canceladas</option>
         </select>
         <Button variant="outline" size="sm" onClick={exportCSV} className="shrink-0">
-          <Download size={14} /> CSV
+          <Download size={14} strokeWidth={1.5} /> CSV
         </Button>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-stone-100 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-100">
-              {['Nombre', 'Fecha/Hora', 'Email', 'Estado', 'Acciones'].map(h => (
-                <th key={h} className={cn('px-4 py-3 text-left text-xs text-ink-muted tracking-widest uppercase font-semibold', h === 'Email' && 'hidden sm:table-cell')}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">Cargando…</td>
-              </tr>
-            )}
-            {!loading && appointments.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">Sin resultados</td>
-              </tr>
-            )}
-            {appointments.map(appt => (
-              <tr
-                key={appt.id}
-                className="border-b border-stone-100 hover:bg-cream-soft transition-colors"
-              >
-                <td className="px-4 py-3 text-ink font-medium">{appt.name}</td>
-                <td className="px-4 py-3 text-ink-muted whitespace-nowrap">
-                  {formatShortDate(appt.slotDatetime)}
-                </td>
-                <td className="hidden sm:table-cell px-4 py-3 text-ink-muted text-xs">{appt.email}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <StatusBadge status={appt.status} />
-                    {(appt.guestCount ?? 0) > 0 && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-stone-100 text-stone-500">
-                        <Users size={9} />
-                        {appt.guestCount}
+      <div className="overflow-x-auto rounded-2xl border border-ink-line bg-white">
+        {loading ? (
+          <TableSkeleton rows={6} cols={5} />
+        ) : appointments.length === 0 ? (
+          <EmptyState
+            title="Sin citas"
+            description={search || statusFilter ? 'Ninguna cita coincide con los filtros.' : 'No hay citas registradas aún.'}
+          />
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-ink-line">
+                {table.getFlatHeaders().map(header => (
+                  <th
+                    key={header.id}
+                    className={cn(
+                      'px-4 py-3 text-left',
+                      header.id === 'email' && 'hidden sm:table-cell',
+                    )}
+                  >
+                    {header.column.getCanSort() ? (
+                      <button
+                        onClick={header.column.getToggleSortingHandler()}
+                        className="inline-flex items-center gap-1.5 h-eyebrow text-ink-muted hover:text-ink transition-colors group"
+                      >
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        <SortIcon sorted={header.column.getIsSorted()} />
+                      </button>
+                    ) : (
+                      <span className="h-eyebrow text-ink-muted">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
                       </span>
                     )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  {appt.status === 'pending' && (
-                    <button
-                      onClick={() => setSelected(appt)}
-                      className="text-xs text-champagne-deep hover:text-champagne underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-champagne-deep rounded"
-                      aria-label={`Gestionar cita de ${appt.name}`}
-                    >
-                      Gestionar
-                    </button>
-                  )}
-                  {appt.status !== 'pending' && (
-                    <button
-                      onClick={() => setSelected(appt)}
-                      className="text-xs text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-champagne-deep rounded"
-                      aria-label={`Ver cita de ${appt.name}`}
-                    >
-                      Ver
-                    </button>
-                  )}
-                </td>
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-left h-eyebrow text-ink-muted">Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.map(row => {
+                const appt = row.original
+                return (
+                  <tr key={row.id} className="border-b border-ink-line last:border-0 hover:bg-cream-soft transition-colors">
+                    {row.getVisibleCells().map(cell => (
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          'px-4 py-3',
+                          cell.column.id === 'email' && 'hidden sm:table-cell',
+                        )}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setSelected(appt)}
+                        className={cn(
+                          'text-xs focus-visible:outline-none focus-visible:shadow-focus-ring rounded',
+                          appt.status === 'pending'
+                            ? 'text-champagne-deep hover:text-champagne underline'
+                            : 'text-ink-muted hover:text-ink',
+                        )}
+                        aria-label={`${appt.status === 'pending' ? 'Gestionar' : 'Ver'} cita de ${appt.name}`}
+                      >
+                        {appt.status === 'pending' ? 'Gestionar' : 'Ver'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Load more */}
-      {nextCursor && (
+      {nextCursor && !loading && (
         <div className="text-center">
           <Button variant="outline" size="sm" onClick={() => fetchAppointments(false)}>
-            <ChevronDown size={14} /> Cargar más
+            <ChevronDown size={14} strokeWidth={1.5} /> Cargar más
           </Button>
         </div>
       )}
@@ -217,7 +287,7 @@ export function AppointmentTable() {
       >
         {selected && (
           <div className="space-y-4">
-            <div className="divide-y divide-stone-100 text-sm">
+            <dl className="divide-y divide-ink-line text-sm">
               {[
                 ['Código',    selected.confirmationCode],
                 ['Nombre',    selected.name],
@@ -226,61 +296,50 @@ export function AppointmentTable() {
                 ['Fecha',     formatShortDate(selected.slotDatetime)],
                 ['Calendar',  selected.googleCalendarEventId
                   ? 'Sincronizado'
-                  : selected.calendarSyncFailed
+                  : (selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed
                     ? '⚠ Error de sincronización'
                     : 'Pendiente'],
-                ['Estado',    null],
                 ...(selected.decidedBy ? [['Aprobado por', selected.decidedBy]] : []),
                 ...(selected.decidedAt ? [['Fecha decisión', formatShortDate(selected.decidedAt)]] : []),
-                ...(selected.adminNote ? [['Nota', selected.adminNote]] : []),
+                ...(selected.adminNote ? [['Nota admin', selected.adminNote]] : []),
                 ...(selected.notes ? [['Notas cliente', selected.notes]] : []),
               ].map(([label, value]) => (
-                <div key={label as string} className="flex justify-between py-2">
-                  <span className="text-ink-muted">{label}</span>
-                  {value !== null
-                    ? <span className="text-ink max-w-[60%] text-right">{value}</span>
-                    : <StatusBadge status={selected.status} />
-                  }
+                <div key={label as string} className="flex justify-between py-2.5 gap-4">
+                  <dt className="text-ink-muted shrink-0">{label}</dt>
+                  <dd className="text-ink text-right">{value as string}</dd>
                 </div>
               ))}
-            </div>
+              <div className="flex justify-between py-2.5 gap-4">
+                <dt className="text-ink-muted">Estado</dt>
+                <dd><StatusBadge status={selected.status} /></dd>
+              </div>
+            </dl>
 
             {(selected.guestCount ?? 0) > 0 && (
-              <div className="pt-2">
-                <p className="text-xs text-ink-muted font-semibold tracking-widest uppercase mb-2">
-                  Invitados ({selected.guestCount})
-                </p>
+              <div className="pt-1">
+                <p className="h-eyebrow mb-2">Invitados ({selected.guestCount})</p>
                 <GuestsList appointmentId={selected.id} />
               </div>
             )}
 
             {selected.status === 'pending' && (
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3 pt-2 border-t border-ink-line">
                 <div>
                   <label className="label-clean">Motivo de rechazo (opcional)</label>
-                  <input
+                  <Textarea
                     value={rejectReason}
                     onChange={e => setRejectReason(e.target.value)}
                     placeholder="Ej: Sin disponibilidad en esa fecha"
-                    className="input-clean"
+                    rows={3}
+                    className="mt-1"
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="gold"
-                    className="flex-1"
-                    loading={deciding}
-                    onClick={() => decide('accept')}
-                  >
-                    <CheckCircle size={15} /> Confirmar
+                  <Button variant="gold" className="flex-1" loading={deciding} onClick={() => decide('accept')}>
+                    <CheckCircle size={15} strokeWidth={1.5} /> Confirmar
                   </Button>
-                  <Button
-                    variant="danger"
-                    className="flex-1"
-                    loading={deciding}
-                    onClick={() => decide('reject')}
-                  >
-                    <XCircle size={15} /> Rechazar
+                  <Button variant="danger" className="flex-1" loading={deciding} onClick={() => decide('reject')}>
+                    <XCircle size={15} strokeWidth={1.5} /> Rechazar
                   </Button>
                 </div>
               </div>

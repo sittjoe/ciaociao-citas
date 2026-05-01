@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Cormorant_Garamond } from 'next/font/google'
 import { Toaster } from 'sonner'
+import { MotionProvider } from '@/components/motion'
 import './globals.css'
 
 const inter = Inter({
@@ -44,13 +45,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${inter.variable} ${cormorant.variable}`}>
       <body className="min-h-screen font-sans antialiased">
-        {children}
+        <MotionProvider>
+          {children}
+        </MotionProvider>
         <Toaster
           theme="light"
           toastOptions={{
             style: {
               background: '#FFFFFF',
-              border: '1px solid rgba(0,0,0,0.08)',
+              border: '1px solid #E8E2D4',
               color: '#1A1A1A',
               boxShadow: '0 2px 4px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08)',
             },

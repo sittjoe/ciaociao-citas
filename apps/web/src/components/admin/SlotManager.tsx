@@ -5,8 +5,12 @@ import { toast } from 'sonner'
 import { Plus, Trash2, Calendar } from 'lucide-react'
 import { format, addDays, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { motion, AnimatePresence, LayoutGroup } from '@/components/motion'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { AlertDialog } from '@/components/ui/AlertDialog'
+import { TableSkeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { cn, formatShortDate } from '@/lib/utils'
 
 interface SlotRow {
@@ -27,7 +31,6 @@ export function SlotManager() {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [futureOnly,    setFutureOnly]    = useState(true)
 
-  // Bulk create form state
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
   const [selectedTimes, setSelectedTimes] = useState<Set<string>>(new Set(DEFAULT_TIMES))
   const [customTime,    setCustomTime]    = useState('')
@@ -51,7 +54,6 @@ export function SlotManager() {
 
   useEffect(() => { fetchSlots() }, [fetchSlots])
 
-  // Generate next 14 days for quick date picking
   const nextDays = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i + 1)
     return format(d, 'yyyy-MM-dd')
@@ -89,17 +91,13 @@ export function SlotManager() {
       const res  = await fetch('/api/admin/slots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dates: [...selectedDates],
-          times: [...selectedTimes],
-        }),
+        body: JSON.stringify({ dates: [...selectedDates], times: [...selectedTimes] }),
       })
       const data = await res.json() as { created: number; skipped: string[] }
       const skipped = data.skipped?.length ?? 0
-      const msg = skipped > 0
+      toast.success(skipped > 0
         ? `${data.created} slots creados, ${skipped} ya existían`
-        : `${data.created} slot${data.created !== 1 ? 's' : ''} creado${data.created !== 1 ? 's' : ''}`
-      toast.success(msg)
+        : `${data.created} slot${data.created !== 1 ? 's' : ''} creado${data.created !== 1 ? 's' : ''}`)
       setShowAdd(false)
       setSelectedDates(new Set())
       fetchSlots()
@@ -134,7 +132,7 @@ export function SlotManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-serif text-xl text-ink">Slots disponibles</h2>
+        <h2 className="font-serif text-xl font-light text-ink">Slots disponibles</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setFutureOnly(v => !v)}
@@ -142,86 +140,103 @@ export function SlotManager() {
               'text-xs px-3 py-1.5 rounded-lg border transition-all',
               futureOnly
                 ? 'bg-champagne-soft text-champagne-deep border-champagne-soft'
-                : 'text-ink-muted border-stone-200 hover:border-champagne-soft',
+                : 'text-ink-muted border-ink-line hover:border-champagne-soft',
             )}
           >
             {futureOnly ? 'Solo futuros' : 'Todos'}
           </button>
           <Button size="sm" onClick={() => setShowAdd(true)}>
-            <Plus size={14} /> Agregar slots
+            <Plus size={14} strokeWidth={1.5} /> Agregar slots
           </Button>
         </div>
       </div>
 
       {/* Slots list */}
-      <div className="overflow-x-auto rounded-2xl border border-stone-100 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-100">
-              {['Fecha y hora', 'Estado', 'Acciones'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs text-ink-muted tracking-widest uppercase font-semibold">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={3} className="px-4 py-8 text-center text-ink-muted">Cargando…</td></tr>
-            )}
-            {!loading && visibleSlots.length === 0 && (
-              <tr><td colSpan={3} className="px-4 py-8 text-center text-ink-muted">
-                {futureOnly ? 'Sin slots futuros' : 'Sin slots creados'}
-              </td></tr>
-            )}
-            {visibleSlots.map(slot => (
-              <tr key={slot.id} className="border-b border-stone-100 hover:bg-cream-soft transition-colors">
-                <td className="px-4 py-3 text-ink">
-                  {formatShortDate(slot.datetime)}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={cn(
-                    'text-xs px-2 py-0.5 rounded-full',
-                    slot.available
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-stone-100 text-stone-500 border border-stone-200',
-                  )}>
-                    {slot.available ? 'Disponible' : 'Reservado'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  {slot.available && (
-                    pendingDelete === slot.id ? (
-                      <div className="flex items-center gap-2 text-xs">
-                        <button
-                          onClick={() => { deleteSlot(slot.id); setPendingDelete(null) }}
-                          disabled={deleting === slot.id}
-                          className="text-red-500 font-semibold hover:underline disabled:opacity-40"
+      <div className="overflow-x-auto rounded-2xl border border-ink-line bg-white">
+        {loading ? (
+          <TableSkeleton rows={5} cols={3} />
+        ) : visibleSlots.length === 0 ? (
+          <EmptyState
+            title={futureOnly ? 'Sin slots futuros' : 'Sin slots'}
+            description={futureOnly ? 'Crea slots para los próximos días.' : 'No hay slots registrados.'}
+            action={
+              <Button size="sm" onClick={() => setShowAdd(true)}>
+                <Plus size={14} /> Agregar slots
+              </Button>
+            }
+          />
+        ) : (
+          <LayoutGroup>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink-line">
+                  {['Fecha y hora', 'Estado', 'Acciones'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left h-eyebrow text-ink-muted">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence initial={false}>
+                  {visibleSlots.map(slot => (
+                    <motion.tr
+                      key={slot.id}
+                      layoutId={`slot-${slot.id}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="border-b border-ink-line last:border-0 hover:bg-cream-soft"
+                    >
+                      <td className="px-4 py-3 text-ink">{formatShortDate(slot.datetime)}</td>
+                      <td className="px-4 py-3">
+                        <motion.span
+                          layoutId={`status-${slot.id}`}
+                          className={cn(
+                            'text-xs px-2.5 py-0.5 rounded-full border',
+                            slot.available
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-champagne-tint text-champagne-deep border-champagne-soft',
+                          )}
                         >
-                          Sí, eliminar
-                        </button>
-                        <span className="text-ink-subtle">·</span>
-                        <button onClick={() => setPendingDelete(null)} className="text-ink-muted hover:text-ink">
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setPendingDelete(slot.id)}
-                        disabled={deleting === slot.id}
-                        className="text-red-400/60 hover:text-red-500 transition-colors disabled:opacity-40"
-                        aria-label="Eliminar slot"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                          {slot.available ? 'Disponible' : 'Reservado'}
+                        </motion.span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {slot.available && (
+                          <button
+                            onClick={() => setPendingDelete(slot.id)}
+                            disabled={deleting === slot.id}
+                            className="text-red-400/60 hover:text-red-500 transition-colors disabled:opacity-40 p-1 rounded-lg hover:bg-red-50"
+                            aria-label="Eliminar slot"
+                          >
+                            <Trash2 size={15} strokeWidth={1.5} />
+                          </button>
+                        )}
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </LayoutGroup>
+        )}
       </div>
+
+      {/* Delete confirm dialog */}
+      <AlertDialog
+        open={!!pendingDelete}
+        title="¿Eliminar este slot?"
+        description="Esta acción no se puede deshacer. El slot dejará de estar disponible para reservas."
+        confirmLabel="Sí, eliminar"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={!!deleting}
+        onConfirm={() => {
+          if (pendingDelete) deleteSlot(pendingDelete)
+          setPendingDelete(null)
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
 
       {/* Add slots modal */}
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Agregar slots" size="lg">
@@ -229,42 +244,54 @@ export function SlotManager() {
           <div>
             <p className="label-clean mb-3">Selecciona fechas</p>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-              {nextDays.map(d => {
-                const date    = new Date(d + 'T12:00:00')
-                const isSel   = selectedDates.has(d)
-                return (
-                  <button
-                    key={d}
-                    onClick={() => toggleDate(d)}
-                    className={cn(
-                      'flex flex-col items-center py-2 px-1 rounded-xl text-xs border transition-all',
-                      isSel
-                        ? 'bg-champagne text-white border-champagne shadow-pop'
-                        : 'border-stone-200 text-ink hover:border-champagne hover:bg-cream-soft',
-                    )}
-                  >
-                    <span className="uppercase opacity-70">{format(date, 'EEE', { locale: es })}</span>
-                    <span className="font-semibold text-sm mt-0.5">{format(date, 'd')}</span>
-                    <span className="opacity-70">{format(date, 'MMM', { locale: es })}</span>
-                  </button>
-                )
-              })}
+              <LayoutGroup>
+                {nextDays.map(d => {
+                  const date  = new Date(d + 'T12:00:00')
+                  const isSel = selectedDates.has(d)
+                  return (
+                    <motion.button
+                      key={d}
+                      layoutId={`day-${d}`}
+                      onClick={() => toggleDate(d)}
+                      className={cn(
+                        'flex flex-col items-center py-2 px-1 rounded-xl text-xs border transition-colors',
+                        isSel
+                          ? 'bg-champagne text-white border-champagne shadow-pop'
+                          : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-tint',
+                      )}
+                    >
+                      <span className="uppercase opacity-70">{format(date, 'EEE', { locale: es })}</span>
+                      <span className="font-semibold text-sm mt-0.5">{format(date, 'd')}</span>
+                      <span className="opacity-70">{format(date, 'MMM', { locale: es })}</span>
+                    </motion.button>
+                  )
+                })}
+              </LayoutGroup>
             </div>
           </div>
 
           <div>
             <p className="label-clean mb-3">Selecciona horarios</p>
-            <div className="flex flex-wrap gap-2">
-              {[...selectedTimes].sort().map(t => (
-                <button
-                  key={t}
-                  onClick={() => toggleTime(t)}
-                  className="px-3 py-1.5 rounded-lg text-sm border bg-champagne text-white border-champagne"
-                >
-                  {t} ✕
-                </button>
-              ))}
-            </div>
+            <LayoutGroup>
+              <div className="flex flex-wrap gap-2">
+                <AnimatePresence>
+                  {[...selectedTimes].sort().map(t => (
+                    <motion.button
+                      key={t}
+                      layoutId={`time-${t}`}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.15 }}
+                      onClick={() => toggleTime(t)}
+                      className="px-3 py-1.5 rounded-lg text-sm border bg-champagne text-white border-champagne hover:bg-champagne-deep transition-colors"
+                    >
+                      {t} ✕
+                    </motion.button>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </LayoutGroup>
             <div className="flex gap-2 mt-3">
               <input
                 value={customTime}
@@ -279,14 +306,14 @@ export function SlotManager() {
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-2 border-t border-stone-100">
+          <div className="flex justify-between items-center pt-2 border-t border-ink-line">
             <p className="text-xs text-ink-muted">
               {selectedDates.size} fecha{selectedDates.size !== 1 ? 's' : ''} ×{' '}
               {selectedTimes.size} horario{selectedTimes.size !== 1 ? 's' : ''} ={' '}
               <strong className="text-champagne">{selectedDates.size * selectedTimes.size} slots</strong>
             </p>
             <Button loading={creating} onClick={createSlots}>
-              <Calendar size={14} /> Crear slots
+              <Calendar size={14} strokeWidth={1.5} /> Crear slots
             </Button>
           </div>
         </div>

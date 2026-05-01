@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { ShieldCheck, Clock, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from '@/components/motion'
+import { Card } from '@/components/ui/Card'
 import { IDUploader } from '@/components/booking/IDUploader'
 import { Button } from '@/components/ui/Button'
 
@@ -22,12 +24,31 @@ interface AppointmentInfo {
 
 type PageState = 'loading' | 'ready' | 'already_verified' | 'expired' | 'revoked' | 'error' | 'done'
 
+function SpinnerArc() {
+  return (
+    <motion.svg
+      width="40" height="40" viewBox="0 0 40 40"
+      animate={{ rotate: 360 }}
+      transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }}
+      className="mx-auto mb-4"
+    >
+      <circle cx="20" cy="20" r="16" fill="none" stroke="#EFE6D3" strokeWidth="2" />
+      <circle
+        cx="20" cy="20" r="16" fill="none"
+        stroke="#B89968" strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray="60 44"
+      />
+    </motion.svg>
+  )
+}
+
 export default function InvitadoPage() {
-  const { token }  = useParams<{ token: string }>()
-  const [pageState, setPageState] = useState<PageState>('loading')
-  const [guest,  setGuest]        = useState<GuestInfo | null>(null)
-  const [appt,   setAppt]         = useState<AppointmentInfo | null>(null)
-  const [idFile, setIdFile]       = useState<File | null>(null)
+  const { token }    = useParams<{ token: string }>()
+  const [pageState,  setPageState]  = useState<PageState>('loading')
+  const [guest,      setGuest]      = useState<GuestInfo | null>(null)
+  const [appt,       setAppt]       = useState<AppointmentInfo | null>(null)
+  const [idFile,     setIdFile]     = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -67,115 +88,137 @@ export default function InvitadoPage() {
   }, [idFile, token])
 
   return (
-    <div className="min-h-screen bg-[#FAFAF7] flex items-start justify-center px-4 py-12">
+    <div className="min-h-screen bg-cream flex items-start justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <h1 className="font-serif text-2xl text-ink tracking-[4px]">CIAO CIAO</h1>
-          <p className="text-[11px] text-champagne tracking-[3px] uppercase mt-1">Joyería fina · Showroom privado</p>
+
+        {/* Brand header */}
+        <div className="text-center mb-10">
+          <h1 className="font-serif font-light text-3xl text-ink tracking-[0.12em]">CIAO CIAO</h1>
+          <div className="w-8 h-px bg-champagne mx-auto my-3" />
+          <p className="text-[0.6rem] text-champagne tracking-[0.32em] uppercase font-semibold">
+            Joyería fina · Showroom privado
+          </p>
         </div>
 
-        {pageState === 'loading' && (
-          <div className="card-soft text-center py-12">
-            <div className="h-8 w-8 border-2 border-champagne border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-sm text-ink-muted">Cargando…</p>
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={pageState}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {pageState === 'loading' && (
+              <Card variant="soft" className="text-center py-12">
+                <SpinnerArc />
+                <p className="text-sm text-ink-muted">Cargando…</p>
+              </Card>
+            )}
 
-        {pageState === 'error' && (
-          <div className="card-soft text-center space-y-3 py-8">
-            <AlertCircle size={36} className="text-red-400 mx-auto" />
-            <h2 className="font-serif text-xl text-ink">Link inválido</h2>
-            <p className="text-sm text-ink-muted leading-relaxed">
-              Este link de verificación no es válido o ya fue usado. Si crees que es un error, contacta a{' '}
-              <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
-            </p>
-          </div>
-        )}
+            {pageState === 'error' && (
+              <Card variant="soft" className="text-center space-y-3 py-8">
+                <AlertCircle size={36} strokeWidth={1.5} className="text-red-400 mx-auto" />
+                <h2 className="font-serif font-light text-xl text-ink">Link inválido</h2>
+                <p className="text-sm text-ink-muted leading-relaxed">
+                  Este link no es válido o ya fue usado. Si crees que es un error, contacta a{' '}
+                  <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
+                </p>
+              </Card>
+            )}
 
-        {pageState === 'expired' && (
-          <div className="card-soft text-center space-y-3 py-8">
-            <Clock size={36} className="text-amber-400 mx-auto" />
-            <h2 className="font-serif text-xl text-ink">Plazo vencido</h2>
-            <p className="text-sm text-ink-muted leading-relaxed">
-              El plazo para verificar tu identidad ha vencido. Contacta a{' '}
-              <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>{' '}
-              para que el equipo pueda ayudarte.
-            </p>
-          </div>
-        )}
+            {pageState === 'expired' && (
+              <Card variant="soft" className="text-center space-y-3 py-8">
+                <Clock size={36} strokeWidth={1.5} className="text-amber-400 mx-auto" />
+                <h2 className="font-serif font-light text-xl text-ink">Plazo vencido</h2>
+                <p className="text-sm text-ink-muted leading-relaxed">
+                  El plazo para verificar tu identidad ha vencido. Contacta a{' '}
+                  <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>{' '}
+                  para que el equipo pueda ayudarte.
+                </p>
+              </Card>
+            )}
 
-        {pageState === 'revoked' && (
-          <div className="card-soft text-center space-y-3 py-8">
-            <AlertCircle size={36} className="text-stone-400 mx-auto" />
-            <h2 className="font-serif text-xl text-ink">Invitación no activa</h2>
-            <p className="text-sm text-ink-muted leading-relaxed">
-              Esta invitación ya no está activa. Si crees que es un error, contacta a{' '}
-              <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
-            </p>
-          </div>
-        )}
+            {pageState === 'revoked' && (
+              <Card variant="soft" className="text-center space-y-3 py-8">
+                <AlertCircle size={36} strokeWidth={1.5} className="text-ink-subtle mx-auto" />
+                <h2 className="font-serif font-light text-xl text-ink">Invitación no activa</h2>
+                <p className="text-sm text-ink-muted leading-relaxed">
+                  Esta invitación ya no está activa. Si crees que es un error, contacta a{' '}
+                  <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
+                </p>
+              </Card>
+            )}
 
-        {pageState === 'already_verified' && (
-          <div className="card-soft text-center space-y-3 py-8">
-            <ShieldCheck size={40} className="text-emerald-500 mx-auto" />
-            <h2 className="font-serif text-xl text-ink">Ya estás verificado</h2>
-            <p className="text-sm text-ink-muted">
-              Tu identidad fue verificada exitosamente. Te esperamos el {appt?.dateStr} a las {appt?.timeStr}.
-            </p>
-          </div>
-        )}
+            {pageState === 'already_verified' && (
+              <Card variant="soft" className="text-center space-y-3 py-8">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
+                  <ShieldCheck size={28} strokeWidth={1.5} className="text-emerald-500" />
+                </div>
+                <h2 className="font-serif font-light text-xl text-ink">Ya estás verificado</h2>
+                <p className="text-sm text-ink-muted">
+                  Tu identidad fue verificada exitosamente. Te esperamos el {appt?.dateStr} a las {appt?.timeStr}.
+                </p>
+              </Card>
+            )}
 
-        {pageState === 'done' && (
-          <div className="card-soft text-center space-y-4 py-8">
-            <ShieldCheck size={48} className="text-champagne mx-auto" />
-            <h2 className="font-serif text-2xl text-ink">Identidad verificada</h2>
-            <p className="text-sm text-ink-muted leading-relaxed">
-              Tu identificación fue recibida correctamente. Te esperamos el{' '}
-              <strong>{appt?.dateStr}</strong> a las <strong>{appt?.timeStr}</strong>.
-            </p>
-            <p className="text-xs text-ink-muted">Asegúrate de traer la misma identificación el día de tu visita.</p>
-          </div>
-        )}
+            {pageState === 'done' && (
+              <Card variant="soft" className="text-center space-y-4 py-8">
+                <div className="w-16 h-16 rounded-full bg-champagne-tint flex items-center justify-center mx-auto">
+                  <ShieldCheck size={30} strokeWidth={1.5} className="text-champagne" />
+                </div>
+                <h2 className="font-serif font-light text-2xl text-ink">Identidad verificada</h2>
+                <p className="text-sm text-ink-muted leading-relaxed">
+                  Tu identificación fue recibida correctamente. Te esperamos el{' '}
+                  <strong>{appt?.dateStr}</strong> a las <strong>{appt?.timeStr}</strong>.
+                </p>
+                <p className="text-xs text-ink-muted">Asegúrate de traer la misma identificación el día de tu visita.</p>
+              </Card>
+            )}
 
-        {pageState === 'ready' && guest && appt && (
-          <div className="space-y-4 fade-up">
-            <div className="card-soft space-y-3">
-              <h2 className="font-serif text-xl text-ink">Verifica tu identidad</h2>
-              <p className="text-sm text-ink-muted leading-relaxed">
-                <strong>{appt.hostName}</strong> te ha invitado a una visita privada al showroom de Ciao Ciao Joyería.
-                Para poder ingresar, necesitamos verificar tu identidad.
-              </p>
-              <div className="divide-y divide-stone-100 text-sm">
-                {([
-                  ['Invitado',                 guest.name],
-                  ['Fecha',                    appt.dateStr],
-                  ['Hora',                     appt.timeStr],
-                  ['Límite de verificación',   appt.deadlineStr],
-                ] as [string, string][]).map(([label, val]) => (
-                  <div key={label} className="flex justify-between py-2">
-                    <span className="text-ink-muted">{label}</span>
-                    <span className="text-ink font-medium text-right max-w-[55%]">{val}</span>
+            {pageState === 'ready' && guest && appt && (
+              <div className="space-y-4">
+                <Card variant="soft" className="space-y-4">
+                  <h2 className="font-serif font-light text-xl text-ink">Verifica tu identidad</h2>
+                  <p className="text-sm text-ink-muted leading-relaxed">
+                    <strong>{appt.hostName}</strong> te ha invitado a una visita privada al showroom de Ciao Ciao Joyería.
+                    Para poder ingresar, necesitamos verificar tu identidad.
+                  </p>
+
+                  <div className="divide-y divide-ink-line text-sm">
+                    {([
+                      ['Invitado',               guest.name],
+                      ['Fecha',                  appt.dateStr],
+                      ['Hora',                   appt.timeStr],
+                      ['Límite de verificación', appt.deadlineStr],
+                    ] as [string, string][]).map(([label, val]) => (
+                      <div key={label} className="flex justify-between py-2.5">
+                        <span className="text-ink-muted">{label}</span>
+                        <span className="text-ink font-medium text-right max-w-[55%]">{val}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-700 leading-relaxed">
-                Solo las personas con identificación verificada podrán ingresar al showroom.
-              </div>
-            </div>
 
-            <div className="card-soft space-y-4">
-              <div>
-                <h3 className="font-medium text-ink text-sm">Sube tu identificación oficial</h3>
-                <p className="text-xs text-ink-muted mt-0.5">INE, pasaporte u otra identificación vigente. JPG, PNG, WebP o PDF · máx. 5 MB.</p>
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-700 leading-relaxed">
+                    Solo las personas con identificación verificada podrán ingresar al showroom.
+                  </div>
+                </Card>
+
+                <Card variant="soft" className="space-y-4">
+                  <div>
+                    <h3 className="font-medium text-ink text-sm">Sube tu identificación oficial</h3>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      INE, pasaporte u otra identificación vigente. JPG, PNG, WebP o PDF · máx. 5 MB.
+                    </p>
+                  </div>
+                  <IDUploader value={idFile} onChange={setIdFile} />
+                  <Button className="w-full" disabled={!idFile} loading={submitting} onClick={submit}>
+                    <ShieldCheck size={15} strokeWidth={1.5} /> Verificar mi identidad
+                  </Button>
+                </Card>
               </div>
-              <IDUploader value={idFile} onChange={setIdFile} />
-              <Button className="w-full" disabled={!idFile} loading={submitting} onClick={submit}>
-                <ShieldCheck size={15} /> Verificar mi identidad
-              </Button>
-            </div>
-          </div>
-        )}
+            )}
+          </motion.div>
+        </AnimatePresence>
 
         <p className="text-center text-xs text-ink-muted mt-8">
           Dudas: <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>

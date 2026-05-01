@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@tanstack/react-table": "^8.21.3",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
@@ -19,6 +20,7 @@
     "date-fns-tz": "^3.2.0",
     "firebase": "^10.8.0",
     "firebase-admin": "^12.3.0",
+    "framer-motion": "^12.38.0",
     "googleapis": "^171.4.0",
     "lucide-react": "^0.469.0",
     "next": "15.5.15",

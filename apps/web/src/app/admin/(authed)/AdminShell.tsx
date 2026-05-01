@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { LayoutDashboard, CalendarDays, Settings, LogOut, Menu, X, Users, KeyRound } from 'lucide-react'
+import { motion, AnimatePresence, LayoutGroup } from '@/components/motion'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -15,9 +16,57 @@ const navItems = [
   { href: '/admin/cuenta', label: 'Mi cuenta',  Icon: KeyRound        },
 ]
 
+function Logomark() {
+  return (
+    <div className="px-5 py-5 border-b border-ink-line">
+      <p className="font-serif text-xl font-light tracking-[0.22em] uppercase text-ink leading-none">
+        Ciao Ciao
+      </p>
+      <p className="text-[0.625rem] tracking-[0.28em] uppercase text-ink-subtle mt-1 font-medium">
+        Joyería · Admin
+      </p>
+    </div>
+  )
+}
+
+function NavList({ pathname, onClose }: { pathname: string; onClose: () => void }) {
+  return (
+    <LayoutGroup>
+      <nav className="flex-1 p-3 space-y-0.5">
+        {navItems.map(({ href, label, Icon }) => {
+          const active = pathname === href
+          return (
+            <Link
+              key={href}
+              href={href}
+              onClick={onClose}
+              className={cn(
+                'relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring',
+                active ? 'text-champagne font-medium' : 'text-ink-muted hover:text-ink hover:bg-cream-soft',
+              )}
+            >
+              {active && (
+                <motion.span
+                  layoutId="nav-pill"
+                  className="absolute inset-0 rounded-xl bg-champagne-soft"
+                  transition={{ ease: [0.25, 1, 0.5, 1], duration: 0.3 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-3">
+                <Icon size={16} strokeWidth={active ? 1.75 : 1.5} />
+                {label}
+              </span>
+            </Link>
+          )
+        })}
+      </nav>
+    </LayoutGroup>
+  )
+}
+
 export function AdminShell({ children, adminEmail }: { children: React.ReactNode; adminEmail: string }) {
-  const pathname  = usePathname()
-  const router    = useRouter()
+  const pathname = usePathname()
+  const router   = useRouter()
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -33,51 +82,12 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
     router.refresh()
   }
 
-  const NavContent = () => (
-    <>
-      <div className="px-6 py-6 border-b border-stone-100">
-        <p className="font-serif text-lg text-ink tracking-widest uppercase">Ciao Ciao</p>
-        <p className="text-xs text-ink-subtle tracking-widest mt-0.5">Admin</p>
-      </div>
-
-      <nav className="flex-1 p-4 space-y-1">
-        {navItems.map(({ href, label, Icon }) => {
-          const active = pathname === href
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setOpen(false)}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-champagne-deep focus-visible:ring-offset-2',
-                active
-                  ? 'bg-champagne-soft text-champagne font-medium'
-                  : 'text-ink-muted hover:text-ink hover:bg-cream-soft',
-              )}
-            >
-              <Icon size={16} />
-              {label}
-            </Link>
-          )
-        })}
-      </nav>
-
-      <div className="p-4 border-t border-stone-100">
-        <div className="flex items-center gap-2 px-3 pb-2">
-          <span className="w-8 h-8 rounded-full bg-champagne-soft flex items-center justify-center text-xs font-semibold text-champagne-deep shrink-0">
-            {adminEmail.charAt(0).toUpperCase()}
-          </span>
-          <span className="text-[0.68rem] text-ink-subtle truncate">{adminEmail}</span>
-        </div>
-        <button
-          onClick={logout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"
-        >
-          <LogOut size={16} /> Cerrar sesión
-        </button>
-      </div>
-    </>
-  )
+  const initials = adminEmail
+    .split('@')[0]
+    .split(/[._-]/)
+    .slice(0, 2)
+    .map(s => s[0]?.toUpperCase() ?? '')
+    .join('')
 
   return (
     <div className="min-h-screen flex bg-cream text-ink">
@@ -89,36 +99,82 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 bg-white border-r border-stone-100 fixed inset-y-0 left-0">
-        <NavContent />
+      <aside className="hidden lg:flex flex-col w-56 bg-white border-r border-ink-line fixed inset-y-0 left-0">
+        <Logomark />
+        <NavList pathname={pathname} onClose={() => {}} />
+        <div className="p-3 border-t border-ink-line">
+          <div className="flex items-center gap-2.5 px-3 pb-2.5">
+            <span className="w-7 h-7 rounded-full bg-champagne-soft border border-champagne-soft/60 flex items-center justify-center text-[0.65rem] font-semibold text-champagne-deep shrink-0">
+              {initials}
+            </span>
+            <span className="text-[0.68rem] text-ink-subtle truncate">{adminEmail}</span>
+          </div>
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full focus-visible:outline-none focus-visible:shadow-focus-ring"
+          >
+            <LogOut size={15} strokeWidth={1.5} /> Cerrar sesión
+          </button>
+        </div>
       </aside>
 
       {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-white border-b border-stone-100">
-        <p className="font-serif text-ink tracking-widest uppercase">Ciao Ciao</p>
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-white border-b border-ink-line">
+        <p className="font-serif tracking-[0.2em] uppercase text-ink">Ciao Ciao</p>
         <button
           onClick={() => setOpen(!open)}
-          className="text-ink-muted hover:text-ink transition-colors p-1"
-          aria-label="Menú"
+          className="text-ink-muted hover:text-ink transition-colors p-1 rounded-lg focus-visible:shadow-focus-ring"
+          aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={open}
         >
-          {open ? <X size={20} /> : <Menu size={20} />}
+          {open ? <X size={20} strokeWidth={1.5} /> : <Menu size={20} strokeWidth={1.5} />}
         </button>
       </header>
 
-      {/* Mobile drawer */}
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm lg:hidden" onClick={() => setOpen(false)} />
-          <aside
-            role="dialog"
-            aria-modal="true"
-            aria-label="Menú de navegación"
-            className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-white border-r border-stone-100 lg:hidden"
-          >
-            <NavContent />
-          </aside>
-        </>
-      )}
+      {/* Mobile drawer with AnimatePresence */}
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm lg:hidden"
+              onClick={() => setOpen(false)}
+            />
+            <motion.aside
+              key="drawer"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menú de navegación"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ ease: [0.25, 1, 0.5, 1], duration: 0.32 }}
+              className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-white border-r border-ink-line lg:hidden"
+            >
+              <Logomark />
+              <NavList pathname={pathname} onClose={() => setOpen(false)} />
+              <div className="p-3 border-t border-ink-line">
+                <div className="flex items-center gap-2.5 px-3 pb-2.5">
+                  <span className="w-7 h-7 rounded-full bg-champagne-soft flex items-center justify-center text-[0.65rem] font-semibold text-champagne-deep shrink-0">
+                    {initials}
+                  </span>
+                  <span className="text-[0.68rem] text-ink-subtle truncate">{adminEmail}</span>
+                </div>
+                <button
+                  onClick={logout}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full"
+                >
+                  <LogOut size={15} strokeWidth={1.5} /> Cerrar sesión
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main content */}
       <main id="main-content" className="flex-1 lg:ml-56 pt-16 lg:pt-0">

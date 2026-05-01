@@ -65,7 +65,7 @@ export default function AdminLoginPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="card-soft space-y-5">
           <div className="flex justify-center mb-2">
-            <div className="w-12 h-12 rounded-full bg-cream-soft border border-stone-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-cream-soft border border-ink-line flex items-center justify-center">
               <KeyRound size={20} className="text-champagne" />
             </div>
           </div>
