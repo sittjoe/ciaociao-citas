@@ -30,6 +30,11 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'es_MX',
     url: 'https://citas.ciaociao.mx',
+    images: [{ url: '/og-image.jpg', width: 1200, height: 630, alt: 'Ciao Ciao Joyería' }],
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
   },
   robots: { index: true, follow: true },
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'),

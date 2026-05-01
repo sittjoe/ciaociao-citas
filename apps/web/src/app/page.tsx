@@ -21,7 +21,14 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.72),rgba(0,0,0,0.2)_58%,rgba(0,0,0,0.06))]" />
         <div className="relative z-10 flex min-h-[92vh] lg:min-h-screen flex-col justify-between px-6 py-7 sm:px-10 lg:px-16">
           <header className="flex items-center justify-between text-white">
-            <p className="font-serif text-xl tracking-[0.28em] uppercase">Ciao Ciao</p>
+            <Image
+              src="/logo-ciaociao.png"
+              alt="Ciao Ciao Joyería"
+              width={120}
+              height={72}
+              className="h-10 w-auto object-contain"
+              priority
+            />
             <a href="#booking" className="hidden sm:inline-flex text-xs font-semibold uppercase tracking-[0.22em] hover:text-champagne-soft transition-colors">
               Reservar
             </a>

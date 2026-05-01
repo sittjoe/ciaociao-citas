@@ -15,13 +15,15 @@ function normalizeEmail(email: string | undefined | null): string {
   return String(email ?? '').trim().toLowerCase()
 }
 
+function parseEnvEmailList(value: string | undefined): string[] {
+  return (value || '').split(',').map(normalizeEmail).filter(Boolean)
+}
+
 export function getBootstrapAdminEmails(): string[] {
-  return Array.from(new Set(
-    (process.env.ADMIN_BOOTSTRAP_EMAILS ?? process.env.ADMIN_EMAIL ?? '')
-      .split(',')
-      .map(normalizeEmail)
-      .filter(Boolean)
-  ))
+  return Array.from(new Set([
+    ...parseEnvEmailList(process.env.ADMIN_BOOTSTRAP_EMAILS),
+    ...parseEnvEmailList(process.env.ADMIN_EMAIL),
+  ]))
 }
 
 export async function isAdminUser(uid: string, email: string | undefined | null): Promise<boolean> {
