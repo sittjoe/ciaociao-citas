@@ -1,22 +1,16 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { cookies } from 'next/headers'
 import { fromZonedTime } from 'date-fns-tz'
 import { bulkSlotsSchema } from '@/lib/schemas'
-import { verifySession } from '@/lib/admin-session'
+import { requireAdminSession } from '@/lib/admin-auth'
 import { BUSINESS_TZ } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
-async function verifyAdmin(): Promise<boolean> {
-  const session = (await cookies()).get('__session')?.value
-  return verifySession(session)
-}
-
 // GET — list all slots (admin view, no available filter)
 export async function GET(request: Request) {
-  if (!(await verifyAdmin())) {
+  if (!(await requireAdminSession())) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
@@ -59,7 +53,7 @@ export async function GET(request: Request) {
 
 // POST — bulk create slots (dates × times)
 export async function POST(request: Request) {
-  if (!(await verifyAdmin())) {
+  if (!(await requireAdminSession())) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
@@ -106,7 +100,7 @@ export async function POST(request: Request) {
 
 // DELETE — remove a single slot
 export async function DELETE(request: Request) {
-  if (!(await verifyAdmin())) {
+  if (!(await requireAdminSession())) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 

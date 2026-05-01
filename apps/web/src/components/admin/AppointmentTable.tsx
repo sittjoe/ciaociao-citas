@@ -209,6 +209,7 @@ export function AppointmentTable() {
                 ['Email',     selected.email],
                 ['Teléfono',  selected.phone],
                 ['Fecha',     formatShortDate(selected.slotDatetime)],
+                ['Calendar',  selected.googleCalendarEventId ? 'Sincronizado' : 'Pendiente'],
                 ['Estado',    null],
                 ...(selected.notes ? [['Notas', selected.notes]] : []),
               ].map(([label, value]) => (

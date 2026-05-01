@@ -1,3 +1,4 @@
+import { CalendarCheck, Clock, Gem, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AdminStats } from '@/types'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -5,17 +6,20 @@ import { formatShortDate } from '@/lib/utils'
 
 export function StatsCards({ stats }: { stats: AdminStats }) {
   const cards = [
-    { label: 'Pendientes',       value: stats.totalPending,   color: 'text-amber-600'    },
-    { label: 'Confirmadas hoy',  value: stats.acceptedToday,  color: 'text-emerald-600'  },
-    { label: 'Total confirmadas',value: stats.totalAccepted,  color: 'text-champagne'    },
-    { label: 'Slots disponibles',value: stats.upcomingSlots,  color: 'text-blue-600'     },
+    { label: 'Pendientes',        value: stats.totalPending,   color: 'text-amber-600',   Icon: Clock },
+    { label: 'Confirmadas hoy',   value: stats.acceptedToday,  color: 'text-emerald-600', Icon: CalendarCheck },
+    { label: 'Total confirmadas', value: stats.totalAccepted,  color: 'text-champagne',   Icon: Gem },
+    { label: 'Rechazadas',        value: stats.totalRejected,  color: 'text-red-500',     Icon: XCircle },
   ]
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {cards.map(card => (
-        <div key={card.label} className="card-soft flex flex-col gap-1">
-          <p className="text-xs text-ink-muted tracking-widest uppercase font-semibold">{card.label}</p>
+        <div key={card.label} className="card-soft flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-ink-muted tracking-widest uppercase font-semibold">{card.label}</p>
+            <card.Icon size={17} className={card.color} />
+          </div>
           <p className={cn('text-3xl font-bold font-serif', card.color)}>{card.value}</p>
         </div>
       ))}

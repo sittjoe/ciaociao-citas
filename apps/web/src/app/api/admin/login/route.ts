@@ -1,76 +1,36 @@
 import { NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
-import { adminLoginSchema } from '@/lib/schemas'
+import { adminAuth } from '@/lib/firebase-admin'
 import { signSession, SESSION_TTL_SECONDS } from '@/lib/admin-session'
+import { isAdminUser } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_ATTEMPTS = 5
-const LOCKOUT_MS   = 15 * 60 * 1000
-
-const attempts = new Map<string, { count: number; firstAt: number }>()
-
-function getIp(req: Request): string {
-  return req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
-}
-
 export async function POST(request: Request) {
   try {
-    const body   = await request.json()
-    const parsed = adminLoginSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 })
+    const body = await request.json() as { idToken?: string }
+    if (!body.idToken || typeof body.idToken !== 'string') {
+      return NextResponse.json({ error: 'Token requerido' }, { status: 400 })
     }
 
-    const { password } = parsed.data
-    const ip  = getIp(request)
-    const now = Date.now()
-
-    const rec = attempts.get(ip)
-    if (rec) {
-      const windowEnd = rec.firstAt + LOCKOUT_MS
-      if (rec.count >= MAX_ATTEMPTS && now < windowEnd) {
-        const minutesLeft = Math.ceil((windowEnd - now) / 60000)
-        return NextResponse.json(
-          { error: `Demasiados intentos. Espera ${minutesLeft} minuto(s).` },
-          { status: 429 }
-        )
-      }
-      if (now >= windowEnd) attempts.delete(ip)
+    const decoded = await adminAuth.verifyIdToken(body.idToken)
+    const email = decoded.email?.toLowerCase().trim()
+    if (!email || !(await isAdminUser(decoded.uid, email))) {
+      return NextResponse.json({ error: 'Usuario sin permisos de administrador' }, { status: 403 })
     }
 
-    const hash = process.env.ADMIN_PASSWORD_HASH?.trim()
-    if (!hash) {
-      console.error('ADMIN_PASSWORD_HASH env var not set')
-      return NextResponse.json({ error: 'Error de configuración del servidor' }, { status: 500 })
-    }
-
-    const valid = await bcrypt.compare(password, hash)
-    if (!valid) {
-      const cur = attempts.get(ip)
-      if (!cur || now >= cur.firstAt + LOCKOUT_MS) {
-        attempts.set(ip, { count: 1, firstAt: now })
-      } else {
-        attempts.set(ip, { count: cur.count + 1, firstAt: cur.firstAt })
-      }
-      return NextResponse.json({ error: 'Contraseña incorrecta' }, { status: 401 })
-    }
-
-    attempts.delete(ip)
-
-    const token    = signSession()
+    const token = signSession({ uid: decoded.uid, email })
     const response = NextResponse.json({ ok: true })
     response.cookies.set('__session', token, {
       httpOnly: true,
-      secure:   process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge:   SESSION_TTL_SECONDS,
-      path:     '/',
+      maxAge: SESSION_TTL_SECONDS,
+      path: '/',
     })
 
     return response
   } catch (err) {
     console.error('POST /api/admin/login', err)
-    return NextResponse.json({ error: 'Error del servidor' }, { status: 500 })
+    return NextResponse.json({ error: 'No se pudo iniciar sesión' }, { status: 401 })
   }
 }

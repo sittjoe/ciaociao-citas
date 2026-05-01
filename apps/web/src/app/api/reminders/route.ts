@@ -47,6 +47,7 @@ export async function GET(request: Request) {
         cancelToken: d.cancelToken,
         reminder24Sent: d.reminder24Sent,
         reminder2Sent:  d.reminder2Sent,
+        googleCalendarEventId: d.googleCalendarEventId ?? null,
         createdAt: (d.createdAt as Timestamp).toDate(),
       }
       // Mark before send to ensure idempotency
@@ -89,6 +90,7 @@ export async function GET(request: Request) {
         cancelToken: d.cancelToken,
         reminder24Sent: d.reminder24Sent,
         reminder2Sent:  d.reminder2Sent,
+        googleCalendarEventId: d.googleCalendarEventId ?? null,
         createdAt: (d.createdAt as Timestamp).toDate(),
       }
       await doc.ref.update({ reminder2Sent: true, updatedAt: FieldValue.serverTimestamp() })

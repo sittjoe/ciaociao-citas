@@ -1,96 +1,118 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { cookies } from 'next/headers'
 import { appointmentDecisionSchema } from '@/lib/schemas'
 import { sendStatusUpdate } from '@/lib/email'
-import { verifySession } from '@/lib/admin-session'
-import type { Appointment } from '@/types'
+import { requireAdminSession } from '@/lib/admin-auth'
+import { createAppointmentCalendarEvent, deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
+import type { Appointment, AppointmentStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
-async function verifyAdmin(): Promise<boolean> {
-  const session = (await cookies()).get('__session')?.value
-  return verifySession(session)
+function mapAppointment(id: string, data: FirebaseFirestore.DocumentData, status?: AppointmentStatus): Appointment {
+  return {
+    id,
+    slotId: data.slotId,
+    slotDatetime: (data.slotDatetime as Timestamp).toDate(),
+    name: data.name,
+    email: data.email,
+    phone: data.phone,
+    notes: data.notes,
+    identificationUrl: data.identificationUrl,
+    status: status ?? data.status,
+    confirmationCode: data.confirmationCode,
+    cancelToken: data.cancelToken,
+    reminder24Sent: data.reminder24Sent ?? false,
+    reminder2Sent: data.reminder2Sent ?? false,
+    googleCalendarEventId: data.googleCalendarEventId ?? null,
+    createdAt: (data.createdAt as Timestamp).toDate(),
+  }
 }
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await verifyAdmin())) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const admin = await requireAdminSession()
+  if (!admin) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { id } = await params
-  const body   = await request.json()
-
-  const parsed = appointmentDecisionSchema.safeParse(body)
+  const parsed = appointmentDecisionSchema.safeParse(await request.json())
   if (!parsed.success) {
     return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 })
   }
 
   const { action, reason } = parsed.data
 
+  let appointment: Appointment | null = null
+  let googleCalendarEventId: string | null = null
+
   try {
-    let appointment: Appointment | null = null
+    const apptRef = adminDb.collection('appointments').doc(id)
+    const apptSnap = await apptRef.get()
+    if (!apptSnap.exists) return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
+
+    const apptData = apptSnap.data()!
+    if (apptData.status !== 'pending') {
+      return NextResponse.json({ error: 'Esta cita ya fue procesada' }, { status: 409 })
+    }
+
+    appointment = mapAppointment(id, apptData, action === 'accept' ? 'accepted' : 'rejected')
+
+    if (action === 'accept') {
+      try {
+        googleCalendarEventId = await createAppointmentCalendarEvent(appointment)
+      } catch (err) {
+        console.error('Google Calendar create failed:', err)
+        return NextResponse.json(
+          { error: 'No se pudo crear el evento en Google Calendar. La cita sigue pendiente.' },
+          { status: 502 }
+        )
+      }
+    }
 
     await adminDb.runTransaction(async tx => {
-      const apptRef  = adminDb.collection('appointments').doc(id)
-      const apptSnap = await tx.get(apptRef)
-
-      if (!apptSnap.exists) throw new Error('NOT_FOUND')
-
-      const apptData = apptSnap.data()!
-      if (apptData.status !== 'pending') throw new Error('ALREADY_PROCESSED')
+      const freshSnap = await tx.get(apptRef)
+      if (!freshSnap.exists) throw new Error('NOT_FOUND')
+      const freshData = freshSnap.data()!
+      if (freshData.status !== 'pending') throw new Error('ALREADY_PROCESSED')
 
       const newStatus = action === 'accept' ? 'accepted' : 'rejected'
-
       tx.update(apptRef, {
-        status:    newStatus,
+        status: newStatus,
         updatedAt: FieldValue.serverTimestamp(),
+        decidedBy: admin.email,
         ...(reason ? { adminNote: reason } : {}),
+        ...(googleCalendarEventId ? { googleCalendarEventId } : {}),
       })
 
-      // If rejecting, free the slot
       if (action === 'reject') {
-        const slotRef = adminDb.collection('slots').doc(apptData.slotId)
-        tx.update(slotRef, {
+        tx.update(adminDb.collection('slots').doc(freshData.slotId), {
           available: true,
           heldUntil: null,
-          bookedBy:  null,
+          bookedBy: null,
         })
       }
 
       appointment = {
-        id,
-        slotId:           apptData.slotId,
-        slotDatetime:     (apptData.slotDatetime as Timestamp).toDate(),
-        name:             apptData.name,
-        email:            apptData.email,
-        phone:            apptData.phone,
-        notes:            apptData.notes,
-        identificationUrl: apptData.identificationUrl,
-        status:           newStatus,
-        confirmationCode: apptData.confirmationCode,
-        cancelToken:      apptData.cancelToken,
-        reminder24Sent:   apptData.reminder24Sent ?? false,
-        reminder2Sent:    apptData.reminder2Sent  ?? false,
-        createdAt:        (apptData.createdAt as Timestamp).toDate(),
+        ...mapAppointment(id, freshData, newStatus),
+        googleCalendarEventId,
       }
     })
 
-    // Send email async
-    if (appointment) {
-      sendStatusUpdate(appointment, action, reason).catch(err =>
-        console.error('Status email failed (non-fatal):', err)
+    sendStatusUpdate(appointment, action, reason).catch(err =>
+      console.error('Status email failed (non-fatal):', err)
+    )
+
+    return NextResponse.json({ ok: true, googleCalendarEventId })
+  } catch (err: unknown) {
+    if (action === 'accept' && appointment && googleCalendarEventId) {
+      deleteAppointmentCalendarEvent({ ...appointment, googleCalendarEventId }).catch(cleanupErr =>
+        console.error('Google Calendar cleanup failed:', cleanupErr)
       )
     }
-
-    return NextResponse.json({ ok: true })
-  } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : ''
-    if (msg === 'NOT_FOUND')         return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
+    if (msg === 'NOT_FOUND') return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
     if (msg === 'ALREADY_PROCESSED') return NextResponse.json({ error: 'Esta cita ya fue procesada' }, { status: 409 })
     console.error(`POST /api/admin/appointments/${id}/decision`, err)
     return NextResponse.json({ error: 'Error al procesar la decisión' }, { status: 500 })

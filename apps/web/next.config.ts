@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: process.cwd(),
   experimental: {
     serverActions: { allowedOrigins: ['citas.ciaociao.mx', 'localhost:3000'] },
   },

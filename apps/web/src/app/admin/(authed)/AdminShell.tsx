@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, CalendarDays, Settings, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, Settings, LogOut, Menu, X, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -11,9 +11,10 @@ const navItems = [
   { href: '/admin',        label: 'Dashboard',  Icon: LayoutDashboard },
   { href: '/admin/citas',  label: 'Citas',      Icon: CalendarDays    },
   { href: '/admin/slots',  label: 'Slots',      Icon: Settings        },
+  { href: '/admin/admins', label: 'Admins',     Icon: Users           },
 ]
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({ children, adminEmail }: { children: React.ReactNode; adminEmail: string }) {
   const pathname  = usePathname()
   const router    = useRouter()
   const [open, setOpen] = useState(false)
@@ -55,6 +56,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       <div className="p-4 border-t border-stone-100">
+        <p className="px-3 pb-2 text-[0.68rem] text-ink-subtle truncate">{adminEmail}</p>
         <button
           onClick={logout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full"

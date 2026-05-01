@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { bookingPayloadSchema } from '@/lib/schemas'
 import { generateCode, sanitize } from '@/lib/utils'
 import { sendBookingConfirmation } from '@/lib/email'
+import { releaseExpiredHolds } from '@/lib/holds'
 import type { Appointment } from '@/types'
 import { randomUUID } from 'crypto'
 
@@ -16,6 +17,8 @@ const HOLD_MS = 30 * 60 * 1000
 
 export async function POST(request: Request) {
   try {
+    await releaseExpiredHolds()
+
     const formData = await request.formData()
 
     const raw = {
@@ -72,6 +75,7 @@ export async function POST(request: Request) {
       slotDatetime   = (slotData.datetime as Timestamp).toDate()
 
       if (!slotData.available) throw new Error('SLOT_UNAVAILABLE')
+      if (slotDatetime <= new Date()) throw new Error('SLOT_UNAVAILABLE')
 
       // Check for existing pending/accepted appointments on this slot.
       // Use tx.get(query) so the read participates in the transaction snapshot.
@@ -129,6 +133,7 @@ export async function POST(request: Request) {
       cancelToken,
       reminder24Sent: false,
       reminder2Sent:  false,
+      googleCalendarEventId: null,
       createdAt: new Date(),
     }
 

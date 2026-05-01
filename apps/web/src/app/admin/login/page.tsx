@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
-import { Lock } from 'lucide-react'
+import { Mail, KeyRound } from 'lucide-react'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { getClientAuth } from '@/lib/firebase-client'
 import { adminLoginSchema, type AdminLoginInput } from '@/lib/schemas'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
@@ -25,10 +27,13 @@ export default function AdminLoginPage() {
   const onSubmit = async (data: AdminLoginInput) => {
     setLoading(true)
     try {
+      const credential = await signInWithEmailAndPassword(getClientAuth(), data.email, data.password)
+      const idToken = await credential.user.getIdToken()
+
       const res  = await fetch('/api/admin/login', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(data),
+        body:    JSON.stringify({ idToken }),
       })
       const json = await res.json() as { error?: string }
 
@@ -36,7 +41,7 @@ export default function AdminLoginPage() {
         if (res.status === 429) {
           toast.error('Demasiados intentos. Espera 15 minutos.')
         } else {
-          toast.error(json.error ?? 'Contraseña incorrecta')
+          toast.error(json.error ?? 'No tienes permisos de administrador')
         }
         return
       }
@@ -44,7 +49,7 @@ export default function AdminLoginPage() {
       router.push('/admin')
       router.refresh()
     } catch {
-      toast.error('Error de conexión')
+      toast.error('No se pudo iniciar sesión')
     } finally {
       setLoading(false)
     }
@@ -61,9 +66,23 @@ export default function AdminLoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="card-soft space-y-5">
           <div className="flex justify-center mb-2">
             <div className="w-12 h-12 rounded-full bg-cream-soft border border-stone-100 flex items-center justify-center">
-              <Lock size={20} className="text-champagne" />
+              <KeyRound size={20} className="text-champagne" />
             </div>
           </div>
+
+          <Field label="Email" required error={errors.email?.message}>
+            <div className="relative">
+              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+              <input
+                {...register('email')}
+                type="email"
+                className="input-clean pl-9"
+                placeholder="admin@ciaociao.mx"
+                autoComplete="email"
+                autoFocus
+              />
+            </div>
+          </Field>
 
           <Field label="Contraseña" required error={errors.password?.message}>
             <input
@@ -72,7 +91,6 @@ export default function AdminLoginPage() {
               className="input-clean"
               placeholder="••••••••••••"
               autoComplete="current-password"
-              autoFocus
             />
           </Field>
 

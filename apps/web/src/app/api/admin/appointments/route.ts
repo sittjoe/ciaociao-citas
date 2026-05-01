@@ -1,18 +1,12 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { cookies } from 'next/headers'
-import { verifySession } from '@/lib/admin-session'
+import { requireAdminSession } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
-async function verifyAdmin(): Promise<boolean> {
-  const session = (await cookies()).get('__session')?.value
-  return verifySession(session)
-}
-
 export async function GET(request: Request) {
-  if (!(await verifyAdmin())) {
+  if (!(await requireAdminSession())) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
@@ -77,6 +71,7 @@ export async function GET(request: Request) {
         whatsapp:         d.whatsapp ?? false,
         status:           d.status,
         confirmationCode: d.confirmationCode,
+        googleCalendarEventId: d.googleCalendarEventId ?? null,
         createdAt:        (d.createdAt as Timestamp)?.toDate().toISOString(),
         updatedAt:        (d.updatedAt as Timestamp)?.toDate().toISOString(),
         identificationUrl: d.identificationUrl,

@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { releaseExpiredHolds } from '@/lib/holds'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
+    await releaseExpiredHolds()
+
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month') // YYYY-MM
     const year  = searchParams.get('year')

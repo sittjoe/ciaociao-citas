@@ -32,6 +32,7 @@ export const bookingPayloadSchema = bookingFormSchema.extend({
 export type BookingPayloadInput = z.infer<typeof bookingPayloadSchema>
 
 export const adminLoginSchema = z.object({
+  email: z.string().email('Email inválido').max(200),
   password: z.string().min(1, 'Contraseña requerida').max(200),
 })
 

@@ -13,7 +13,7 @@ async function getStats(): Promise<AdminStats> {
   const todayEnd   = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
   const weekEnd    = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-  const [pendingSnap, acceptedTodaySnap, totalAcceptedSnap, upcomingSlotsSnap, nextApptSnap] =
+  const [pendingSnap, acceptedTodaySnap, totalAcceptedSnap, totalRejectedSnap, upcomingSlotsSnap, nextApptSnap] =
     await Promise.all([
       adminDb.collection('appointments').where('status', '==', 'pending').count().get(),
       adminDb.collection('appointments')
@@ -22,6 +22,7 @@ async function getStats(): Promise<AdminStats> {
         .where('slotDatetime', '<',  Timestamp.fromDate(todayEnd))
         .count().get(),
       adminDb.collection('appointments').where('status', '==', 'accepted').count().get(),
+      adminDb.collection('appointments').where('status', '==', 'rejected').count().get(),
       adminDb.collection('slots')
         .where('available', '==', true)
         .where('datetime', '>=', Timestamp.fromDate(now))
@@ -51,6 +52,7 @@ async function getStats(): Promise<AdminStats> {
       cancelToken:      d.cancelToken,
       reminder24Sent:   d.reminder24Sent,
       reminder2Sent:    d.reminder2Sent,
+      googleCalendarEventId: d.googleCalendarEventId ?? null,
       createdAt:        (d.createdAt as Timestamp).toDate(),
     } satisfies Appointment
   })
@@ -59,7 +61,7 @@ async function getStats(): Promise<AdminStats> {
     totalPending:    pendingSnap.data().count,
     acceptedToday:   acceptedTodaySnap.data().count,
     totalAccepted:   totalAcceptedSnap.data().count,
-    totalRejected:   0,
+    totalRejected:   totalRejectedSnap.data().count,
     upcomingSlots:   upcomingSlotsSnap.data().count,
     nextAppointments,
   }

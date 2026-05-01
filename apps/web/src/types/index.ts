@@ -26,6 +26,7 @@ export interface Appointment {
   cancelToken: string
   reminder24Sent: boolean
   reminder2Sent: boolean
+  googleCalendarEventId?: string | null
   createdAt: Date
   updatedAt?: Date
 }
