@@ -71,19 +71,29 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="booking" className="px-4 py-14 sm:py-20">
-        <div className="mx-auto mb-10 max-w-xl text-center">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.35em] text-champagne">
-            Reserva en minutos
-          </p>
-          <h2 className="font-serif text-4xl tracking-tight text-ink sm:text-5xl">
-            Agenda tu cita
-          </h2>
-          <p className="mt-4 text-sm leading-6 text-ink-muted">
-            Selecciona fecha, horario y comparte tus datos para que podamos confirmar tu visita.
-          </p>
+      <section id="booking" className="px-6 py-14 sm:py-20">
+        <div className="mx-auto max-w-5xl lg:grid lg:grid-cols-[300px_1fr] lg:gap-20 lg:items-start">
+
+          {/* Sidebar — visible on desktop only */}
+          <div className="text-center lg:text-left mb-10 lg:mb-0 lg:sticky lg:top-20">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.35em] text-champagne">
+              Reserva en minutos
+            </p>
+            <h2 className="font-serif text-4xl tracking-tight text-ink sm:text-5xl mb-6">
+              Agenda tu cita
+            </h2>
+            <p className="text-sm leading-6 text-ink-muted hidden lg:block">
+              Selecciona fecha, horario y comparte tus datos para que podamos confirmar tu visita.
+            </p>
+            <div className="hidden lg:block mt-8 pt-8 border-t border-stone-100 space-y-3 text-xs text-ink-subtle">
+              <p>✦ Experiencia exclusiva</p>
+              <p>✦ Confirmación en 24h</p>
+              <p>✦ Showroom privado CDMX</p>
+            </div>
+          </div>
+
+          <BookingWizard />
         </div>
-        <BookingWizard />
       </section>
 
       <footer className="border-t border-stone-100 bg-white px-4 py-10 text-center text-xs text-ink-subtle space-y-1.5">
