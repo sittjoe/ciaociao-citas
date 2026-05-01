@@ -19,11 +19,12 @@ interface SlotRow {
 const DEFAULT_TIMES = ['10:00', '11:00', '12:00', '13:00', '15:00', '16:00', '17:00']
 
 export function SlotManager() {
-  const [slots,    setSlots]    = useState<SlotRow[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [showAdd,  setShowAdd]  = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [deleting, setDeleting] = useState<string | null>(null)
+  const [slots,         setSlots]         = useState<SlotRow[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [showAdd,       setShowAdd]       = useState(false)
+  const [creating,      setCreating]      = useState(false)
+  const [deleting,      setDeleting]      = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
 
   // Bulk create form state
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
@@ -93,7 +94,11 @@ export function SlotManager() {
         }),
       })
       const data = await res.json() as { created: number; skipped: string[] }
-      toast.success(`${data.created} slot${data.created !== 1 ? 's' : ''} creado${data.created !== 1 ? 's' : ''}`)
+      const skipped = data.skipped?.length ?? 0
+      const msg = skipped > 0
+        ? `${data.created} slots creados, ${skipped} ya existían`
+        : `${data.created} slot${data.created !== 1 ? 's' : ''} creado${data.created !== 1 ? 's' : ''}`
+      toast.success(msg)
       setShowAdd(false)
       setSelectedDates(new Set())
       fetchSlots()
@@ -166,14 +171,30 @@ export function SlotManager() {
                 </td>
                 <td className="px-4 py-3">
                   {slot.available && (
-                    <button
-                      onClick={() => deleteSlot(slot.id)}
-                      disabled={deleting === slot.id}
-                      className="text-red-400/60 hover:text-red-500 transition-colors disabled:opacity-40"
-                      aria-label="Eliminar slot"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    pendingDelete === slot.id ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          onClick={() => { deleteSlot(slot.id); setPendingDelete(null) }}
+                          disabled={deleting === slot.id}
+                          className="text-red-500 font-semibold hover:underline disabled:opacity-40"
+                        >
+                          Sí, eliminar
+                        </button>
+                        <span className="text-ink-subtle">·</span>
+                        <button onClick={() => setPendingDelete(null)} className="text-ink-muted hover:text-ink">
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setPendingDelete(slot.id)}
+                        disabled={deleting === slot.id}
+                        className="text-red-400/60 hover:text-red-500 transition-colors disabled:opacity-40"
+                        aria-label="Eliminar slot"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )
                   )}
                 </td>
               </tr>

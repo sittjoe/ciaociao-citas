@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { LayoutDashboard, CalendarDays, Settings, LogOut, Menu, X, Users, KeyRound } from 'lucide-react'
@@ -19,6 +19,12 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
   const pathname  = usePathname()
   const router    = useRouter()
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    if (open) document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open])
 
   const logout = async () => {
     await fetch('/api/admin/session', { method: 'DELETE' })
@@ -43,7 +49,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
               href={href}
               onClick={() => setOpen(false)}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-champagne-deep focus-visible:ring-offset-2',
                 active
                   ? 'bg-champagne-soft text-champagne font-medium'
                   : 'text-ink-muted hover:text-ink hover:bg-cream-soft',
@@ -60,7 +66,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
         <p className="px-3 pb-2 text-[0.68rem] text-ink-subtle truncate">{adminEmail}</p>
         <button
           onClick={logout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"
         >
           <LogOut size={16} /> Cerrar sesión
         </button>
@@ -70,6 +76,13 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen flex bg-cream text-ink">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 z-[60] bg-white px-3 py-2 rounded-lg text-sm font-medium text-champagne-deep border border-champagne-soft shadow-lift"
+      >
+        Saltar al contenido
+      </a>
+
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col w-56 bg-white border-r border-stone-100 fixed inset-y-0 left-0">
         <NavContent />
@@ -91,14 +104,19 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
       {open && (
         <>
           <div className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm lg:hidden" onClick={() => setOpen(false)} />
-          <aside className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-white border-r border-stone-100 lg:hidden">
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menú de navegación"
+            className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-white border-r border-stone-100 lg:hidden"
+          >
             <NavContent />
           </aside>
         </>
       )}
 
       {/* Main content */}
-      <main className="flex-1 lg:ml-56 pt-16 lg:pt-0">
+      <main id="main-content" className="flex-1 lg:ml-56 pt-16 lg:pt-0">
         <div className="p-5 sm:p-8">
           {children}
         </div>

@@ -166,7 +166,8 @@ export function AppointmentTable() {
                   {appt.status === 'pending' && (
                     <button
                       onClick={() => setSelected(appt)}
-                      className="text-xs text-champagne hover:text-champagne-deep underline"
+                      className="text-xs text-champagne-deep hover:text-champagne underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-champagne-deep rounded"
+                      aria-label={`Gestionar cita de ${appt.name}`}
                     >
                       Gestionar
                     </button>
@@ -174,7 +175,8 @@ export function AppointmentTable() {
                   {appt.status !== 'pending' && (
                     <button
                       onClick={() => setSelected(appt)}
-                      className="text-xs text-ink-muted hover:text-ink"
+                      className="text-xs text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-champagne-deep rounded"
+                      aria-label={`Ver cita de ${appt.name}`}
                     >
                       Ver
                     </button>
