@@ -120,6 +120,15 @@ export async function DELETE(request: Request) {
     if (!data.available) {
       return NextResponse.json({ error: 'No se puede eliminar un slot con reserva' }, { status: 409 })
     }
+    const activeAppts = await adminDb
+      .collection('appointments')
+      .where('slotId', '==', slotId)
+      .where('status', 'in', ['pending', 'accepted'])
+      .limit(1)
+      .get()
+    if (!activeAppts.empty) {
+      return NextResponse.json({ error: 'No se puede eliminar un slot con reserva activa' }, { status: 409 })
+    }
     await slotRef.delete()
     return NextResponse.json({ ok: true })
   } catch (err) {

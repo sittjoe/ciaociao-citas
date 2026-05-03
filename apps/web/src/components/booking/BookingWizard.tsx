@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { CheckCircle2, ChevronLeft, ExternalLink, Send, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
@@ -35,7 +35,7 @@ export function BookingWizard() {
   const [step,         setStep]        = useState<Step>('calendar')
   const [slots,        setSlots]       = useState<Slot[]>([])
   const [loadingSlots, setLoadingSlots]= useState(true)
-  const [selectedDate, setSelectedDate]= useState<Date | null>(null)
+  const [selectedDate, setSelectedDate]= useState<string | null>(null)
   const [selectedSlot, setSelectedSlot]= useState<Slot | null>(null)
   const [idFile,       setIdFile]      = useState<File | null>(null)
   const [guests,       setGuests]      = useState<GuestInput[]>([])
@@ -221,7 +221,7 @@ export function BookingWizard() {
               <div>
                 <p className="h-eyebrow mb-2">Paso 2</p>
                 <h2 className="font-serif font-light text-2xl text-ink capitalize">
-                  {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
+                  {format(parseISO(selectedDate), "EEEE d 'de' MMMM", { locale: es })}
                 </h2>
               </div>
               <SlotPicker

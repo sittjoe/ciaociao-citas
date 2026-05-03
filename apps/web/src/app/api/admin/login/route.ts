@@ -1,12 +1,41 @@
 import { NextResponse } from 'next/server'
-import { adminAuth } from '@/lib/firebase-admin'
+import { adminAuth, adminDb } from '@/lib/firebase-admin'
 import { signSession, SESSION_TTL_SECONDS } from '@/lib/admin-session'
 import { isAdminUser } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
+async function checkRateLimit(ip: string): Promise<boolean> {
+  const key        = ip.replace(/[^\w.-]/g, '_').slice(0, 128)
+  const ref        = adminDb.collection('loginAttempts').doc(key)
+  const WINDOW_MS  = 15 * 60 * 1000
+  const MAX        = 5
+  const now        = Date.now()
+
+  return adminDb.runTransaction(async tx => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) {
+      tx.set(ref, { count: 1, windowStart: now })
+      return false
+    }
+    const { count, windowStart } = snap.data() as { count: number; windowStart: number }
+    if (now - windowStart > WINDOW_MS) {
+      tx.update(ref, { count: 1, windowStart: now })
+      return false
+    }
+    if (count >= MAX) return true
+    tx.update(ref, { count: count + 1 })
+    return false
+  })
+}
+
 export async function POST(request: Request) {
   try {
+    const ip = (request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0].trim()
+    if (await checkRateLimit(ip)) {
+      return NextResponse.json({ error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.' }, { status: 429 })
+    }
+
     const body = await request.json() as { idToken?: string }
     if (!body.idToken || typeof body.idToken !== 'string') {
       return NextResponse.json({ error: 'Token requerido' }, { status: 400 })

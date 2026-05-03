@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval,
-         isToday, isSameDay, addMonths, subMonths, isBefore, startOfDay } from 'date-fns'
+         isToday, addMonths, subMonths, isBefore, startOfDay } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -11,8 +11,9 @@ import { BUSINESS_TZ, cn } from '@/lib/utils'
 
 interface CalendarViewProps {
   slots:          { id: string; datetime: string }[]
-  selectedDate:   Date | null
-  onSelectDate:   (date: Date) => void
+  /** yyyy-MM-dd in BUSINESS_TZ (CDMX) — never a viewer-local Date */
+  selectedDate:   string | null
+  onSelectDate:   (dateKey: string) => void
 }
 
 export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarViewProps) {
@@ -81,14 +82,14 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
           const key      = format(day, 'yyyy-MM-dd')
           const hasSlots = slotDates.has(key)
           const isPast   = isBefore(startOfDay(day), today)
-          const isSel    = selectedDate ? isSameDay(day, selectedDate) : false
+          const isSel    = selectedDate === format(day, 'yyyy-MM-dd')
           const isNow    = isToday(day)
 
           return (
             <button
               key={key}
               disabled={!hasSlots || isPast}
-              onClick={() => onSelectDate(day)}
+              onClick={() => onSelectDate(format(day, 'yyyy-MM-dd'))}
               className={cn(
                 'relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-colors duration-150',
                 isPast && 'opacity-30 cursor-not-allowed',

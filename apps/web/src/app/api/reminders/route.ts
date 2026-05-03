@@ -7,7 +7,7 @@ import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
-// Called by Vercel cron every hour (see vercel.json: "0 * * * *")
+// Called by Vercel cron once daily at 14:00 UTC (see vercel.json: "0 14 * * *")
 export async function GET(request: Request) {
   const authHeader = request.headers.get('Authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -20,9 +20,9 @@ export async function GET(request: Request) {
   const errors: string[] = []
 
   try {
-    // 24-hour reminders: appointments starting between 23h and 25h from now
-    const from24 = new Date(now.getTime() + 23 * 60 * 60 * 1000)
-    const to24   = new Date(now.getTime() + 25 * 60 * 60 * 1000)
+    // 24-hour reminders: appointments 12–36h from now (wide window matches daily cron cadence)
+    const from24 = new Date(now.getTime() + 12 * 60 * 60 * 1000)
+    const to24   = new Date(now.getTime() + 36 * 60 * 60 * 1000)
 
     const snap24 = await adminDb
       .collection('appointments')
@@ -63,9 +63,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2-hour reminders: appointments starting between 1h45m and 2h15m from now
-    const from2 = new Date(now.getTime() + 105 * 60 * 1000)
-    const to2   = new Date(now.getTime() + 135 * 60 * 1000)
+    // Same-day reminders: appointments 0–12h from now (daily cron fires once at ~8AM CDMX)
+    const from2 = new Date(now.getTime())
+    const to2   = new Date(now.getTime() + 12 * 60 * 60 * 1000)
 
     const snap2 = await adminDb
       .collection('appointments')
@@ -109,8 +109,8 @@ export async function GET(request: Request) {
     let sentGuest24  = 0
     let expiredCount = 0
 
-    const from48g = new Date(now.getTime() + 47 * 60 * 60 * 1000)
-    const to48g   = new Date(now.getTime() + 49 * 60 * 60 * 1000)
+    const from48g = new Date(now.getTime() + 36 * 60 * 60 * 1000)
+    const to48g   = new Date(now.getTime() + 60 * 60 * 60 * 1000)
 
     const appts48 = await adminDb
       .collection('appointments')
@@ -173,8 +173,8 @@ export async function GET(request: Request) {
     }
 
     // Guest reminders — 24h window (runs after expiration so expired guests are excluded)
-    const from24g = new Date(now.getTime() + 23 * 60 * 60 * 1000)
-    const to24g   = new Date(now.getTime() + 25 * 60 * 60 * 1000)
+    const from24g = new Date(now.getTime() + 12 * 60 * 60 * 1000)
+    const to24g   = new Date(now.getTime() + 36 * 60 * 60 * 1000)
 
     const appts24g = await adminDb
       .collection('appointments')

@@ -37,14 +37,16 @@ export default async function ReservaPage({ params }: PageProps) {
   const data = doc.data()
 
   const appt = {
-    id:               doc.id,
-    status:           data.status as AppointmentStatus,
-    name:             data.name as string,
-    email:            data.email as string,
-    slotDatetime:     (data.slotDatetime as Timestamp).toDate(),
-    confirmationCode: data.confirmationCode as string,
-    cancelToken:      data.cancelToken as string,
-    notes:            data.notes as string | undefined,
+    id:                doc.id,
+    status:            data.status as AppointmentStatus,
+    name:              data.name as string,
+    email:             data.email as string,
+    slotDatetime:      (data.slotDatetime as Timestamp).toDate(),
+    confirmationCode:  data.confirmationCode as string,
+    cancelToken:       data.cancelToken as string,
+    notes:             data.notes as string | undefined,
+    guestCount:        (data.guestCount as number | undefined) ?? 0,
+    guestsAllVerified: (data.guestsAllVerified as boolean | undefined) ?? true,
   }
 
   const canCancel = appt.status === 'pending' || appt.status === 'accepted'
@@ -84,6 +86,16 @@ export default async function ReservaPage({ params }: PageProps) {
             </div>
 
             <p className="text-sm leading-6 text-ink-muted">{STATUS_MESSAGES[appt.status]}</p>
+
+            {appt.status === 'accepted' && appt.guestCount > 0 && !appt.guestsAllVerified && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                <p className="font-semibold text-amber-900">Invitados pendientes de verificación</p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-700">
+                  {appt.guestCount} invitado{appt.guestCount !== 1 ? 's' : ''} aún no ha verificado su identidad.
+                  Cada uno recibió un correo con su link personal. Sin verificación no podrán ingresar al showroom.
+                </p>
+              </div>
+            )}
 
             <div className="rounded-2xl border border-ink-line bg-porcelain/70 px-4 py-2 text-sm">
               {([

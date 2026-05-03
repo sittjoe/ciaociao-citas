@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import { FieldValue } from 'firebase-admin/firestore'
-import { formatDate, formatTime } from './utils'
+import { formatInTimeZone } from 'date-fns-tz'
+import { formatDate, formatTime, BUSINESS_TZ } from './utils'
 import { adminDb } from './firebase-admin'
 import type { Appointment } from '@/types'
 
@@ -402,26 +403,87 @@ export async function sendGuestReminder(params: {
 }
 
 function generateICS(appt: Appointment): string {
-  const start = appt.slotDatetime
-  const end = new Date(start.getTime() + 60 * 60 * 1000)
-  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
-  const admin = getConfiguredAdminEmails()[0] ?? 'info@ciaociao.mx'
+  const start    = appt.slotDatetime
+  const end      = new Date(start.getTime() + 60 * 60 * 1000)
+  const fmtLocal = (d: Date) => formatInTimeZone(d, BUSINESS_TZ, "yyyyMMdd'T'HHmmss")
+  const dtstamp  = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  const admin    = getConfiguredAdminEmails()[0] ?? 'info@ciaociao.mx'
 
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//CiaoCiao//Citas//ES',
+    'METHOD:REQUEST',
+    'BEGIN:VTIMEZONE',
+    `TZID:${BUSINESS_TZ}`,
+    'BEGIN:STANDARD',
+    'DTSTART:19700101T000000',
+    'TZNAME:CST',
+    'TZOFFSETFROM:-0600',
+    'TZOFFSETTO:-0600',
+    'END:STANDARD',
+    'END:VTIMEZONE',
     'BEGIN:VEVENT',
     `UID:${appt.id}@ciaociao.mx`,
-    `DTSTART:${fmt(start)}`,
-    `DTEND:${fmt(end)}`,
+    `DTSTAMP:${dtstamp}`,
+    `DTSTART;TZID=${BUSINESS_TZ}:${fmtLocal(start)}`,
+    `DTEND;TZID=${BUSINESS_TZ}:${fmtLocal(end)}`,
     'SUMMARY:Cita en Ciao Ciao Joyería',
     'DESCRIPTION:Tu cita personalizada en el showroom privado de Ciao Ciao Joyería.',
     'LOCATION:Showroom Ciao Ciao Joyería',
     `ORGANIZER;CN=Ciao Ciao Joyería:mailto:${admin}`,
-    `ATTENDEE;CN=${appt.name}:mailto:${appt.email}`,
+    `ATTENDEE;RSVP=TRUE;CN=${appt.name}:mailto:${appt.email}`,
     'STATUS:CONFIRMED',
     'END:VEVENT',
     'END:VCALENDAR',
   ].join('\r\n')
+}
+
+export async function sendCancellationEmail(appt: Appointment) {
+  const dateStr = formatDate(appt.slotDatetime)
+  const timeStr = formatTime(appt.slotDatetime)
+
+  await sendTracked({
+    kind: 'status_update',
+    appointmentId: appt.id,
+    from: `Ciao Ciao Joyería <${FROM}>`,
+    to: appt.email,
+    subject: `Cita cancelada - ${dateStr}`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Cita cancelada</p>
+        <p class="copy">Tu cita del ${dateStr} a las ${timeStr} ha sido cancelada. Si deseas agendar una nueva visita, puedes hacerlo en cualquier momento.</p>
+        ${details([
+          ['Fecha',  dateStr],
+          ['Hora',   timeStr],
+          ['Código', appt.confirmationCode],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${SITE}">Agendar nueva cita</a></p>
+    `),
+  })
+
+  const adminRecipients = await getActiveAdminEmails()
+  if (adminRecipients.length > 0) {
+    await sendTracked({
+      kind: 'booking_admin',
+      appointmentId: appt.id,
+      from: `Sistema Citas <${FROM}>`,
+      to: adminRecipients,
+      subject: `Cita cancelada: ${appt.name} — ${dateStr} ${timeStr}`,
+      html: baseTemplate(`
+        <div class="card">
+          <p class="title">Cita cancelada por el cliente</p>
+          <p class="copy">El cliente canceló desde su link de cancelación.</p>
+          ${details([
+            ['Nombre',  appt.name],
+            ['Email',   appt.email],
+            ['Fecha',   `${dateStr} ${timeStr}`],
+            ['Código',  appt.confirmationCode],
+          ])}
+        </div>
+        <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Ver panel</a></p>
+      `),
+    })
+  }
 }

@@ -20,19 +20,39 @@ export async function releaseExpiredHolds(limit = 50): Promise<number> {
 
     const apptRef = adminDb.collection('appointments').doc(slot.bookedBy)
     const apptSnap = await apptRef.get()
-    // Only release orphaned holds — never cancel a valid pending appointment
-    if (apptSnap.exists && apptSnap.data()?.status === 'pending') continue
+    const apptStatus = apptSnap.exists ? apptSnap.data()?.status : null
 
+    // Accepted appointments must never be auto-cancelled. Defensive: also clear
+    // their stale heldUntil so we don't keep re-evaluating them on every cron tick.
+    if (apptStatus === 'accepted') {
+      batch.update(slotDoc.ref, { heldUntil: null })
+      continue
+    }
+
+    // Pending appointments still within their hold window must not be touched.
+    // Only expire pending appts whose hold has actually elapsed (heldUntil <= now
+    // is already enforced by the query) AND whose slot start hasn't passed.
+    if (apptStatus === 'pending') {
+      const apptHeld = apptSnap.data()?.heldUntil as Timestamp | undefined
+      // If the appointment doc itself tracks its hold and it's still in the future,
+      // skip — hold not actually expired.
+      if (apptHeld && apptHeld.toMillis() > Date.now()) continue
+    }
+
+    // Cancel: orphaned hold (no appt doc), or pending past its hold,
+    // or already cancelled/rejected appt (slot recovery).
     batch.update(slotDoc.ref, {
       available: true,
       heldUntil: null,
       bookedBy: null,
     })
-    batch.update(apptRef, {
-      status: 'cancelled',
-      expiredAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    })
+    if (apptSnap.exists && apptStatus !== 'cancelled' && apptStatus !== 'rejected') {
+      batch.update(apptRef, {
+        status: 'cancelled',
+        expiredAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    }
     released++
   }
 

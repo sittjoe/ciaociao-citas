@@ -74,7 +74,11 @@ export async function POST(
         ...(reason ? { adminNote: reason } : {}),
       })
 
-      if (action === 'reject') {
+      if (action === 'accept') {
+        // Clear heldUntil so releaseExpiredHolds never picks up this slot.
+        // Slot stays available:false, bookedBy unchanged.
+        tx.update(adminDb.collection('slots').doc(freshData.slotId), { heldUntil: null })
+      } else {
         tx.update(adminDb.collection('slots').doc(freshData.slotId), {
           available: true,
           heldUntil: null,

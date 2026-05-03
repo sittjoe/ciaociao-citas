@@ -8,16 +8,16 @@ import { BUSINESS_TZ, cn } from '@/lib/utils'
 
 interface SlotPickerProps {
   slots:          { id: string; datetime: string }[]
-  selectedDate:   Date
+  /** yyyy-MM-dd in BUSINESS_TZ — same key CalendarView emits */
+  selectedDate:   string
   selectedSlotId: string | null
   onSelectSlot:   (slotId: string) => void
 }
 
 export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot }: SlotPickerProps) {
   const daySlots = useMemo(() => {
-    const targetKey = formatInTimeZone(selectedDate, BUSINESS_TZ, 'yyyy-MM-dd')
     return slots
-      .filter(s => formatInTimeZone(parseISO(s.datetime), BUSINESS_TZ, 'yyyy-MM-dd') === targetKey)
+      .filter(s => formatInTimeZone(parseISO(s.datetime), BUSINESS_TZ, 'yyyy-MM-dd') === selectedDate)
       .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime())
   }, [slots, selectedDate])
 
