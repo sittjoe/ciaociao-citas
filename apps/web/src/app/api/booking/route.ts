@@ -12,12 +12,41 @@ import { randomUUID, randomBytes } from 'crypto'
 export const dynamic = 'force-dynamic'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024 // 5 MB
+
+async function checkBookingRateLimit(ip: string): Promise<boolean> {
+  const key       = ip.replace(/[^\w.-]/g, '_').slice(0, 128)
+  const ref       = adminDb.collection('bookingAttempts').doc(key)
+  const WINDOW_MS = 60 * 60 * 1000 // 1 hour
+  const MAX       = 3
+  const now       = Date.now()
+
+  return adminDb.runTransaction(async tx => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) {
+      tx.set(ref, { count: 1, windowStart: now })
+      return false
+    }
+    const { count, windowStart } = snap.data() as { count: number; windowStart: number }
+    if (now - windowStart > WINDOW_MS) {
+      tx.update(ref, { count: 1, windowStart: now })
+      return false
+    }
+    if (count >= MAX) return true
+    tx.update(ref, { count: count + 1 })
+    return false
+  })
+}
 const ALLOWED_MIME   = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 // Slot hold duration: pending appointments hold the slot for 30 minutes
 const HOLD_MS = 30 * 60 * 1000
 
 export async function POST(request: Request) {
   try {
+    const ip = (request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0].trim()
+    if (await checkBookingRateLimit(ip)) {
+      return NextResponse.json({ error: 'Demasiadas solicitudes. Intenta de nuevo en una hora.' }, { status: 429 })
+    }
+
     await releaseExpiredHolds()
 
     const formData = await request.formData()
