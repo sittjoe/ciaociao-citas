@@ -22,3 +22,6 @@ npm-debug.log*
 .cache/
 .temp/
 .vercel
+
+# Claude Code runtime state (locks, worktrees, plans, scheduled tasks)
+.claude/
