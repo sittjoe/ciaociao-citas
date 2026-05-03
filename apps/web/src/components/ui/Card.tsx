@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils'
 
-type CardVariant = 'flat' | 'whisper' | 'soft' | 'lift'
+type CardVariant = 'flat' | 'whisper' | 'soft' | 'lift' | 'atelier' | 'admin'
 
 interface CardProps {
   children: React.ReactNode
@@ -17,6 +17,8 @@ const variantMap: Record<CardVariant, string> = {
   whisper: 'bg-white shadow-whisper',
   soft:    'bg-white border border-ink-line shadow-soft',
   lift:    'bg-white border border-ink-line shadow-lift',
+  atelier: 'bg-porcelain border border-ink-line/80 shadow-warm',
+  admin:   'bg-admin-panel border border-admin-line',
 }
 
 export function Card({ children, variant = 'soft', className, as: Tag = 'div', onClick }: CardProps) {

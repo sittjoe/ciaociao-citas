@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
+import { motion, LayoutGroup } from '@/components/motion'
 import { BUSINESS_TZ, cn } from '@/lib/utils'
 
 interface SlotPickerProps {
@@ -29,7 +30,8 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot }
   }
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+    <LayoutGroup>
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
       {daySlots.map(slot => {
         const selected = selectedSlotId === slot.id
         return (
@@ -37,16 +39,26 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot }
             key={slot.id}
             onClick={() => onSelectSlot(slot.id)}
             className={cn(
-              'py-2.5 rounded-xl text-sm font-medium border transition-all duration-150',
+              'relative overflow-hidden py-2.5 rounded-xl text-sm font-medium border transition-colors duration-150',
               selected
-                ? 'bg-champagne text-white border-champagne shadow-pop scale-[1.03]'
-                : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-soft hover:scale-[1.02]',
+                ? 'text-white border-champagne shadow-pop'
+                : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-tint',
             )}
           >
-            {formatInTimeZone(parseISO(slot.datetime), BUSINESS_TZ, 'HH:mm')}
+            {selected && (
+              <motion.span
+                layoutId="slot-pill"
+                className="absolute inset-0 bg-champagne"
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              />
+            )}
+            <span className="relative z-10">
+              {formatInTimeZone(parseISO(slot.datetime), BUSINESS_TZ, 'HH:mm')}
+            </span>
           </button>
         )
       })}
     </div>
+    </LayoutGroup>
   )
 }

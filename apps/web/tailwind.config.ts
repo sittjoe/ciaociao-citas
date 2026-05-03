@@ -6,22 +6,33 @@ const config: Config = {
     extend: {
       colors: {
         champagne: {
-          DEFAULT: '#B89968',
-          deep:    '#9A7E50',
-          soft:    '#EFE6D3',
-          tint:    '#FAF6EE',
+          DEFAULT: 'oklch(0.66 0.083 80)',
+          deep:    'oklch(0.53 0.069 78)',
+          soft:    'oklch(0.90 0.041 82)',
+          tint:    'oklch(0.97 0.018 82)',
         },
         ink: {
-          DEFAULT: '#1A1A1A',
-          muted:   '#6B6B6B',
-          subtle:  '#A8A8A8',
-          line:    '#E8E2D4',
+          DEFAULT: 'oklch(0.18 0.009 73)',
+          muted:   'oklch(0.47 0.014 73)',
+          subtle:  'oklch(0.68 0.011 73)',
+          line:    'oklch(0.88 0.026 80)',
         },
         cream: {
-          DEFAULT: '#FAFAF7',
-          soft:    '#F4F2EC',
+          DEFAULT: 'oklch(0.982 0.008 86)',
+          soft:    'oklch(0.95 0.014 84)',
         },
         vellum: '#F7F2E8',
+        porcelain: 'oklch(0.992 0.006 86)',
+        showroom: {
+          ink: 'oklch(0.145 0.017 66)',
+          velvet: 'oklch(0.34 0.038 52)',
+          stone: 'oklch(0.89 0.024 78)',
+        },
+        admin: {
+          surface: 'oklch(0.977 0.006 82)',
+          panel:   'oklch(0.991 0.004 82)',
+          line:    'oklch(0.89 0.018 78)',
+        },
       },
       fontFamily: {
         sans:    ['var(--font-inter)', 'system-ui', 'sans-serif'],
@@ -40,10 +51,11 @@ const config: Config = {
         'display-eyebrow': '0.32em',
       },
       boxShadow: {
-        soft:    '0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04)',
-        lift:    '0 2px 4px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08)',
-        pop:     '0 8px 24px rgba(184,153,104,0.18)',
-        whisper: '0 0 0 1px #E8E2D4',
+        soft:    '0 1px 2px color-mix(in oklch, var(--showroom-ink) 5%, transparent), 0 10px 30px color-mix(in oklch, var(--showroom-ink) 7%, transparent)',
+        lift:    '0 2px 4px color-mix(in oklch, var(--showroom-ink) 8%, transparent), 0 18px 48px color-mix(in oklch, var(--showroom-ink) 12%, transparent)',
+        pop:     '0 10px 30px color-mix(in oklch, var(--champagne) 26%, transparent)',
+        warm:    '0 28px 80px color-mix(in oklch, var(--showroom-ink) 18%, transparent)',
+        whisper: '0 0 0 1px var(--ink-line)',
         'focus-ring': '0 0 0 3px rgba(184,153,104,0.18), 0 0 0 1px rgba(184,153,104,0.7)',
       },
       transitionTimingFunction: {

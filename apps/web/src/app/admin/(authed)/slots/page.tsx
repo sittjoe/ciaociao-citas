@@ -5,10 +5,11 @@ export const metadata: Metadata = { title: 'Slots' }
 
 export default function SlotsPage() {
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       <div>
+        <p className="h-eyebrow mb-2">Agenda</p>
         <h1 className="font-serif text-2xl text-ink">Slots</h1>
-        <p className="text-sm text-ink-muted mt-1">Crea y gestiona los horarios disponibles para visitas</p>
+        <p className="text-sm text-ink-muted mt-1">Crea y gestiona los horarios disponibles para visitas.</p>
       </div>
       <SlotManager />
     </div>

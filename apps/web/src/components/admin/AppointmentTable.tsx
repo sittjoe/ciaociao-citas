@@ -166,7 +166,7 @@ export function AppointmentTable() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:flex-row">
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
           <input
@@ -193,7 +193,7 @@ export function AppointmentTable() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-ink-line bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
           <TableSkeleton rows={6} cols={5} />
         ) : appointments.length === 0 ? (
@@ -204,7 +204,7 @@ export function AppointmentTable() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-ink-line">
+              <tr className="border-b border-admin-line bg-admin-surface/70">
                 {table.getFlatHeaders().map(header => (
                   <th
                     key={header.id}
@@ -235,7 +235,7 @@ export function AppointmentTable() {
               {table.getRowModel().rows.map(row => {
                 const appt = row.original
                 return (
-                  <tr key={row.id} className="border-b border-ink-line last:border-0 hover:bg-cream-soft transition-colors">
+                  <tr key={row.id} className="border-b border-admin-line last:border-0 hover:bg-champagne-tint/60 transition-colors">
                     {row.getVisibleCells().map(cell => (
                       <td
                         key={cell.id}
@@ -248,18 +248,31 @@ export function AppointmentTable() {
                       </td>
                     ))}
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => setSelected(appt)}
-                        className={cn(
-                          'text-xs focus-visible:outline-none focus-visible:shadow-focus-ring rounded',
-                          appt.status === 'pending'
-                            ? 'text-champagne-deep hover:text-champagne underline'
-                            : 'text-ink-muted hover:text-ink',
+                      <div className="flex items-center gap-2">
+                        {appt.identificationUrl && (
+                          <a
+                            href={`/api/admin/id-url?path=${encodeURIComponent(appt.identificationUrl)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg p-1.5 text-ink-subtle transition-colors hover:bg-champagne-tint hover:text-champagne"
+                            aria-label={`Ver identificación de ${appt.name}`}
+                          >
+                            <FileText size={14} strokeWidth={1.5} />
+                          </a>
                         )}
-                        aria-label={`${appt.status === 'pending' ? 'Gestionar' : 'Ver'} cita de ${appt.name}`}
-                      >
-                        {appt.status === 'pending' ? 'Gestionar' : 'Ver'}
-                      </button>
+                        <button
+                          onClick={() => setSelected(appt)}
+                          className={cn(
+                            'rounded-lg px-2.5 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:shadow-focus-ring',
+                            appt.status === 'pending'
+                              ? 'bg-champagne-tint text-champagne-deep hover:bg-champagne-soft'
+                              : 'text-ink-muted hover:bg-admin-surface hover:text-ink',
+                          )}
+                          aria-label={`${appt.status === 'pending' ? 'Gestionar' : 'Ver'} cita de ${appt.name}`}
+                        >
+                          {appt.status === 'pending' ? 'Gestionar' : 'Ver'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -287,7 +300,15 @@ export function AppointmentTable() {
       >
         {selected && (
           <div className="space-y-4">
-            <dl className="divide-y divide-ink-line text-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="h-eyebrow mb-1">Solicitud</p>
+                <h3 className="font-serif text-2xl font-light text-ink">{selected.name}</h3>
+              </div>
+              <StatusBadge status={selected.status} />
+            </div>
+
+            <dl className="divide-y divide-admin-line rounded-2xl border border-admin-line bg-admin-surface/60 px-4 text-sm">
               {[
                 ['Código',    selected.confirmationCode],
                 ['Nombre',    selected.name],
@@ -321,7 +342,7 @@ export function AppointmentTable() {
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-ink-line bg-cream-soft px-3 py-2.5">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
               <div className="flex items-center gap-2 min-w-0">
                 <FileText size={16} strokeWidth={1.5} className="text-champagne shrink-0" />
                 <div className="min-w-0">

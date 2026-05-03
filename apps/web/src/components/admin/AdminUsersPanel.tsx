@@ -107,7 +107,7 @@ export function AdminUsersPanel() {
 
   return (
     <div className="space-y-5">
-      <form onSubmit={addAdmin} className="card-soft flex flex-col sm:flex-row gap-3 sm:items-end">
+      <form onSubmit={addAdmin} className="flex flex-col gap-3 rounded-2xl border border-admin-line bg-admin-panel p-4 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label className="label-clean">Email de Firebase Auth</label>
           <input
@@ -124,7 +124,7 @@ export function AdminUsersPanel() {
         </Button>
       </form>
 
-      <div className="overflow-hidden rounded-2xl border border-ink-line bg-white">
+      <div className="overflow-hidden rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
           <div className="p-5 space-y-3">
             {[1, 2, 3].map(i => (
@@ -142,9 +142,9 @@ export function AdminUsersPanel() {
             No hay admins. Los correos en <code className="text-xs bg-cream-soft px-1 rounded">ADMIN_BOOTSTRAP_EMAILS</code> pueden crear el primer registro.
           </p>
         ) : (
-          <div className="divide-y divide-ink-line">
+          <div className="divide-y divide-admin-line">
             {admins.map(admin => (
-              <div key={admin.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4">
+              <div key={admin.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 hover:bg-champagne-tint/50">
                 <div className="flex items-center gap-3 min-w-0">
                   <InitialsAvatar email={admin.email} />
                   <div className="min-w-0">

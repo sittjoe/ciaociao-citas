@@ -4,18 +4,25 @@
 
 /* ─── Design tokens ──────────────────────────────────────────────────────── */
 :root {
-  --background:     #FAFAF7;
-  --surface:        #FFFFFF;
-  --surface-soft:   #F4F2EC;
-  --vellum:         #F7F2E8;
-  --ink:            #1A1A1A;
-  --ink-muted:      #6B6B6B;
-  --ink-subtle:     #A8A8A8;
-  --ink-line:       #E8E2D4;
-  --champagne:      #B89968;
-  --champagne-deep: #9A7E50;
-  --champagne-soft: #EFE6D3;
-  --champagne-tint: #FAF6EE;
+  --background:     oklch(0.982 0.008 86);
+  --surface:        oklch(0.992 0.006 86);
+  --surface-soft:   oklch(0.95 0.014 84);
+  --vellum:         oklch(0.955 0.027 82);
+  --porcelain:      oklch(0.992 0.006 86);
+  --admin-surface:  oklch(0.977 0.006 82);
+  --admin-panel:    oklch(0.991 0.004 82);
+  --admin-line:     oklch(0.89 0.018 78);
+  --showroom-ink:   oklch(0.145 0.017 66);
+  --showroom-velvet:oklch(0.34 0.038 52);
+  --showroom-stone: oklch(0.89 0.024 78);
+  --ink:            oklch(0.18 0.009 73);
+  --ink-muted:      oklch(0.47 0.014 73);
+  --ink-subtle:     oklch(0.68 0.011 73);
+  --ink-line:       oklch(0.88 0.026 80);
+  --champagne:      oklch(0.66 0.083 80);
+  --champagne-deep: oklch(0.53 0.069 78);
+  --champagne-soft: oklch(0.90 0.041 82);
+  --champagne-tint: oklch(0.97 0.018 82);
   --ease:           cubic-bezier(0.16, 1, 0.3, 1);
   --ease-quart:     cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -75,6 +82,26 @@ input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
+  .btn-atelier {
+    @apply inline-flex items-center justify-center gap-2
+           bg-champagne text-porcelain font-semibold
+           py-3 px-6 rounded-xl
+           hover:bg-champagne-deep hover:-translate-y-px hover:shadow-pop
+           active:scale-[0.98]
+           transition-all duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .surface-atelier {
+    background:
+      radial-gradient(circle at 78% 18%, color-mix(in oklch, var(--champagne-soft) 60%, transparent), transparent 26rem),
+      linear-gradient(180deg, var(--porcelain), var(--background));
+  }
+
+  .atelier-rule {
+    @apply h-px w-14 bg-champagne;
+  }
+
   .btn-outline-light {
     @apply inline-flex items-center justify-center gap-2
            border border-champagne text-champagne font-medium
@@ -119,7 +146,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
   .status-pending  { @apply bg-amber-50   text-amber-700   border border-amber-200; }
   .status-accepted { @apply bg-emerald-50 text-emerald-700 border border-emerald-200; }
   .status-rejected { @apply bg-red-50     text-red-600     border border-red-200; }
-  .status-cancelled{ @apply bg-ink-line/40 text-ink-muted  border border-ink-line; }
+  .status-cancelled{ @apply bg-cream-soft text-ink-muted border border-ink-line; }
 
 }
 

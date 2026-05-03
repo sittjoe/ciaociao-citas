@@ -65,7 +65,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.35 }}
             className={cn(
-              'relative w-full bg-white border border-ink-line rounded-2xl shadow-lift p-6',
+              'relative w-full bg-admin-panel border border-admin-line rounded-2xl shadow-lift p-6',
               sizeMap[size],
             )}
           >

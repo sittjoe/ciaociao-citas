@@ -19,16 +19,16 @@ const cards = (stats: AdminStats) => [
 
 export function StatsCards({ stats }: { stats: AdminStats }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       {cards(stats).map(({ label, value, color, Icon }) => (
-        <Card key={label} variant="soft" className="p-5 flex flex-col gap-2">
+        <Card key={label} variant="admin" className="flex flex-col gap-2 p-4">
           <div className="flex items-center justify-between gap-2">
             <p className="h-eyebrow truncate">{label}</p>
             <Icon size={16} strokeWidth={1.5} className={cn(color, 'shrink-0')} />
           </div>
           <NumberRoll
             value={value}
-            className={cn('text-display-sm font-light font-serif tabular-nums', color)}
+            className={cn('text-3xl font-light font-serif tabular-nums leading-none', color)}
           />
         </Card>
       ))}

@@ -6,6 +6,7 @@ import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval,
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { motion, LayoutGroup } from '@/components/motion'
 import { BUSINESS_TZ, cn } from '@/lib/utils'
 
 interface CalendarViewProps {
@@ -72,7 +73,8 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7 gap-1">
+      <LayoutGroup>
+      <div className="grid grid-cols-7 gap-1.5">
         {startPad.map(i => <div key={`pad-${i}`} />)}
 
         {days.map(day => {
@@ -88,21 +90,28 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
               disabled={!hasSlots || isPast}
               onClick={() => onSelectDate(day)}
               className={cn(
-                'aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-all duration-150',
+                'relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-colors duration-150',
                 isPast && 'opacity-30 cursor-not-allowed',
                 !isPast && !hasSlots && 'text-ink-subtle cursor-not-allowed',
                 !isPast && hasSlots && !isSel && [
                   'text-ink cursor-pointer',
-                  'hover:bg-champagne-soft hover:scale-105',
+                  'hover:bg-champagne-tint',
                 ],
-                isSel && 'bg-champagne text-white font-semibold shadow-pop scale-105',
+                isSel && 'text-white font-semibold',
                 isNow && !isSel && 'ring-1 ring-champagne',
               )}
             >
-              <span>{format(day, 'd')}</span>
+              {isSel && (
+                <motion.span
+                  layoutId="cal-selected"
+                  className="absolute inset-0 rounded-xl bg-champagne shadow-pop"
+                  transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                />
+              )}
+              <span className="relative z-10">{format(day, 'd')}</span>
               {hasSlots && !isPast && (
                 <span className={cn(
-                  'w-1 h-1 rounded-full mt-0.5',
+                  'relative z-10 w-1 h-1 rounded-full mt-0.5',
                   isSel ? 'bg-white/70' : 'bg-champagne',
                 )} />
               )}
@@ -110,6 +119,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
           )
         })}
       </div>
+      </LayoutGroup>
     </div>
   )
 }

@@ -70,17 +70,25 @@ async function getStats(): Promise<AdminStats> {
 
 export default async function AdminDashboard() {
   const stats = await getStats()
+  const needsAttention = stats.totalPending + stats.upcomingSlots === 0
 
   return (
-    <div className="space-y-8 max-w-5xl">
-      <div>
-        <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Dashboard</h1>
-        <p className="text-sm text-ink-muted mt-1 italic">Resumen de la actividad del showroom</p>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="h-eyebrow mb-2">Operación</p>
+          <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Dashboard</h1>
+          <p className="text-sm text-ink-muted mt-1">Pendientes, próximos horarios y citas confirmadas.</p>
+        </div>
+        <div className="rounded-xl border border-admin-line bg-admin-panel px-4 py-3 text-xs text-ink-muted">
+          {needsAttention ? 'Sin pendientes ni slots próximos' : `${stats.totalPending} pendiente${stats.totalPending === 1 ? '' : 's'} por revisar`}
+        </div>
       </div>
 
       <StatsCards stats={stats} />
 
-      <Card variant="soft">
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <Card variant="admin">
         <CardHeader>
           <h2 className="font-serif text-lg font-light text-ink">Próximas citas</h2>
         </CardHeader>
@@ -88,6 +96,25 @@ export default async function AdminDashboard() {
           <UpcomingList appointments={stats.nextAppointments} />
         </CardBody>
       </Card>
+
+      <Card variant="admin" className="p-5">
+        <p className="h-eyebrow mb-4">Atención rápida</p>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between border-b border-admin-line pb-3">
+            <span className="text-ink-muted">Pendientes</span>
+            <span className="font-medium text-amber-700">{stats.totalPending}</span>
+          </div>
+          <div className="flex items-center justify-between border-b border-admin-line pb-3">
+            <span className="text-ink-muted">Hoy</span>
+            <span className="font-medium text-emerald-700">{stats.acceptedToday}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-ink-muted">Slots 7 días</span>
+            <span className="font-medium text-champagne-deep">{stats.upcomingSlots}</span>
+          </div>
+        </div>
+      </Card>
+      </div>
     </div>
   )
 }

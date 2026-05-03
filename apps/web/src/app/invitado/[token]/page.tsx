@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { ShieldCheck, Clock, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -88,8 +89,16 @@ export default function InvitadoPage() {
   }, [idFile, token])
 
   return (
-    <div className="min-h-screen bg-cream flex items-start justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen overflow-hidden bg-cream px-4 py-10">
+      <Image
+        src="/atelier-vivo-hero.png"
+        alt="Mesa de atelier con joyería fina"
+        fill
+        sizes="100vw"
+        className="object-cover opacity-14"
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.82),oklch(0.982_0.008_86/0.98))]" />
+      <div className="relative z-10 mx-auto w-full max-w-md">
 
         {/* Brand header */}
         <div className="text-center mb-10">
@@ -109,14 +118,14 @@ export default function InvitadoPage() {
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
           >
             {pageState === 'loading' && (
-              <Card variant="soft" className="text-center py-12">
+              <Card variant="atelier" className="text-center py-12">
                 <SpinnerArc />
                 <p className="text-sm text-ink-muted">Cargando…</p>
               </Card>
             )}
 
             {pageState === 'error' && (
-              <Card variant="soft" className="text-center space-y-3 py-8">
+              <Card variant="atelier" className="text-center space-y-3 px-6 py-8">
                 <AlertCircle size={36} strokeWidth={1.5} className="text-red-400 mx-auto" />
                 <h2 className="font-serif font-light text-xl text-ink">Link inválido</h2>
                 <p className="text-sm text-ink-muted leading-relaxed">
@@ -127,7 +136,7 @@ export default function InvitadoPage() {
             )}
 
             {pageState === 'expired' && (
-              <Card variant="soft" className="text-center space-y-3 py-8">
+              <Card variant="atelier" className="text-center space-y-3 px-6 py-8">
                 <Clock size={36} strokeWidth={1.5} className="text-amber-400 mx-auto" />
                 <h2 className="font-serif font-light text-xl text-ink">Plazo vencido</h2>
                 <p className="text-sm text-ink-muted leading-relaxed">
@@ -139,7 +148,7 @@ export default function InvitadoPage() {
             )}
 
             {pageState === 'revoked' && (
-              <Card variant="soft" className="text-center space-y-3 py-8">
+              <Card variant="atelier" className="text-center space-y-3 px-6 py-8">
                 <AlertCircle size={36} strokeWidth={1.5} className="text-ink-subtle mx-auto" />
                 <h2 className="font-serif font-light text-xl text-ink">Invitación no activa</h2>
                 <p className="text-sm text-ink-muted leading-relaxed">
@@ -150,7 +159,7 @@ export default function InvitadoPage() {
             )}
 
             {pageState === 'already_verified' && (
-              <Card variant="soft" className="text-center space-y-3 py-8">
+              <Card variant="atelier" className="text-center space-y-3 px-6 py-8">
                 <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
                   <ShieldCheck size={28} strokeWidth={1.5} className="text-emerald-500" />
                 </div>
@@ -162,7 +171,7 @@ export default function InvitadoPage() {
             )}
 
             {pageState === 'done' && (
-              <Card variant="soft" className="text-center space-y-4 py-8">
+              <Card variant="atelier" className="text-center space-y-4 px-6 py-8">
                 <div className="w-16 h-16 rounded-full bg-champagne-tint flex items-center justify-center mx-auto">
                   <ShieldCheck size={30} strokeWidth={1.5} className="text-champagne" />
                 </div>
@@ -177,8 +186,11 @@ export default function InvitadoPage() {
 
             {pageState === 'ready' && guest && appt && (
               <div className="space-y-4">
-                <Card variant="soft" className="space-y-4">
-                  <h2 className="font-serif font-light text-xl text-ink">Verifica tu identidad</h2>
+                <Card variant="atelier" className="space-y-4 p-6">
+                  <div>
+                    <p className="h-eyebrow mb-2">Invitación privada</p>
+                    <h2 className="font-serif font-light text-2xl text-ink">Verifica tu identidad</h2>
+                  </div>
                   <p className="text-sm text-ink-muted leading-relaxed">
                     <strong>{appt.hostName}</strong> te ha invitado a una visita privada al showroom de Ciao Ciao Joyería.
                     Para poder ingresar, necesitamos verificar tu identidad.
@@ -203,7 +215,7 @@ export default function InvitadoPage() {
                   </div>
                 </Card>
 
-                <Card variant="soft" className="space-y-4">
+                <Card variant="atelier" className="space-y-4 p-6">
                   <div>
                     <h3 className="font-medium text-ink text-sm">Sube tu identificación oficial</h3>
                     <p className="text-xs text-ink-muted mt-0.5">

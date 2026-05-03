@@ -18,8 +18,8 @@ const navItems = [
 
 function Logomark() {
   return (
-    <div className="px-5 py-5 border-b border-ink-line">
-      <p className="font-serif text-xl font-light tracking-[0.22em] uppercase text-ink leading-none">
+    <div className="border-b border-admin-line px-4 py-4">
+      <p className="font-serif text-lg font-light tracking-[0.22em] uppercase text-ink leading-none">
         Ciao Ciao
       </p>
       <p className="text-[0.625rem] tracking-[0.28em] uppercase text-ink-subtle mt-1 font-medium">
@@ -32,7 +32,7 @@ function Logomark() {
 function NavList({ pathname, onClose }: { pathname: string; onClose: () => void }) {
   return (
     <LayoutGroup>
-      <nav className="flex-1 p-3 space-y-0.5">
+      <nav className="flex-1 p-2.5 space-y-0.5">
         {navItems.map(({ href, label, Icon }) => {
           const active = pathname === href
           return (
@@ -41,14 +41,14 @@ function NavList({ pathname, onClose }: { pathname: string; onClose: () => void 
               href={href}
               onClick={onClose}
               className={cn(
-                'relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring',
-                active ? 'text-champagne font-medium' : 'text-ink-muted hover:text-ink hover:bg-cream-soft',
+                'relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring',
+                active ? 'text-champagne-deep font-medium' : 'text-ink-muted hover:text-ink hover:bg-admin-surface',
               )}
             >
               {active && (
                 <motion.span
                   layoutId="nav-pill"
-                  className="absolute inset-0 rounded-xl bg-champagne-soft"
+                  className="absolute inset-0 rounded-lg bg-champagne-tint"
                   transition={{ ease: [0.25, 1, 0.5, 1], duration: 0.3 }}
                 />
               )}
@@ -90,7 +90,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
     .join('')
 
   return (
-    <div className="min-h-screen flex bg-cream text-ink">
+    <div className="min-h-screen flex bg-admin-surface text-ink">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 z-[60] bg-white px-3 py-2 rounded-lg text-sm font-medium text-champagne-deep border border-champagne-soft shadow-lift"
@@ -99,10 +99,10 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 bg-white border-r border-ink-line fixed inset-y-0 left-0">
+      <aside className="hidden lg:flex flex-col w-56 bg-admin-panel border-r border-admin-line fixed inset-y-0 left-0">
         <Logomark />
         <NavList pathname={pathname} onClose={() => {}} />
-        <div className="p-3 border-t border-ink-line">
+        <div className="p-3 border-t border-admin-line">
           <div className="flex items-center gap-2.5 px-3 pb-2.5">
             <span className="w-7 h-7 rounded-full bg-champagne-soft border border-champagne-soft/60 flex items-center justify-center text-[0.65rem] font-semibold text-champagne-deep shrink-0">
               {initials}
@@ -119,7 +119,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
       </aside>
 
       {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-white border-b border-ink-line">
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-admin-panel border-b border-admin-line">
         <p className="font-serif tracking-[0.2em] uppercase text-ink">Ciao Ciao</p>
         <button
           onClick={() => setOpen(!open)}
@@ -153,11 +153,11 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ ease: [0.25, 1, 0.5, 1], duration: 0.32 }}
-              className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-white border-r border-ink-line lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-admin-panel border-r border-admin-line lg:hidden"
             >
               <Logomark />
               <NavList pathname={pathname} onClose={() => setOpen(false)} />
-              <div className="p-3 border-t border-ink-line">
+              <div className="p-3 border-t border-admin-line">
                 <div className="flex items-center gap-2.5 px-3 pb-2.5">
                   <span className="w-7 h-7 rounded-full bg-champagne-soft flex items-center justify-center text-[0.65rem] font-semibold text-champagne-deep shrink-0">
                     {initials}
@@ -178,7 +178,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
 
       {/* Main content */}
       <main id="main-content" className="flex-1 lg:ml-56 pt-16 lg:pt-0">
-        <div className="p-5 sm:p-8">
+        <div className="p-4 sm:p-6 lg:p-8">
           {children}
         </div>
       </main>

@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { formatDate, formatTime } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import { CalendarPlus, Gem } from 'lucide-react'
 import type { AppointmentStatus } from '@/types'
 import CancelButton from './CancelButton'
 
@@ -15,7 +17,7 @@ interface PageProps { params: Promise<{ code: string }> }
 
 const STATUS_MESSAGES: Record<AppointmentStatus, string> = {
   pending:   'Tu solicitud fue recibida y está pendiente de revisión por nuestro equipo.',
-  accepted:  'Tu cita está confirmada. ¡Te esperamos en el showroom!',
+  accepted:  'Tu cita está confirmada. Te esperamos en el showroom.',
   rejected:  'En este momento no podemos confirmar tu cita. Te invitamos a agendar en otro horario.',
   cancelled: 'Esta cita fue cancelada.',
 }
@@ -48,58 +50,79 @@ export default async function ReservaPage({ params }: PageProps) {
   const canCancel = appt.status === 'pending' || appt.status === 'accepted'
 
   return (
-    <main className="min-h-screen flex flex-col items-center px-4 py-12 sm:py-20 bg-cream">
-      {/* Brand header */}
-      <header className="text-center mb-10">
-        <h1 className="font-serif font-light text-4xl text-ink tracking-tight leading-none">
-          Ciao Ciao
-        </h1>
-        <div className="w-8 h-px bg-champagne mx-auto my-3" />
-        <p className="h-eyebrow">Joyería · Showroom Privado</p>
-      </header>
+    <main className="min-h-screen bg-cream">
+      <section className="relative min-h-screen overflow-hidden px-4 py-10 sm:px-8 sm:py-16">
+        <Image
+          src="/atelier-vivo-hero.png"
+          alt="Detalle de joyería fina en mesa de atelier"
+          fill
+          sizes="100vw"
+          className="object-cover opacity-18"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.78),oklch(0.982_0.008_86/0.96))]" />
 
-      <Card variant="soft" className="w-full max-w-md space-y-5">
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif font-light text-xl text-ink">Tu cita</h2>
-          <StatusBadge status={appt.status} />
-        </div>
+        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
+          <header>
+            <p className="mb-4 text-[0.6rem] font-semibold uppercase tracking-display-eyebrow text-champagne">
+              Ciao Ciao · Showroom privado
+            </p>
+            <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">
+              Estado de tu cita
+            </h1>
+            <p className="mt-6 max-w-md text-sm leading-7 text-ink-muted">
+              Conserva este código. El equipo lo usará para ubicar tu solicitud y preparar tu visita.
+            </p>
+          </header>
 
-        <p className="text-sm text-ink-muted">{STATUS_MESSAGES[appt.status]}</p>
-
-        <div className="divide-y divide-ink-line text-sm">
-          {([
-            ['Código',  appt.confirmationCode],
-            ['Nombre',  appt.name],
-            ['Fecha',   formatDate(appt.slotDatetime)],
-            ['Hora',    formatTime(appt.slotDatetime)],
-            ...(appt.notes ? [['Notas', appt.notes]] : [] as [string, string][]),
-          ] as [string, string][]).map(([label, value]) => (
-            <div key={label} className="flex justify-between py-2.5">
-              <span className="text-ink-muted">{label}</span>
-              <span className="text-ink text-right max-w-[60%]">{value}</span>
+          <Card variant="atelier" className="w-full space-y-5 p-6 sm:p-7">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="h-eyebrow mb-2">Tu cita</p>
+                <h2 className="font-serif text-2xl font-light text-ink">{appt.name}</h2>
+              </div>
+              <StatusBadge status={appt.status} />
             </div>
-          ))}
+
+            <p className="text-sm leading-6 text-ink-muted">{STATUS_MESSAGES[appt.status]}</p>
+
+            <div className="rounded-2xl border border-ink-line bg-porcelain/70 px-4 py-2 text-sm">
+              {([
+                ['Código',  appt.confirmationCode],
+                ['Fecha',   formatDate(appt.slotDatetime)],
+                ['Hora',    formatTime(appt.slotDatetime)],
+                ...(appt.notes ? [['Notas', appt.notes]] : [] as [string, string][]),
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-5 border-b border-ink-line py-2.5 last:border-0">
+                  <span className="text-ink-muted">{label}</span>
+                  <span className="max-w-[60%] text-right text-ink">{value}</span>
+                </div>
+              ))}
+            </div>
+
+            {appt.status === 'accepted' && (
+              <a
+                href={`/api/calendar/${appt.id}`}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
+              >
+                <CalendarPlus size={15} strokeWidth={1.5} />
+                Agregar a mi calendario
+              </a>
+            )}
+
+            {canCancel && <CancelButton token={appt.cancelToken} />}
+
+            <div className="flex items-center justify-between border-t border-ink-line pt-3">
+              <span className="inline-flex items-center gap-2 text-xs text-ink-subtle">
+                <Gem size={13} strokeWidth={1.5} className="text-champagne" />
+                Showroom privado CDMX
+              </span>
+              <a href="/" className="text-xs font-medium text-champagne hover:text-champagne-deep transition-colors">
+                Nueva cita
+              </a>
+            </div>
+          </Card>
         </div>
-
-        {appt.status === 'accepted' && (
-          <a
-            href={`/api/calendar/${appt.id}`}
-            className="flex items-center justify-center gap-2 w-full py-2.5 px-5 rounded-xl
-                       border border-champagne text-champagne text-sm font-medium
-                       hover:bg-champagne-soft transition-colors duration-200"
-          >
-            Agregar a mi calendario (.ics)
-          </a>
-        )}
-
-        {canCancel && <CancelButton token={appt.cancelToken} />}
-
-        <div className="pt-2 border-t border-ink-line text-center">
-          <a href="/" className="text-xs text-ink-muted hover:text-champagne transition-colors">
-            Agendar nueva cita →
-          </a>
-        </div>
-      </Card>
+      </section>
     </main>
   )
 }

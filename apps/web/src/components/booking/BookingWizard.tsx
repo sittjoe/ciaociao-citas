@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { CheckCircle2, ChevronLeft, CalendarPlus, ExternalLink } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ExternalLink, Send, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
@@ -121,11 +121,30 @@ export function BookingWizard() {
   }, [selectedSlot, idFile, guests, goTo])
 
   return (
-    <div className="w-full max-w-lg mx-auto">
+    <div className="w-full max-w-2xl mx-auto">
       {/* Progress bar */}
       {step !== 'done' && (
         <div className="mb-6">
-          <div className="flex items-center gap-1 mb-2">
+          <div className="mb-3 hidden grid-cols-5 gap-2 sm:grid">
+            {STEPS.slice(0, -1).map((s, i) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => i < stepIndex && goTo(s)}
+                disabled={i > stepIndex}
+                className={cn(
+                  'rounded-xl border px-3 py-2 text-left transition-colors',
+                  i < stepIndex && 'border-champagne-soft bg-champagne-tint text-champagne-deep',
+                  i === stepIndex && 'border-champagne bg-porcelain text-ink shadow-soft',
+                  i > stepIndex && 'border-ink-line bg-porcelain/70 text-ink-subtle',
+                )}
+              >
+                <span className="block text-[0.62rem] font-semibold uppercase tracking-eyebrow">{i + 1}</span>
+                <span className="block truncate text-xs font-medium">{STEP_LABELS[i]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 mb-2 sm:hidden">
             {STEPS.slice(0, -1).map((s, i) => (
               <div
                 key={s}
@@ -165,8 +184,14 @@ export function BookingWizard() {
         >
           {/* STEP: Calendar */}
           {step === 'calendar' && (
-            <Card variant="whisper" className="p-6">
-              <h2 className="font-serif font-light text-xl text-ink mb-5">Selecciona una fecha</h2>
+            <Card variant="atelier" className="p-5 sm:p-7">
+              <div className="mb-5 flex items-end justify-between gap-4">
+                <div>
+                  <p className="h-eyebrow mb-2">Paso 1</p>
+                  <h2 className="font-serif font-light text-2xl text-ink">Selecciona una fecha</h2>
+                </div>
+                <span className="hidden text-xs text-ink-muted sm:block">Horarios CDMX</span>
+              </div>
               {loadingSlots ? (
                 <div className="h-64 shimmer rounded-xl" />
               ) : slots.length === 0 ? (
@@ -192,10 +217,13 @@ export function BookingWizard() {
 
           {/* STEP: Slot picker */}
           {step === 'slots' && selectedDate && (
-            <Card variant="whisper" className="space-y-4">
-              <h2 className="font-serif font-light text-xl text-ink capitalize">
-                {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
-              </h2>
+            <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
+              <div>
+                <p className="h-eyebrow mb-2">Paso 2</p>
+                <h2 className="font-serif font-light text-2xl text-ink capitalize">
+                  {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
+                </h2>
+              </div>
               <SlotPicker
                 slots={slots}
                 selectedDate={selectedDate}
@@ -203,7 +231,7 @@ export function BookingWizard() {
                 onSelectSlot={id => setSelectedSlot(slots.find(s => s.id === id) ?? null)}
               />
               {selectedSlot && (
-                <Button className="w-full" onClick={() => goTo('form')}>Continuar →</Button>
+                <Button className="w-full" onClick={() => goTo('form')}>Continuar</Button>
               )}
             </Card>
           )}
@@ -238,8 +266,11 @@ export function BookingWizard() {
                 goTo('upload')
               }}
             >
-              <Card variant="whisper" className="space-y-4">
-                <h2 className="font-serif font-light text-xl text-ink">Tus datos</h2>
+              <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
+                <div>
+                  <p className="h-eyebrow mb-2">Paso 3</p>
+                  <h2 className="font-serif font-light text-2xl text-ink">Tus datos</h2>
+                </div>
 
                 <Field label="Nombre completo" required error={errors.name?.message}>
                   {(id, ariaProps) => (
@@ -314,23 +345,24 @@ export function BookingWizard() {
                   />
                 </div>
 
-                <Button type="submit" className="w-full">Continuar →</Button>
+                <Button type="submit" className="w-full">Continuar</Button>
               </Card>
             </form>
           )}
 
           {/* STEP: ID upload */}
           {step === 'upload' && (
-            <Card variant="whisper" className="space-y-4">
+            <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
               <div>
-                <h2 className="font-serif font-light text-xl text-ink">Identificación oficial</h2>
+                <p className="h-eyebrow mb-2">Paso 4</p>
+                <h2 className="font-serif font-light text-2xl text-ink">Identificación oficial</h2>
                 <p className="text-sm text-ink-muted mt-1">
                   Requerida para confirmar tu visita al showroom privado.
                 </p>
               </div>
               <IDUploader value={idFile} onChange={setIdFile} />
               <Button className="w-full" disabled={!idFile} onClick={() => goTo('review')}>
-                Continuar →
+                <ShieldCheck size={15} strokeWidth={1.5} /> Continuar
               </Button>
             </Card>
           )}
@@ -344,8 +376,11 @@ export function BookingWizard() {
                 if (errs.name || errs.email || errs.phone || errs.notes) goTo('form')
               })}
             >
-              <Card variant="whisper" className="space-y-5">
-                <h2 className="font-serif font-light text-xl text-ink">Confirmar solicitud</h2>
+              <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
+                <div>
+                  <p className="h-eyebrow mb-2">Paso 5</p>
+                  <h2 className="font-serif font-light text-2xl text-ink">Confirmar solicitud</h2>
+                </div>
 
                 <div className="divide-y divide-ink-line">
                   {([
@@ -377,7 +412,7 @@ export function BookingWizard() {
                 </p>
 
                 <Button type="submit" loading={submitting} className="w-full">
-                  Enviar solicitud
+                  <Send size={15} strokeWidth={1.5} /> Enviar solicitud
                 </Button>
               </Card>
             </form>
@@ -385,15 +420,20 @@ export function BookingWizard() {
 
           {/* STEP: Done */}
           {step === 'done' && (
-            <Card variant="whisper" className="text-center space-y-6 py-8">
+            <Card variant="atelier" className="text-center space-y-6 px-6 py-9">
               <div className="flex justify-center">
-                <div className="w-16 h-16 rounded-full bg-champagne-tint flex items-center justify-center">
+                <motion.div
+                  initial={{ scale: 0.92, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
+                  className="w-16 h-16 rounded-full bg-champagne-tint border border-champagne-soft flex items-center justify-center"
+                >
                   <CheckCircle2 size={32} strokeWidth={1.5} className="text-champagne" />
-                </div>
+                </motion.div>
               </div>
 
               <div className="space-y-2">
-                <h2 className="font-serif font-light text-2xl text-ink">¡Solicitud recibida!</h2>
+                <h2 className="font-serif font-light text-3xl text-ink">Solicitud recibida</h2>
                 <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
                   Revisaremos tu solicitud y te notificaremos a la brevedad por email.
                 </p>

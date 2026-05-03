@@ -131,8 +131,11 @@ export function SlotManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-serif text-xl font-light text-ink">Slots disponibles</h2>
+      <div className="flex flex-col gap-3 rounded-2xl border border-admin-line bg-admin-panel p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="h-eyebrow mb-1">Disponibilidad</p>
+          <h2 className="font-serif text-xl font-light text-ink">Slots disponibles</h2>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setFutureOnly(v => !v)}
@@ -152,7 +155,7 @@ export function SlotManager() {
       </div>
 
       {/* Slots list */}
-      <div className="overflow-x-auto rounded-2xl border border-ink-line bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
           <TableSkeleton rows={5} cols={3} />
         ) : visibleSlots.length === 0 ? (
@@ -169,7 +172,7 @@ export function SlotManager() {
           <LayoutGroup>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-ink-line">
+                <tr className="border-b border-admin-line bg-admin-surface/70">
                   {['Fecha y hora', 'Estado', 'Acciones'].map(h => (
                     <th key={h} className="px-4 py-3 text-left h-eyebrow text-ink-muted">{h}</th>
                   ))}
@@ -185,7 +188,7 @@ export function SlotManager() {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="border-b border-ink-line last:border-0 hover:bg-cream-soft"
+                      className="border-b border-admin-line last:border-0 hover:bg-champagne-tint/60"
                     >
                       <td className="px-4 py-3 text-ink">{formatShortDate(slot.datetime)}</td>
                       <td className="px-4 py-3">
@@ -239,9 +242,9 @@ export function SlotManager() {
       />
 
       {/* Add slots modal */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Agregar slots" size="lg">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Crear disponibilidad" size="lg">
         <div className="space-y-5">
-          <div>
+          <div className="rounded-2xl border border-admin-line bg-admin-surface p-4">
             <p className="label-clean mb-3">Selecciona fechas</p>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
               <LayoutGroup>
@@ -270,7 +273,7 @@ export function SlotManager() {
             </div>
           </div>
 
-          <div>
+          <div className="rounded-2xl border border-admin-line bg-admin-surface p-4">
             <p className="label-clean mb-3">Selecciona horarios</p>
             <LayoutGroup>
               <div className="flex flex-wrap gap-2">
@@ -306,7 +309,7 @@ export function SlotManager() {
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-2 border-t border-ink-line">
+          <div className="flex justify-between items-center pt-2 border-t border-admin-line">
             <p className="text-xs text-ink-muted">
               {selectedDates.size} fecha{selectedDates.size !== 1 ? 's' : ''} ×{' '}
               {selectedTimes.size} horario{selectedTimes.size !== 1 ? 's' : ''} ={' '}

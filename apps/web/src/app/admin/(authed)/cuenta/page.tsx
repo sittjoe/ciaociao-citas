@@ -81,14 +81,16 @@ export default function CuentaPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-lg">
+    <div className="space-y-8 max-w-2xl">
       <div>
+        <p className="h-eyebrow mb-2">Seguridad</p>
         <h1 className="font-serif text-display-sm font-light text-ink">Mi cuenta</h1>
         <p className="text-sm text-ink-muted mt-1">Actualiza tus credenciales de acceso al panel.</p>
       </div>
 
+      <div className="grid gap-4 lg:grid-cols-2">
       <form onSubmit={changePassword}>
-        <Card variant="soft" className="p-6 space-y-5">
+        <Card variant="admin" className="p-6 space-y-5">
           <h2 className="h-eyebrow text-ink">Cambiar contraseña</h2>
 
           <Field label="Nueva contraseña" required>
@@ -149,7 +151,7 @@ export default function CuentaPage() {
       </form>
 
       <form onSubmit={changeEmail}>
-        <Card variant="soft" className="p-6 space-y-5">
+        <Card variant="admin" className="p-6 space-y-5">
           <h2 className="h-eyebrow text-ink">Cambiar email</h2>
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             Al guardar, tu sesión se cerrará y deberás iniciar sesión con el nuevo email.
@@ -175,6 +177,7 @@ export default function CuentaPage() {
           </Button>
         </Card>
       </form>
+      </div>
     </div>
   )
 }
