@@ -21,11 +21,12 @@ import { GuestsList } from './GuestsList'
 import { formatShortDate, csvRow, cn } from '@/lib/utils'
 import type { Appointment, AppointmentStatus } from '@/types'
 
-type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt'> & {
+type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt' | 'clientConfirmedAt'> & {
   slotDatetime: string
   createdAt: string
   updatedAt?: string
   decidedAt?: string | null
+  clientConfirmedAt?: string | null
 }
 
 const col = createColumnHelper<SerialAppt>()
