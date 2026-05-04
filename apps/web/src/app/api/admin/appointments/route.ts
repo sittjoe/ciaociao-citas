@@ -76,6 +76,8 @@ export async function GET(request: Request) {
         decidedBy:        d.decidedBy ?? null,
         decidedAt:        d.decidedAt ? (d.decidedAt as Timestamp)?.toDate().toISOString() : null,
         adminNote:        d.adminNote ?? null,
+        clientConfirmed:  d.clientConfirmed ?? false,
+        clientConfirmedAt: d.clientConfirmedAt ? (d.clientConfirmedAt as Timestamp)?.toDate().toISOString() : null,
         createdAt:        (d.createdAt as Timestamp)?.toDate().toISOString(),
         updatedAt:        (d.updatedAt as Timestamp)?.toDate().toISOString(),
         identificationUrl: d.identificationUrl,

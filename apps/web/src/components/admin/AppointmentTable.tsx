@@ -10,7 +10,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText } from 'lucide-react'
+import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText, MailCheck, MailQuestion } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -49,9 +49,28 @@ const columns = [
     enableSorting: false,
     cell: info => {
       const row = info.row.original
+      const showConfirm = info.getValue() === 'accepted'
       return (
         <div className="flex items-center gap-1.5 flex-wrap">
           <StatusBadge status={info.getValue()} />
+          {showConfirm && row.clientConfirmed && (
+            <span
+              title="El cliente confirmó su asistencia"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+            >
+              <MailCheck size={9} strokeWidth={1.5} />
+              Confirmó
+            </span>
+          )}
+          {showConfirm && !row.clientConfirmed && (
+            <span
+              title="El cliente aún no confirma su asistencia"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
+            >
+              <MailQuestion size={9} strokeWidth={1.5} />
+              Sin confirmar
+            </span>
+          )}
           {(row.guestCount ?? 0) > 0 && (
             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-champagne-tint text-champagne-deep border border-champagne-soft">
               <Users size={9} strokeWidth={1.5} />
@@ -322,6 +341,11 @@ export function AppointmentTable() {
                     : 'Pendiente'],
                 ...(selected.decidedBy ? [['Aprobado por', selected.decidedBy]] : []),
                 ...(selected.decidedAt ? [['Fecha decisión', formatShortDate(selected.decidedAt)]] : []),
+                ...(selected.status === 'accepted'
+                  ? [['Confirmación cliente', selected.clientConfirmed
+                      ? (selected.clientConfirmedAt ? `Sí — ${formatShortDate(selected.clientConfirmedAt)}` : 'Sí')
+                      : 'Pendiente']]
+                  : []),
                 ...(selected.adminNote ? [['Nota admin', selected.adminNote]] : []),
                 ...(selected.notes ? [['Notas cliente', selected.notes]] : []),
               ].map(([label, value]) => (
