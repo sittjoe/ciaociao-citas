@@ -8,7 +8,7 @@ import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
-// Called by Vercel cron every hour (see vercel.json: "0 * * * *")
+// Called by Vercel cron daily at 8am CST (see vercel.json: "0 14 * * *")
 export async function GET(request: Request) {
   const authHeader = request.headers.get('Authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -22,9 +22,10 @@ export async function GET(request: Request) {
   const errors: string[] = []
 
   try {
-    // Auto-cancel: accepted appointments within the next 2h that were NOT confirmed.
+    // Auto-cancel: accepted appointments within the next 12h that were NOT confirmed.
+    // Daily cron at 8am CST cancels all unconfirmed same-day appointments in one pass.
     // Guarded by reminder24Sent == true so clients who never received the warning are never auto-cancelled.
-    const toAC = new Date(now.getTime() + 2 * 60 * 60 * 1000)
+    const toAC = new Date(now.getTime() + 12 * 60 * 60 * 1000)
 
     const snapAC = await adminDb
       .collection('appointments')
@@ -95,9 +96,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // 24h confirmation reminders: appointments 23-25h from now (tight window for hourly cron)
-    const from24 = new Date(now.getTime() + 23 * 60 * 60 * 1000)
-    const to24   = new Date(now.getTime() + 25 * 60 * 60 * 1000)
+    // 24h confirmation reminders: appointments 12–36h from now (covers all of tomorrow for daily cron)
+    const from24 = new Date(now.getTime() + 12 * 60 * 60 * 1000)
+    const to24   = new Date(now.getTime() + 36 * 60 * 60 * 1000)
 
     const snap24 = await adminDb
       .collection('appointments')
@@ -137,9 +138,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2h reminders: appointments 1.5h-2.5h from now (tight window for hourly cron)
-    const from2 = new Date(now.getTime() + 90  * 60 * 1000)
-    const to2   = new Date(now.getTime() + 150 * 60 * 1000)
+    // 2h reminders: appointments 1h–12h from now (covers all confirmed same-day appointments for daily cron)
+    const from2 = new Date(now.getTime() +  1 * 60 * 60 * 1000)
+    const to2   = new Date(now.getTime() + 12 * 60 * 60 * 1000)
 
     const snap2 = await adminDb
       .collection('appointments')
@@ -178,13 +179,13 @@ export async function GET(request: Request) {
       }
     }
 
-    // Guest reminders - 48h window: 47h-49h from now
+    // Guest reminders — 48h window: 36h–60h from now (covers day after tomorrow for daily cron)
     let sentGuest48  = 0
     let sentGuest24  = 0
     let expiredCount = 0
 
-    const from48g = new Date(now.getTime() + 47 * 60 * 60 * 1000)
-    const to48g   = new Date(now.getTime() + 49 * 60 * 60 * 1000)
+    const from48g = new Date(now.getTime() + 36 * 60 * 60 * 1000)
+    const to48g   = new Date(now.getTime() + 60 * 60 * 60 * 1000)
 
     const appts48 = await adminDb
       .collection('appointments')
@@ -246,9 +247,9 @@ export async function GET(request: Request) {
       errors.push(`Guest expiration failed: ${err}`)
     }
 
-    // Guest reminders - 24h window: 23h-25h from now (runs after expiration so expired guests are excluded)
-    const from24g = new Date(now.getTime() + 23 * 60 * 60 * 1000)
-    const to24g   = new Date(now.getTime() + 25 * 60 * 60 * 1000)
+    // Guest reminders — 24h window: 12h–36h from now (covers tomorrow for daily cron)
+    const from24g = new Date(now.getTime() + 12 * 60 * 60 * 1000)
+    const to24g   = new Date(now.getTime() + 36 * 60 * 60 * 1000)
 
     const appts24g = await adminDb
       .collection('appointments')

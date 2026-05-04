@@ -322,7 +322,7 @@ export async function sendReminder24Confirm(appt: Appointment) {
       </div>
       <div style="background:#FFF8F0;border:2px solid #D4A853;border-radius:12px;padding:16px 20px;margin:20px 0;">
         <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px;font-weight:600;">Acción requerida</p>
-        <p style="font-size:14px;color:#1A1A1A;margin:0;line-height:1.6;">Si no confirmas tu asistencia al menos <strong>2 horas antes de tu cita</strong>, será cancelada automáticamente y el horario quedará disponible para otra persona.</p>
+        <p style="font-size:14px;color:#1A1A1A;margin:0;line-height:1.6;">Si no confirmas tu asistencia <strong>antes de las 8am del día de tu cita</strong>, será cancelada automáticamente y el horario quedará disponible para otra persona.</p>
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
       <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${SITE}/reserva/${appt.confirmationCode}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
