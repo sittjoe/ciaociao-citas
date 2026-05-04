@@ -1,7 +1,6 @@
 import { google, calendar_v3 } from 'googleapis'
 import { adminDb } from './firebase-admin'
 import { formatDate, formatTime } from './utils'
-import { getActiveAdminEmails } from './email'
 import type { Appointment } from '@/types'
 
 const DEFAULT_LOCATION = process.env.GOOGLE_CALENDAR_LOCATION || 'Showroom Ciao Ciao Joyería'
@@ -88,7 +87,9 @@ export async function createAppointmentCalendarEvent(appt: Appointment): Promise
   try {
     const response = await getCalendar().events.insert({
       calendarId: calendarId!,
-      sendUpdates: 'all',
+      // Service accounts cannot invite attendees without Domain-Wide Delegation.
+      // Client already receives the ICS attachment via email.
+      sendUpdates: 'none',
       requestBody: {
         summary,
         location: DEFAULT_LOCATION,
@@ -102,10 +103,6 @@ export async function createAppointmentCalendarEvent(appt: Appointment): Promise
         ].filter(Boolean).join('\n'),
         start: { dateTime: start.toISOString(), timeZone: 'America/Mexico_City' },
         end: { dateTime: end.toISOString(), timeZone: 'America/Mexico_City' },
-        attendees: [
-          { email: appt.email, displayName: appt.name },
-          ...(await getActiveAdminEmails()).map(email => ({ email })),
-        ],
         reminders: {
           useDefault: false,
           overrides: [
@@ -145,7 +142,7 @@ export async function deleteAppointmentCalendarEvent(appt: Appointment): Promise
     await getCalendar().events.delete({
       calendarId: calendarId!,
       eventId: appt.googleCalendarEventId,
-      sendUpdates: 'all',
+      sendUpdates: 'none',
     })
     await recordCalendarEvent({
       appointmentId: appt.id,
