@@ -49,6 +49,9 @@ export interface Appointment {
   decidedBy?: string | null
   decidedAt?: Date | null
   adminNote?: string | null
+  clientConfirmed?: boolean
+  clientConfirmedAt?: Date | null
+  autoCancelledAt?: Date | null
   guestCount?: number
   guestsAllVerified?: boolean
   createdAt: Date

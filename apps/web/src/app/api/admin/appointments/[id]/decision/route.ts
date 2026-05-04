@@ -72,6 +72,7 @@ export async function POST(
         decidedAt: FieldValue.serverTimestamp(),
         decidedBy: admin.email,
         ...(reason ? { adminNote: reason } : {}),
+        ...(action === 'accept' ? { clientConfirmed: false } : {}),
       })
 
       if (action === 'accept') {
