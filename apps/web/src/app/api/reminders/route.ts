@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { sendReminder, sendReminder24Confirm, sendAutoCancellation, sendGuestReminder } from '@/lib/email'
-import { deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
+import { sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
 import { expirePendingGuests } from '@/lib/guests'
 import type { Appointment } from '@/types'
 
@@ -16,86 +15,11 @@ export async function GET(request: Request) {
   }
 
   const now = new Date()
-  let autoCancelled = 0
   let sent24        = 0
   let sent2         = 0
   const errors: string[] = []
 
   try {
-    // Auto-cancel: accepted appointments within the next 12h that were NOT confirmed.
-    // Daily cron at 8am CST cancels all unconfirmed same-day appointments in one pass.
-    // Guarded by reminder24Sent == true so clients who never received the warning are never auto-cancelled.
-    const toAC = new Date(now.getTime() + 12 * 60 * 60 * 1000)
-
-    const snapAC = await adminDb
-      .collection('appointments')
-      .where('status', '==', 'accepted')
-      .where('clientConfirmed', '==', false)
-      .where('reminder24Sent', '==', true)
-      .where('slotDatetime', '>=', Timestamp.fromDate(now))
-      .where('slotDatetime', '<=', Timestamp.fromDate(toAC))
-      .get()
-
-    for (const doc of snapAC.docs) {
-      try {
-        const d = doc.data()
-        const appt: Appointment = {
-          id: doc.id,
-          slotId: d.slotId,
-          slotDatetime: (d.slotDatetime as Timestamp).toDate(),
-          name: d.name,
-          email: d.email,
-          phone: d.phone,
-          notes: d.notes,
-          identificationUrl: d.identificationUrl,
-          status: 'cancelled',
-          confirmationCode: d.confirmationCode,
-          cancelToken: d.cancelToken,
-          reminder24Sent: d.reminder24Sent ?? true,
-          reminder2Sent: d.reminder2Sent ?? false,
-          googleCalendarEventId: d.googleCalendarEventId ?? null,
-          createdAt: (d.createdAt as Timestamp).toDate(),
-        }
-
-        if (d.googleCalendarEventId) {
-          try {
-            await deleteAppointmentCalendarEvent({ ...appt, googleCalendarEventId: d.googleCalendarEventId })
-          } catch (err) {
-            errors.push(`Auto-cancel calendar delete failed for ${doc.id}: ${err}`)
-          }
-        }
-
-        await adminDb.runTransaction(async tx => {
-          const fresh = await tx.get(doc.ref)
-          if (!fresh.exists) return
-          const fd = fresh.data()!
-          // Skip if another process already handled this appointment
-          if (fd.status !== 'accepted' || fd.clientConfirmed !== false) return
-          tx.update(doc.ref, {
-            status: 'cancelled',
-            autoCancelledAt: FieldValue.serverTimestamp(),
-            googleCalendarEventId: null,
-            updatedAt: FieldValue.serverTimestamp(),
-          })
-          tx.update(adminDb.collection('slots').doc(fd.slotId), {
-            available: true,
-            heldUntil: null,
-            bookedBy: null,
-          })
-        })
-
-        try {
-          await sendAutoCancellation(appt)
-        } catch (err) {
-          errors.push(`Auto-cancel email failed for ${doc.id}: ${err}`)
-        }
-
-        autoCancelled++
-      } catch (err) {
-        errors.push(`Auto-cancel failed for ${doc.id}: ${err}`)
-      }
-    }
-
     // 24h confirmation reminders: appointments 12–36h from now (covers all of tomorrow for daily cron)
     const from24 = new Date(now.getTime() + 12 * 60 * 60 * 1000)
     const to24   = new Date(now.getTime() + 36 * 60 * 60 * 1000)
@@ -179,7 +103,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Guest reminders — 48h window: 36h–60h from now (covers day after tomorrow for daily cron)
+    // Guest reminders — 48h window: 47h–49h from now
     let sentGuest48  = 0
     let sentGuest24  = 0
     let expiredCount = 0
@@ -247,7 +171,7 @@ export async function GET(request: Request) {
       errors.push(`Guest expiration failed: ${err}`)
     }
 
-    // Guest reminders — 24h window: 12h–36h from now (covers tomorrow for daily cron)
+    // Guest reminders — 24h window: 23h–25h from now (runs after expiration so expired guests are excluded)
     const from24g = new Date(now.getTime() + 12 * 60 * 60 * 1000)
     const to24g   = new Date(now.getTime() + 36 * 60 * 60 * 1000)
 
@@ -302,7 +226,7 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ autoCancelled, sent24, sent2, sentGuest48, sentGuest24, expiredCount, errors })
+    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, errors })
   } catch (err) {
     console.error('GET /api/reminders', err)
     return NextResponse.json({ error: 'Error en reminders' }, { status: 500 })

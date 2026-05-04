@@ -309,20 +309,16 @@ export async function sendReminder24Confirm(appt: Appointment) {
     appointmentId: appt.id,
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: appt.email,
-    subject: `Acción requerida: confirma tu cita de mañana — ${dateStr}`,
+    subject: `Confirma tu cita de mañana — ${dateStr}`,
     html: baseTemplate(`
       <div class="card">
-        <p class="title">Confirma tu cita de mañana</p>
-        <p class="copy">Hola ${escapeHtml(appt.name)}, tu cita en el showroom privado de Ciao Ciao Joyería es mañana.</p>
+        <p class="title">Tu cita es mañana</p>
+        <p class="copy">Hola ${escapeHtml(appt.name)}, te esperamos mañana en el showroom privado de Ciao Ciao Joyería. Para ayudarnos a prepararnos, confírmanos que podrás asistir.</p>
         ${details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
         ])}
-      </div>
-      <div style="background:#FFF8F0;border:2px solid #D4A853;border-radius:12px;padding:16px 20px;margin:20px 0;">
-        <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px;font-weight:600;">Acción requerida</p>
-        <p style="font-size:14px;color:#1A1A1A;margin:0;line-height:1.6;">Si no confirmas tu asistencia <strong>antes de las 8am del día de tu cita</strong>, será cancelada automáticamente y el horario quedará disponible para otra persona.</p>
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
       <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${SITE}/reserva/${appt.confirmationCode}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
@@ -330,30 +326,6 @@ export async function sendReminder24Confirm(appt: Appointment) {
   })
 }
 
-export async function sendAutoCancellation(appt: Appointment) {
-  const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
-
-  await sendTracked({
-    kind: 'status_update',
-    appointmentId: appt.id,
-    from: `Ciao Ciao Joyería <${FROM}>`,
-    to: appt.email,
-    subject: `Tu cita fue cancelada — ${dateStr}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Tu cita fue cancelada</p>
-        <p class="copy">No recibimos confirmación de tu asistencia, por lo que tu cita programada para el ${escapeHtml(dateStr)} a las ${escapeHtml(timeStr)} ha sido cancelada y el horario está disponible para otras personas.</p>
-        ${details([
-          ['Fecha',  dateStr],
-          ['Hora',   timeStr],
-          ['Código', appt.confirmationCode],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}">Agendar nueva cita</a></p>
-    `),
-  })
-}
 
 export async function sendCalendarError(appt: Appointment, errorMessage: string) {
   const adminRecipients = await getActiveAdminEmails()
