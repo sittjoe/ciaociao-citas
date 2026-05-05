@@ -22,7 +22,9 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
 
   const slotDates = useMemo(() => {
     const set = new Set<string>()
+    const nowMs = Date.now()
     for (const s of slots) {
+      if (parseISO(s.datetime).getTime() <= nowMs) continue
       set.add(formatInTimeZone(parseISO(s.datetime), BUSINESS_TZ, 'yyyy-MM-dd'))
     }
     return set

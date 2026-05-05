@@ -30,6 +30,9 @@ export async function GET(request: Request) {
       end   = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000)
     }
 
+    // Never return slots already in the past
+    if (start < now) start = now
+
     const snap = await adminDb
       .collection('slots')
       .where('datetime', '>=', Timestamp.fromDate(start))

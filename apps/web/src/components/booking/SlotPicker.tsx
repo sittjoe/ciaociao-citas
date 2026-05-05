@@ -16,8 +16,10 @@ interface SlotPickerProps {
 
 export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot }: SlotPickerProps) {
   const daySlots = useMemo(() => {
+    const nowMs = Date.now()
     return slots
       .filter(s => formatInTimeZone(parseISO(s.datetime), BUSINESS_TZ, 'yyyy-MM-dd') === selectedDate)
+      .filter(s => parseISO(s.datetime).getTime() > nowMs)
       .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime())
   }, [slots, selectedDate])
 
