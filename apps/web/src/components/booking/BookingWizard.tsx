@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { CheckCircle2, ChevronLeft, ExternalLink, Send, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Send, ShieldCheck, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
@@ -406,6 +406,34 @@ export function BookingWizard() {
                     </div>
                   )}
                 </div>
+
+                {guests.length < 3 && (
+                  <div className="rounded-xl border border-ink-line bg-cream-soft p-3.5">
+                    <p className="text-xs text-ink leading-relaxed mb-2">
+                      {guests.length === 0
+                        ? '¿Vendrás acompañado? Aún puedes agregar invitados antes de confirmar.'
+                        : `Tienes ${guests.length} invitado${guests.length > 1 ? 's' : ''}. ¿Deseas agregar ${3 - guests.length === 1 ? 'uno más' : 'más'}?`}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => goTo('form')}
+                      className="inline-flex items-center gap-1.5 text-xs text-champagne hover:text-champagne-deep font-medium transition-colors"
+                    >
+                      <UserPlus size={13} strokeWidth={1.5} />
+                      {guests.length === 0 ? 'Agregar invitados' : 'Agregar otro invitado'}
+                    </button>
+                  </div>
+                )}
+
+                {guests.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex gap-2.5">
+                    <AlertTriangle size={15} strokeWidth={1.5} className="text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-900 leading-relaxed">
+                      Cada invitado recibirá un email para subir su identificación oficial.{' '}
+                      <strong className="font-semibold">Los invitados que no completen la verificación no podrán ingresar al showroom.</strong>
+                    </p>
+                  </div>
+                )}
 
                 <p className="text-xs text-ink-muted leading-relaxed">
                   Al confirmar, tu solicitud será revisada por nuestro equipo y recibirás un email con la confirmación o actualización.
