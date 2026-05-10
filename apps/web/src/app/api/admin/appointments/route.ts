@@ -16,10 +16,16 @@ export async function GET(request: Request) {
   const dateFrom = searchParams.get('dateFrom')   // ISO
   const dateTo   = searchParams.get('dateTo')     // ISO
   const cursor   = searchParams.get('cursor')     // doc ID
-  const limit    = Math.min(Number(searchParams.get('limit') ?? '20'), 100)
+  const limit    = Math.min(Number(searchParams.get('limit') ?? '20'), 500)
 
   try {
-    let query = adminDb.collection('appointments').orderBy('createdAt', 'desc') as FirebaseFirestore.Query
+    // Firestore: a range filter requires orderBy on the same field first.
+    // When dateFrom/dateTo are present we order by slotDatetime; otherwise createdAt.
+    let query = (
+      dateFrom || dateTo
+        ? adminDb.collection('appointments').orderBy('slotDatetime', 'asc')
+        : adminDb.collection('appointments').orderBy('createdAt', 'desc')
+    ) as FirebaseFirestore.Query
 
     if (status) {
       query = query.where('status', '==', status)
@@ -28,7 +34,7 @@ export async function GET(request: Request) {
       query = query.where('slotDatetime', '>=', Timestamp.fromDate(new Date(dateFrom)))
     }
     if (dateTo) {
-      query = query.where('slotDatetime', '<=', Timestamp.fromDate(new Date(dateTo)))
+      query = query.where('slotDatetime', '<',  Timestamp.fromDate(new Date(dateTo)))
     }
     if (cursor) {
       const cursorDoc = await adminDb.collection('appointments').doc(cursor).get()

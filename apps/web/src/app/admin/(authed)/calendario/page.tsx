@@ -12,6 +12,9 @@ export default function CalendarioPage() {
         <p className="text-sm text-ink-muted mt-1">
           Visualiza y gestiona todas las citas. Haz clic en cualquier evento para ver detalles.
         </p>
+        <p className="text-xs text-ink-subtle mt-2">
+          Atajos: <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>T</kbd> hoy · <kbd>M</kbd>/<kbd>W</kbd>/<kbd>D</kbd> vista
+        </p>
       </div>
       <CalendarioClient />
     </div>

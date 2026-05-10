@@ -150,6 +150,17 @@ input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
 
 }
 
+/* ─── Keyboard shortcut hints ───────────────────────────────────────────── */
+kbd {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--ink-line);
+  border-radius: 0.25rem;
+  background: var(--admin-surface);
+  color: var(--ink-muted);
+}
+
 /* ─── Keyframes ──────────────────────────────────────────────────────────── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(16px); }
