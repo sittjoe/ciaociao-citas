@@ -173,7 +173,7 @@ export function AdminCalendar() {
                 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all',
                 active
                   ? 'border-champagne bg-champagne-tint text-champagne-deep'
-                  : 'border-admin-line bg-admin-surface text-ink-subtle hover:border-champagne/50',
+                  : 'border-admin-line bg-admin-surface text-ink-muted hover:border-champagne/50 hover:text-ink',
               )}
             >
               <span
@@ -234,25 +234,30 @@ export function AdminCalendar() {
 
       {/* FullCalendar overrides — scoped to .fc-admin-wrap, using design tokens */}
       <style>{`
-        /* ── Champagne chrome ──────────────────────────────────── */
+        /* ── Toolbar buttons — ghost default, fill on active/hoy ── */
         .fc-admin-wrap .fc-button {
-          background: var(--champagne) !important;
-          border-color: var(--champagne) !important;
+          background: transparent !important;
+          border: 1px solid var(--ink-line) !important;
+          color: var(--champagne-deep) !important;
           font-size: 0.73rem !important;
           font-weight: 500 !important;
-          padding: 0.25rem 0.75rem !important;
+          padding: 0.35rem 0.85rem !important;
           border-radius: 0.5rem !important;
           letter-spacing: 0.01em !important;
-          transition: background 120ms, border-color 120ms !important;
+          transition: background 120ms, border-color 120ms, color 120ms !important;
         }
-        .fc-admin-wrap .fc-button:hover {
-          background: var(--champagne-deep) !important;
-          border-color: var(--champagne-deep) !important;
+        .fc-admin-wrap .fc-button:hover:not(:disabled) {
+          background: var(--champagne-tint) !important;
+          border-color: var(--champagne) !important;
+          color: var(--champagne-deep) !important;
         }
         .fc-admin-wrap .fc-button-active,
+        .fc-admin-wrap .fc-button-active:hover,
         .fc-admin-wrap .fc-button:disabled {
-          background: var(--champagne-deep) !important;
-          border-color: var(--champagne-deep) !important;
+          background: var(--champagne) !important;
+          border-color: var(--champagne) !important;
+          color: var(--porcelain) !important;
+          opacity: 1 !important;
         }
         .fc-admin-wrap .fc-toolbar-title {
           font-size: 1rem !important;
