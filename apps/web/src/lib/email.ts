@@ -514,3 +514,28 @@ export async function sendCancellationEmail(appt: Appointment) {
     })
   }
 }
+
+export async function sendRescheduleNotice(appt: Appointment) {
+  const dateStr = formatDate(appt.slotDatetime)
+  const timeStr = formatTime(appt.slotDatetime)
+
+  await sendTracked({
+    kind: 'status_update',
+    appointmentId: appt.id,
+    from: `Ciao Ciao Joyería <${FROM}>`,
+    to: appt.email,
+    subject: `Tu cita fue reprogramada — ${dateStr}`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Tu cita fue reprogramada</p>
+        <p class="copy">Hemos actualizado el horario de tu visita al showroom. A continuación encontrarás los nuevos detalles.</p>
+        ${details([
+          ['Nueva fecha', dateStr],
+          ['Nueva hora',  timeStr],
+          ['Código',      appt.confirmationCode],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>
+    `),
+  })
+}

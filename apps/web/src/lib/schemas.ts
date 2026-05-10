@@ -72,3 +72,9 @@ export const guestVerifySchema = z.object({
 export const adminGuestActionSchema = z.object({
   action: z.enum(['verify', 'exclude']),
 })
+
+export const rescheduleSchema = z.object({
+  newSlotId: z.string().min(1, 'Slot requerido'),
+})
+
+export type RescheduleInput = z.infer<typeof rescheduleSchema>

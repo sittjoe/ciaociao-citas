@@ -11,6 +11,11 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/react": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
     "@hookform/resolvers": "^3.9.1",
     "@tanstack/react-table": "^8.21.3",
     "@types/bcryptjs": "^2.4.6",

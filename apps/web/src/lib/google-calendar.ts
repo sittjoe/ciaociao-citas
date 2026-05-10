@@ -4,6 +4,7 @@ import { formatDate, formatTime } from './utils'
 import type { Appointment } from '@/types'
 
 const DEFAULT_LOCATION = process.env.GOOGLE_CALENDAR_LOCATION || 'Showroom Ciao Ciao Joyería'
+const APPOINTMENT_DURATION_MS = 60 * 60 * 1000
 
 let calendarClient: calendar_v3.Calendar | null = null
 
@@ -61,9 +62,35 @@ function getCalendar(): calendar_v3.Calendar {
   return calendarClient
 }
 
+function buildEventBody(appt: Appointment): calendar_v3.Schema$Event {
+  const start = appt.slotDatetime
+  const end   = new Date(start.getTime() + APPOINTMENT_DURATION_MS)
+  return {
+    summary:  `Ciao Ciao - ${appt.name}`,
+    location: DEFAULT_LOCATION,
+    description: [
+      'Cita confirmada en Ciao Ciao Joyería.',
+      `Cliente: ${appt.name}`,
+      `Email: ${appt.email}`,
+      `Teléfono: ${appt.phone}`,
+      `Fecha: ${formatDate(start)} ${formatTime(start)}`,
+      appt.notes ? `Notas: ${appt.notes}` : '',
+    ].filter(Boolean).join('\n'),
+    start: { dateTime: start.toISOString(), timeZone: 'America/Mexico_City' },
+    end:   { dateTime: end.toISOString(),   timeZone: 'America/Mexico_City' },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'email', minutes: 24 * 60 },
+        { method: 'email', minutes: 120 },
+      ],
+    },
+  }
+}
+
 async function recordCalendarEvent(data: {
   appointmentId: string
-  action: 'create' | 'delete'
+  action: 'create' | 'update' | 'delete'
   ok: boolean
   googleCalendarEventId?: string
   error?: string
@@ -80,9 +107,6 @@ async function recordCalendarEvent(data: {
 
 export async function createAppointmentCalendarEvent(appt: Appointment): Promise<string> {
   const { calendarId } = readCalendarCredentials()
-  const start = appt.slotDatetime
-  const end = new Date(start.getTime() + 60 * 60 * 1000)
-  const summary = `Ciao Ciao - ${appt.name}`
 
   try {
     const response = await getCalendar().events.insert({
@@ -90,27 +114,7 @@ export async function createAppointmentCalendarEvent(appt: Appointment): Promise
       // Service accounts cannot invite attendees without Domain-Wide Delegation.
       // Client already receives the ICS attachment via email.
       sendUpdates: 'none',
-      requestBody: {
-        summary,
-        location: DEFAULT_LOCATION,
-        description: [
-          `Cita confirmada en Ciao Ciao Joyería.`,
-          `Cliente: ${appt.name}`,
-          `Email: ${appt.email}`,
-          `Teléfono: ${appt.phone}`,
-          `Fecha: ${formatDate(start)} ${formatTime(start)}`,
-          appt.notes ? `Notas: ${appt.notes}` : '',
-        ].filter(Boolean).join('\n'),
-        start: { dateTime: start.toISOString(), timeZone: 'America/Mexico_City' },
-        end: { dateTime: end.toISOString(), timeZone: 'America/Mexico_City' },
-        reminders: {
-          useDefault: false,
-          overrides: [
-            { method: 'email', minutes: 24 * 60 },
-            { method: 'popup', minutes: 120 },
-          ],
-        },
-      },
+      requestBody: buildEventBody(appt),
     })
 
     const eventId = response.data.id
@@ -154,6 +158,41 @@ export async function deleteAppointmentCalendarEvent(appt: Appointment): Promise
     await recordCalendarEvent({
       appointmentId: appt.id,
       action: 'delete',
+      ok: false,
+      googleCalendarEventId: appt.googleCalendarEventId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    throw err
+  }
+}
+
+export async function updateAppointmentCalendarEvent(appt: Appointment): Promise<void> {
+  const { calendarId } = readCalendarCredentials()
+
+  // If a previous sync failed there's no eventId — create fresh instead
+  if (!appt.googleCalendarEventId) {
+    const newId = await createAppointmentCalendarEvent(appt)
+    await adminDb.collection('appointments').doc(appt.id).update({ googleCalendarEventId: newId })
+    return
+  }
+
+  try {
+    await getCalendar().events.patch({
+      calendarId: calendarId!,
+      eventId: appt.googleCalendarEventId,
+      sendUpdates: 'none',
+      requestBody: buildEventBody(appt),
+    })
+    await recordCalendarEvent({
+      appointmentId: appt.id,
+      action: 'update',
+      ok: true,
+      googleCalendarEventId: appt.googleCalendarEventId,
+    })
+  } catch (err) {
+    await recordCalendarEvent({
+      appointmentId: appt.id,
+      action: 'update',
       ok: false,
       googleCalendarEventId: appt.googleCalendarEventId,
       error: err instanceof Error ? err.message : String(err),
