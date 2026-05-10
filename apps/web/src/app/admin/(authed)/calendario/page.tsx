@@ -1,17 +1,7 @@
 import type { Metadata } from 'next'
-import dynamic from 'next/dynamic'
+import { CalendarioClient } from './CalendarioClient'
 
 export const metadata: Metadata = { title: 'Calendario' }
-
-const AdminCalendar = dynamic(
-  () => import('@/components/admin/AdminCalendar').then(m => ({ default: m.AdminCalendar })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[600px] animate-pulse rounded-2xl bg-admin-surface border border-admin-line" />
-    ),
-  }
-)
 
 export default function CalendarioPage() {
   return (
@@ -23,7 +13,7 @@ export default function CalendarioPage() {
           Visualiza y gestiona todas las citas. Haz clic en cualquier evento para ver detalles.
         </p>
       </div>
-      <AdminCalendar />
+      <CalendarioClient />
     </div>
   )
 }
