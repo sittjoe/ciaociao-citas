@@ -12,6 +12,9 @@ import { cn } from '@/lib/utils'
 import { AppointmentDetailModal } from './AppointmentDetailModal'
 
 type FilterKey = 'accepted' | 'pending' | 'rejected' | 'slots'
+type ApptStatus  = 'accepted' | 'pending' | 'rejected' | 'cancelled'
+type ApptExtended = { appointmentId: string; status: ApptStatus }
+type SlotExtended = { isSlot: true }
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   accepted: 'Confirmadas',
@@ -67,13 +70,23 @@ async function fetchAppointmentEvents(info: EventSourceFuncArg): Promise<EventIn
 }
 
 async function fetchSlotBackgrounds(info: EventSourceFuncArg): Promise<EventInput[]> {
-  const start = info.start
-  const month = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`
-  const res = await fetch(`/api/slots?month=${month}`)
-  if (!res.ok) return []
+  const months = new Set<string>()
+  const cur = new Date(info.start.getFullYear(), info.start.getMonth(), 1)
+  while (cur < info.end) {
+    months.add(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`)
+    cur.setMonth(cur.getMonth() + 1)
+  }
 
-  const data = await res.json() as { slots: Array<{ id: string; datetime: string }> }
-  return data.slots.map(s => {
+  const slotArrays = await Promise.all(
+    [...months].map(async (m): Promise<Array<{ id: string; datetime: string }>> => {
+      const res = await fetch(`/api/slots?month=${m}`)
+      if (!res.ok) return []
+      const data = await res.json() as { slots: Array<{ id: string; datetime: string }> }
+      return data.slots
+    })
+  )
+
+  return slotArrays.flat().map(s => {
     const dt  = new Date(s.datetime)
     const end = new Date(dt.getTime() + 60 * 60 * 1000)
     return {
@@ -82,7 +95,7 @@ async function fetchSlotBackgrounds(info: EventSourceFuncArg): Promise<EventInpu
       end,
       display: 'background',
       color:   'var(--vellum)',
-      extendedProps: { isSlot: true },
+      extendedProps: { isSlot: true } satisfies SlotExtended,
     }
   })
 }
@@ -107,7 +120,7 @@ export function AdminCalendar() {
       try {
         const events = await fetchAppointmentEvents(info)
         const filtered = events.filter(e => {
-          const status = (e.extendedProps as { status: string }).status as FilterKey
+          const status = (e.extendedProps as ApptExtended).status as FilterKey
           return activeFilters.has(status)
         })
         success(filtered)
@@ -208,11 +221,11 @@ export function AdminCalendar() {
           nowIndicator={true}
           eventSources={[apptSource, slotSource]}
           eventClick={info => {
-            const apptId = (info.event.extendedProps as { appointmentId?: string }).appointmentId
+            const apptId = (info.event.extendedProps as Partial<ApptExtended>).appointmentId
             if (apptId) setSelectedId(apptId)
           }}
           eventDidMount={info => {
-            const { status } = info.event.extendedProps as { status?: string }
+            const { status } = info.event.extendedProps as Partial<ApptExtended>
             if (status) {
               const start = info.event.start
               const time = start?.toLocaleTimeString('es-MX', {
@@ -221,7 +234,6 @@ export function AdminCalendar() {
               info.el.title = `${info.event.title} — ${time} (${STATUS_LABELS_ES[status] ?? status})`
             }
           }}
-          noEventsText="Sin citas en este período"
           buttonText={{ today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día' }}
         />
       </div>
