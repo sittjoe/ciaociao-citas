@@ -7,7 +7,7 @@ import { firebaseConfig, emailConfig } from './config-inline.js';
 
 // Initialize Firebase
 import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-import { getFirestore, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, orderBy, runTransaction } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js';
 
@@ -1495,22 +1495,54 @@ window.bulkAccept = async function() {
 
     if (!confirmed) return;
 
+    // Deshabilitar botones de bulk mientras corre para evitar doble click.
+    const bulkContainer = document.getElementById('bulkActionsPending');
+    const bulkButtons = bulkContainer ? bulkContainer.querySelectorAll('button') : [];
+    const countLabel = document.getElementById('selectedCountPending');
+    const originalLabel = countLabel ? countLabel.textContent : '';
+    bulkButtons.forEach(btn => { btn.disabled = true; });
+
+    let accepted = 0;
+    let skipped = 0;
+    const total = selectedAppointments.size;
+    const idsSnapshot = Array.from(selectedAppointments);
+
     try {
-        const promises = [];
-        for (const appointmentId of selectedAppointments) {
+        let processed = 0;
+        for (const appointmentId of idsSnapshot) {
             const apt = allAppointments.find(a => a.id === appointmentId);
-            if (apt) {
-                promises.push(acceptAppointmentSilent(appointmentId, apt.email, apt.name, apt.slotId, apt.slotDatetime));
+            processed += 1;
+            if (countLabel) {
+                countLabel.textContent = `${processed}/${total}`;
+            }
+            if (!apt) {
+                skipped += 1;
+                continue;
+            }
+            if (apt.status && apt.status !== 'pending') {
+                skipped += 1;
+                continue;
+            }
+            try {
+                await acceptAppointmentSilent(appointmentId, apt.email, apt.name, apt.slotId, apt.slotDatetime);
+                accepted += 1;
+            } catch (error) {
+                console.warn(`Cita ${appointmentId} omitida en bulk accept:`, error?.message || error);
+                skipped += 1;
             }
         }
 
-        await Promise.all(promises);
         selectedAppointments.clear();
         await loadAllData();
-        showToast(`${promises.length} citas aceptadas exitosamente`);
+        showToast(`${accepted} aceptadas, ${skipped} saltadas`, skipped > 0 && accepted === 0 ? 'error' : 'success');
     } catch (error) {
         console.error('Error in bulk accept:', error);
         showToast('Error al aceptar citas: ' + error.message, 'error');
+    } finally {
+        bulkButtons.forEach(btn => { btn.disabled = false; });
+        if (countLabel) {
+            countLabel.textContent = originalLabel;
+        }
     }
 };
 
@@ -1569,43 +1601,83 @@ window.acceptAppointment = async (appointmentId, email, name, slotId, dateStr, t
     }
 };
 
-async function acceptAppointmentSilent(appointmentId, email, name, slotId, datetimeInfo) {
-    // PASO 25: Validación de conflictos - verificar si slot aún disponible
-    if (slotId) {
-        const slotDoc = await getDocs(query(collection(db, 'slots'), where('__name__', '==', slotId)));
-        if (!slotDoc.empty) {
-            const slotData = slotDoc.docs[0].data();
-            if (slotData.available === false) {
-                throw new Error('Este horario ya fue reservado por otra cita. Por favor, elige otro horario.');
-            }
-        }
+// ============================================
+// HELPERS: AUDIT LOG E IDENTIDAD DEL ADMIN
+// ============================================
 
-        // Verificar si hay otra cita aceptada con este mismo slot
-        const conflictQuery = query(
-            collection(db, 'appointments'),
-            where('slotId', '==', slotId),
-            where('status', '==', 'accepted')
-        );
-        const conflictSnapshot = await getDocs(conflictQuery);
-
-        if (!conflictSnapshot.empty) {
-            // Hay conflicto, rechazar operación
-            throw new Error('Conflicto detectado: Este horario ya fue aceptado para otra cita.');
+function getAdminIdentifier() {
+    try {
+        const user = auth.currentUser;
+        if (user) {
+            return user.email || user.uid || 'admin';
         }
+    } catch (_) {
+        // ignore
     }
+    try {
+        const stored = sessionStorage.getItem('adminEmail') || sessionStorage.getItem('adminUser');
+        if (stored) return stored;
+    } catch (_) {
+        // ignore
+    }
+    return 'admin';
+}
 
-    // Update appointment status
-    await updateDoc(doc(db, 'appointments', appointmentId), {
-        status: 'accepted',
-        updatedAt: serverTimestamp()
+async function writeAuditLog(action, appointmentId, extra = {}) {
+    try {
+        await addDoc(collection(db, 'auditLog'), {
+            action,
+            appointmentId,
+            adminEmail: getAdminIdentifier(),
+            timestamp: serverTimestamp(),
+            ...extra
+        });
+    } catch (error) {
+        // Permission rule may not exist yet — never break the main flow
+        console.warn('No se pudo escribir auditLog:', error?.message || error);
+    }
+}
+
+async function acceptAppointmentSilent(appointmentId, email, name, slotId, datetimeInfo) {
+    // Transacción atómica: previene double-booking entre admins concurrentes.
+    const apptRef = doc(db, 'appointments', appointmentId);
+    const slotRef = slotId ? doc(db, 'slots', slotId) : null;
+
+    await runTransaction(db, async (tx) => {
+        const apptSnap = await tx.get(apptRef);
+        if (!apptSnap.exists()) {
+            throw new Error('La cita ya no existe.');
+        }
+        const apptData = apptSnap.data();
+        if (apptData.status !== 'pending') {
+            throw new Error('Cita ya procesada por otro administrador.');
+        }
+
+        if (slotRef) {
+            const slotSnap = await tx.get(slotRef);
+            if (!slotSnap.exists()) {
+                throw new Error('El horario asociado ya no existe.');
+            }
+            const slotData = slotSnap.data();
+            if (slotData.available === false) {
+                throw new Error('Este horario ya fue reservado. Por favor, elige otro horario.');
+            }
+
+            tx.update(slotRef, {
+                available: false,
+                appointmentId,
+                bookedAt: serverTimestamp()
+            });
+        }
+
+        tx.update(apptRef, {
+            status: 'accepted',
+            updatedAt: serverTimestamp()
+        });
     });
 
-    // Mark slot as unavailable
-    if (slotId) {
-        await updateDoc(doc(db, 'slots', slotId), {
-            available: false
-        });
-    }
+    // Audit log (best-effort, fuera de la transacción)
+    await writeAuditLog('accept', appointmentId, { slotId: slotId || null });
 
     // Send confirmation email
     let dateStr = 'Sin fecha';
@@ -1664,13 +1736,28 @@ window.rejectAppointment = async (appointmentId, email, name, slotId) => {
 };
 
 async function rejectAppointmentSilent(appointmentId, email, name, slotId) {
-    // Update appointment status
-    await updateDoc(doc(db, 'appointments', appointmentId), {
-        status: 'rejected',
-        updatedAt: serverTimestamp()
+    const apptRef = doc(db, 'appointments', appointmentId);
+
+    // Transacción defensiva: solo rechazar si sigue en 'pending'.
+    await runTransaction(db, async (tx) => {
+        const apptSnap = await tx.get(apptRef);
+        if (!apptSnap.exists()) {
+            throw new Error('La cita ya no existe.');
+        }
+        const apptData = apptSnap.data();
+        if (apptData.status !== 'pending') {
+            throw new Error('Cita ya procesada por otro administrador.');
+        }
+        tx.update(apptRef, {
+            status: 'rejected',
+            updatedAt: serverTimestamp()
+        });
     });
 
     // Slot remains available (don't update)
+
+    // Audit log (best-effort)
+    await writeAuditLog('reject', appointmentId, { slotId: slotId || null });
 
     // Send rejection email
     if (emailjsAvailable) {
