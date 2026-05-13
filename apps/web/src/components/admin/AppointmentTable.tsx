@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -10,7 +10,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText, MailCheck, MailQuestion } from 'lucide-react'
+import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText, MailCheck, MailQuestion, Star, UserPlus, Repeat, Tag, CalendarClock, BellRing } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -18,15 +18,41 @@ import { TableSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Textarea } from '@/components/ui/Input'
 import { GuestsList } from './GuestsList'
+import { AppointmentMetaForm } from './AppointmentMetaForm'
 import { formatShortDate, csvRow, cn } from '@/lib/utils'
-import type { Appointment, AppointmentStatus } from '@/types'
+import type { Appointment, AppointmentStatus, AppointmentType } from '@/types'
 
-type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt' | 'clientConfirmedAt'> & {
+type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt' | 'clientConfirmedAt' | 'internalNotesUpdatedAt' | 'rescheduleRequestedAt' | 'cancelRequestedAt'> & {
   slotDatetime: string
   createdAt: string
   updatedAt?: string
   decidedAt?: string | null
   clientConfirmedAt?: string | null
+  internalNotesUpdatedAt?: string | null
+  rescheduleRequestedAt?: string | null
+  cancelRequestedAt?: string | null
+}
+
+const TYPE_META: Record<AppointmentType, { label: string; Icon: typeof Star; className: string }> = {
+  vip:          { label: 'VIP',         Icon: Star,    className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  'first-time': { label: 'Primera vez', Icon: UserPlus, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  returning:    { label: 'Recurrente',  Icon: Repeat,  className: 'bg-sky-50 text-sky-700 border-sky-200' },
+  other:        { label: 'Otro',        Icon: Tag,     className: 'bg-zinc-50 text-zinc-700 border-zinc-200' },
+}
+
+function TypeBadge({ type }: { type: AppointmentType }) {
+  const meta = TYPE_META[type]
+  if (!meta) return null
+  const { Icon, label, className } = meta
+  return (
+    <span
+      title={label}
+      className={cn('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium border', className)}
+    >
+      <Icon size={9} strokeWidth={1.75} />
+      {label}
+    </span>
+  )
 }
 
 const col = createColumnHelper<SerialAppt>()
@@ -54,6 +80,7 @@ const columns = [
       return (
         <div className="flex items-center gap-1.5 flex-wrap">
           <StatusBadge status={info.getValue()} />
+          {row.type && <TypeBadge type={row.type} />}
           {showConfirm && row.clientConfirmed && (
             <span
               title="El cliente confirmó su asistencia"
@@ -72,11 +99,40 @@ const columns = [
               Sin confirmar
             </span>
           )}
+          {row.rescheduleRequestedAt && (
+            <span
+              title="El cliente pidió reagendar"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200"
+            >
+              <CalendarClock size={9} strokeWidth={1.5} />
+              Reagendar
+            </span>
+          )}
+          {row.cancelRequestedAt && (
+            <span
+              title="El cliente pidió cancelar"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700 border border-red-200"
+            >
+              <BellRing size={9} strokeWidth={1.5} />
+              Cancelar
+            </span>
+          )}
           {(row.guestCount ?? 0) > 0 && (
             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-champagne-tint text-champagne-deep border border-champagne-soft">
               <Users size={9} strokeWidth={1.5} />
               {row.guestCount}
             </span>
+          )}
+          {(row.tags ?? []).slice(0, 3).map(t => (
+            <span
+              key={t}
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-cream-soft text-ink-muted border border-admin-line"
+            >
+              {t}
+            </span>
+          ))}
+          {(row.tags?.length ?? 0) > 3 && (
+            <span className="text-[10px] text-ink-subtle">+{(row.tags?.length ?? 0) - 3}</span>
           )}
         </div>
       )
@@ -96,6 +152,8 @@ export function AppointmentTable() {
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
   const [search,      setSearch]        = useState('')
   const [statusFilter,setStatusFilter]  = useState<AppointmentStatus | ''>('')
+  const [typeFilter,  setTypeFilter]    = useState<AppointmentType | ''>('')
+  const [tagFilter,   setTagFilter]     = useState<string>('')
   const [sorting,     setSorting]       = useState<SortingState>([])
   const [selected,    setSelected]      = useState<SerialAppt | null>(null)
   const [deciding,    setDeciding]      = useState(false)
@@ -106,6 +164,8 @@ export function AppointmentTable() {
     const params = new URLSearchParams()
     if (search)       params.set('search', search)
     if (statusFilter) params.set('status', statusFilter)
+    if (typeFilter)   params.set('type', typeFilter)
+    if (tagFilter)    params.set('tag', tagFilter)
     if (!reset && nextCursor) params.set('cursor', nextCursor)
 
     try {
@@ -123,9 +183,17 @@ export function AppointmentTable() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, nextCursor])
+  }, [search, statusFilter, typeFilter, tagFilter, nextCursor])
 
-  useEffect(() => { fetchAppointments(true) }, [search, statusFilter]) // eslint-disable-line
+  useEffect(() => { fetchAppointments(true) }, [search, statusFilter, typeFilter, tagFilter]) // eslint-disable-line
+
+  const knownTags = useMemo(() => {
+    const set = new Set<string>()
+    for (const a of appointments) {
+      for (const t of a.tags ?? []) set.add(t)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'))
+  }, [appointments])
 
   const decide = useCallback(async (action: 'accept' | 'reject') => {
     if (!selected) return
@@ -206,6 +274,30 @@ export function AppointmentTable() {
           <option value="accepted">Confirmadas</option>
           <option value="rejected">Rechazadas</option>
           <option value="cancelled">Canceladas</option>
+        </select>
+        <select
+          value={typeFilter}
+          onChange={e => setTypeFilter(e.target.value as AppointmentType | '')}
+          className="input-clean sm:w-40"
+          aria-label="Filtrar por tipo de cliente"
+        >
+          <option value="">Todos los tipos</option>
+          <option value="vip">VIP</option>
+          <option value="first-time">Primera vez</option>
+          <option value="returning">Recurrente</option>
+          <option value="other">Otro</option>
+        </select>
+        <select
+          value={tagFilter}
+          onChange={e => setTagFilter(e.target.value)}
+          className="input-clean sm:w-40"
+          aria-label="Filtrar por etiqueta"
+          disabled={knownTags.length === 0}
+        >
+          <option value="">{knownTags.length === 0 ? 'Sin etiquetas' : 'Todas las etiquetas'}</option>
+          {knownTags.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
         </select>
         <Button variant="outline" size="sm" onClick={exportCSV} className="shrink-0">
           <Download size={14} strokeWidth={1.5} /> CSV
@@ -396,6 +488,16 @@ export function AppointmentTable() {
                 <GuestsList appointmentId={selected.id} />
               </div>
             )}
+
+            <AppointmentMetaForm
+              appointmentId={selected.id}
+              initialTags={selected.tags ?? []}
+              initialType={selected.type ?? null}
+              initialNotes={selected.internalNotes ?? ''}
+              initialNotesUpdatedAt={null}
+              initialNotesUpdatedBy={selected.internalNotesUpdatedBy ?? null}
+              onSaved={() => fetchAppointments(true)}
+            />
 
             {selected.status === 'pending' && (
               <div className="space-y-3 pt-2 border-t border-ink-line">

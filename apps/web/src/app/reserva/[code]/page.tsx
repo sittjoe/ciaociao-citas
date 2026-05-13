@@ -6,9 +6,13 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { formatDate, formatTime } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
-import { CalendarPlus, Gem } from 'lucide-react'
+import { CalendarPlus, Gem, MapPin } from 'lucide-react'
 import type { AppointmentStatus } from '@/types'
 import CancelButton from './CancelButton'
+import ClientRequestButtons from './ClientRequestButtons'
+
+const SHOWROOM_ADDRESS = process.env.NEXT_PUBLIC_SHOWROOM_ADDRESS
+  ?? 'Showroom Ciao Ciao · CDMX (dirección compartida por correo el día de la cita)'
 
 export const dynamic  = 'force-dynamic'
 export const metadata: Metadata = { title: 'Estado de tu cita' }
@@ -47,9 +51,12 @@ export default async function ReservaPage({ params }: PageProps) {
     notes:             data.notes as string | undefined,
     guestCount:        (data.guestCount as number | undefined) ?? 0,
     guestsAllVerified: (data.guestsAllVerified as boolean | undefined) ?? true,
+    reschedulePending: !!data.rescheduleRequestedAt,
+    cancelPending:     !!data.cancelRequestedAt,
   }
 
-  const canCancel = appt.status === 'pending' || appt.status === 'accepted'
+  const canCancel     = appt.status === 'pending' || appt.status === 'accepted'
+  const canReschedule = appt.status === 'pending' || appt.status === 'accepted'
 
   return (
     <main className="min-h-screen bg-cream">
@@ -112,6 +119,23 @@ export default async function ReservaPage({ params }: PageProps) {
             </div>
 
             {appt.status === 'accepted' && (
+              <div className="rounded-2xl border border-ink-line bg-cream-soft/60 px-4 py-3 text-xs leading-relaxed text-ink-muted">
+                <p className="inline-flex items-center gap-1.5 text-champagne-deep font-medium">
+                  <MapPin size={13} strokeWidth={1.5} />
+                  Showroom
+                </p>
+                <p className="mt-1 text-ink">{SHOWROOM_ADDRESS}</p>
+              </div>
+            )}
+
+            {(appt.reschedulePending || appt.cancelPending) && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+                {appt.reschedulePending && <p>Tu solicitud de reagendamiento está siendo revisada.</p>}
+                {appt.cancelPending     && <p>Tu solicitud de cancelación está siendo revisada.</p>}
+              </div>
+            )}
+
+            {appt.status === 'accepted' && (
               <a
                 href={`/api/calendar/${appt.id}`}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
@@ -119,6 +143,16 @@ export default async function ReservaPage({ params }: PageProps) {
                 <CalendarPlus size={15} strokeWidth={1.5} />
                 Agregar a mi calendario
               </a>
+            )}
+
+            {(canReschedule || canCancel) && (
+              <ClientRequestButtons
+                code={appt.confirmationCode}
+                canReschedule={canReschedule}
+                canCancel={canCancel}
+                initialReschedulePending={appt.reschedulePending}
+                initialCancelPending={appt.cancelPending}
+              />
             )}
 
             {canCancel && <CancelButton token={appt.cancelToken} />}

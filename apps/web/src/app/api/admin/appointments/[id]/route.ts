@@ -45,6 +45,19 @@ export async function GET(
       updatedAt:        d.updatedAt ? (d.updatedAt as Timestamp)?.toDate().toISOString() : null,
       guestCount:       d.guestCount ?? 0,
       guestsAllVerified: d.guestsAllVerified ?? false,
+      tags:             Array.isArray(d.tags) ? d.tags : [],
+      type:             d.type ?? null,
+      internalNotes:    d.internalNotes ?? '',
+      internalNotesUpdatedAt: d.internalNotesUpdatedAt
+        ? (d.internalNotesUpdatedAt as Timestamp)?.toDate().toISOString()
+        : null,
+      internalNotesUpdatedBy: d.internalNotesUpdatedBy ?? null,
+      rescheduleRequestedAt: d.rescheduleRequestedAt
+        ? (d.rescheduleRequestedAt as Timestamp)?.toDate().toISOString()
+        : null,
+      cancelRequestedAt: d.cancelRequestedAt
+        ? (d.cancelRequestedAt as Timestamp)?.toDate().toISOString()
+        : null,
     })
   } catch (err) {
     console.error(`GET /api/admin/appointments/${id}`, err)
