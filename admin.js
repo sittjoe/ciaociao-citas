@@ -33,6 +33,26 @@ let currentPageConfirmed = 1;
 const itemsPerPage = 10;
 let appointmentHandlersBound = false;
 
+// Sorting state per list ("pending" | "confirmed").
+// column: name | slotDatetime | status | createdAt
+// direction: 'asc' | 'desc'
+const currentSort = {
+    pending: { column: null, direction: 'asc' },
+    confirmed: { column: null, direction: 'asc' }
+};
+
+// Tracks one-time setup flags
+let chartResizeListenerBound = false;
+let sortHeadersBound = false;
+let skeletonTimeoutsBound = false;
+let detailModalHandlersBound = false;
+
+// Skeleton fallback timers
+const skeletonFallbackTimers = new Map();
+
+// Internal notes modal state
+let currentDetailAppointmentId = null;
+
 const normalizeText = (value, fallback = '') => {
     if (value === undefined || value === null) return fallback;
     return typeof value === 'string' ? value : String(value);
@@ -139,11 +159,20 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const password = document.getElementById('adminPassword').value;
+    const adminEmailInput = document.getElementById('adminEmail');
+    const adminEmailValue = adminEmailInput ? adminEmailInput.value.trim() : '';
     const loginError = document.getElementById('loginError');
     const submitBtn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('button');
 
     loginError.style.display = 'none';
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Verificando...'; }
+
+    // Persistir email del admin para auditoría (sólo si se proporcionó y aún no existe)
+    if (adminEmailValue) {
+        try {
+            sessionStorage.setItem('adminEmail', adminEmailValue);
+        } catch (_) { /* ignore */ }
+    }
 
     try {
         const result = await adminLoginFn({ password });
@@ -161,6 +190,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
+    destroyAllCharts();
     await signOut(auth);
     location.reload();
 });
@@ -180,6 +210,10 @@ function showDashboard() {
     }
     loadAllData();
     initKeyboardShortcuts();
+    bindSortHeaders();
+    bindDetailModalHandlers();
+    updateSortIndicators('pending');
+    updateSortIndicators('confirmed');
 }
 
 // ============================================
@@ -254,10 +288,12 @@ function showToast(message, type = 'success') {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'polite');
 
     const icon = type === 'success' ?
-        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' :
-        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' :
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
     toast.innerHTML = icon;
     const textEl = document.createElement('span');
@@ -428,6 +464,7 @@ async function loadSlots() {
 
 function displaySlots(slots) {
     const container = document.getElementById('slotsList');
+    clearSkeletonFallback('slotsList');
 
     if (slots.length === 0) {
         showEmptyState(container, 'no-slots');
@@ -519,6 +556,36 @@ function showSkeletonAppointments(containerId, count = 3) {
             </div>
         </div>
     `).join('');
+
+    scheduleSkeletonFallback(containerId);
+}
+
+function scheduleSkeletonFallback(containerId) {
+    // Clear any previous timer for this container
+    if (skeletonFallbackTimers.has(containerId)) {
+        clearTimeout(skeletonFallbackTimers.get(containerId));
+    }
+    const timer = setTimeout(() => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        // If skeletons are still showing after 10s, replace with error message
+        if (container.querySelector('.skeleton')) {
+            container.innerHTML = `
+                <div class="skeleton-error" role="alert">
+                    No se pudo cargar — recarga la página.
+                </div>
+            `;
+        }
+        skeletonFallbackTimers.delete(containerId);
+    }, 10000);
+    skeletonFallbackTimers.set(containerId, timer);
+}
+
+function clearSkeletonFallback(containerId) {
+    if (skeletonFallbackTimers.has(containerId)) {
+        clearTimeout(skeletonFallbackTimers.get(containerId));
+        skeletonFallbackTimers.delete(containerId);
+    }
 }
 
 function showSkeletonSlots() {
@@ -536,6 +603,8 @@ function showSkeletonSlots() {
             </div>
         </div>
     `).join('');
+
+    scheduleSkeletonFallback('slotsList');
 }
 
 // ============================================
@@ -633,6 +702,79 @@ function paginateArray(array, page, perPage = itemsPerPage) {
     return array.slice(start, end);
 }
 
+// ============================================
+// SORTING HELPERS
+// ============================================
+
+function getSortValue(apt, column) {
+    if (column === 'name') {
+        return safeLower(apt.name);
+    }
+    if (column === 'slotDatetime' || column === 'createdAt') {
+        const raw = apt[column];
+        if (!raw) return 0;
+        const d = raw instanceof Date ? raw : new Date(raw);
+        return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+    }
+    if (column === 'status') {
+        return normalizeText(apt.status, '');
+    }
+    return '';
+}
+
+function sortAppointments(list, listKey) {
+    const state = currentSort[listKey];
+    if (!state || !state.column) return list;
+    const { column, direction } = state;
+    const factor = direction === 'desc' ? -1 : 1;
+    const sorted = [...list].sort((a, b) => {
+        const av = getSortValue(a, column);
+        const bv = getSortValue(b, column);
+        if (av < bv) return -1 * factor;
+        if (av > bv) return 1 * factor;
+        return 0;
+    });
+    return sorted;
+}
+
+function updateSortIndicators(listKey) {
+    const wrap = document.getElementById(listKey === 'pending' ? 'sortHeadersPending' : 'sortHeadersConfirmed');
+    if (!wrap) return;
+    const state = currentSort[listKey];
+    wrap.querySelectorAll('.sort-header').forEach(btn => {
+        const isActive = state.column && btn.dataset.sortColumn === state.column;
+        btn.classList.toggle('active', !!isActive);
+        const indicator = btn.querySelector('.sort-indicator');
+        if (indicator) {
+            indicator.textContent = isActive ? (state.direction === 'asc' ? '▲' : '▼') : '';
+        }
+        btn.setAttribute('aria-sort', isActive ? (state.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+    });
+}
+
+function bindSortHeaders() {
+    if (sortHeadersBound) return;
+    document.querySelectorAll('.sort-header').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const listKey = btn.dataset.sortList;
+            const column = btn.dataset.sortColumn;
+            if (!listKey || !column) return;
+            const state = currentSort[listKey];
+            if (state.column === column) {
+                state.direction = state.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.column = column;
+                state.direction = 'asc';
+            }
+            if (listKey === 'pending') currentPagePending = 1;
+            else currentPageConfirmed = 1;
+            updateSortIndicators(listKey);
+            filterAndDisplayAppointments();
+        });
+    });
+    sortHeadersBound = true;
+}
+
 function createPagination(containerId, totalItems, currentPage, onPageChange) {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
     if (totalPages <= 1) return '';
@@ -646,13 +788,13 @@ function createPagination(containerId, totalItems, currentPage, onPageChange) {
                 Mostrando ${start}-${end} de ${totalItems}
             </div>
             <div class="pagination-buttons">
-                <button class="pagination-btn" onclick="${onPageChange}(1)" ${currentPage === 1 ? 'disabled' : ''}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <button class="pagination-btn" onclick="${onPageChange}(1)" ${currentPage === 1 ? 'disabled' : ''} aria-label="Primera página">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M18 17L13 12L18 7M11 17L6 12L11 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
-                <button class="pagination-btn" onclick="${onPageChange}(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <button class="pagination-btn" onclick="${onPageChange}(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} aria-label="Página anterior">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
@@ -669,20 +811,20 @@ function createPagination(containerId, totalItems, currentPage, onPageChange) {
 
     for (let i = startPage; i <= endPage; i++) {
         paginationHTML += `
-            <button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="${onPageChange}(${i})">
+            <button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="${onPageChange}(${i})" aria-label="Página ${i}"${i === currentPage ? ' aria-current="page"' : ''}>
                 ${i}
             </button>
         `;
     }
 
     paginationHTML += `
-                <button class="pagination-btn" onclick="${onPageChange}(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <button class="pagination-btn" onclick="${onPageChange}(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} aria-label="Página siguiente">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
-                <button class="pagination-btn" onclick="${onPageChange}(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <button class="pagination-btn" onclick="${onPageChange}(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''} aria-label="Última página">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M6 17L11 12L6 7M13 17L18 12L13 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
@@ -759,6 +901,68 @@ function getRelativeTime(date) {
     } else {
         return 'Hace un momento';
     }
+}
+
+// ============================================
+// FOCUS TRAP (modales accesibles)
+// ============================================
+
+const FOCUSABLE_SELECTOR = [
+    'a[href]',
+    'button:not([disabled])',
+    'textarea:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+].join(',');
+
+function setupFocusTrap(modal) {
+    if (!modal) return;
+    // Remember previously focused element to restore later
+    modal._previousFocus = document.activeElement;
+
+    const handler = (e) => {
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            // Close based on which modal
+            if (modal.id === 'appointmentDetailModal') {
+                closeAppointmentDetailModal();
+            } else if (modal.id === 'idModal') {
+                closeIdModal();
+            } else {
+                modal.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+            return;
+        }
+        if (e.key !== 'Tab') return;
+        const focusables = Array.from(modal.querySelectorAll(FOCUSABLE_SELECTOR))
+            .filter(el => !el.hasAttribute('disabled') && el.offsetParent !== null);
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    };
+    modal._focusTrapHandler = handler;
+    modal.addEventListener('keydown', handler);
+}
+
+function teardownFocusTrap(modal) {
+    if (!modal) return;
+    if (modal._focusTrapHandler) {
+        modal.removeEventListener('keydown', modal._focusTrapHandler);
+        modal._focusTrapHandler = null;
+    }
+    if (modal._previousFocus && typeof modal._previousFocus.focus === 'function') {
+        try { modal._previousFocus.focus(); } catch (_) { /* ignore */ }
+    }
+    modal._previousFocus = null;
 }
 
 // ============================================
@@ -933,6 +1137,23 @@ function updateDashboardStats() {
     // Initialize or update charts
     initializeCharts(pending, accepted, rejected);
     updateWeekChart();
+    bindChartResizeListener();
+}
+
+function bindChartResizeListener() {
+    if (chartResizeListenerBound) return;
+    window.addEventListener('resize', () => {
+        const charts = { statusChart, weekChart };
+        Object.values(charts).forEach(c => {
+            try { if (c && typeof c.resize === 'function') c.resize(); } catch (_) { /* ignore */ }
+        });
+    });
+    chartResizeListenerBound = true;
+}
+
+function destroyAllCharts() {
+    try { if (statusChart) { statusChart.destroy(); statusChart = null; } } catch (_) { /* ignore */ }
+    try { if (weekChart) { weekChart.destroy(); weekChart = null; } } catch (_) { /* ignore */ }
 }
 
 // ============================================
@@ -946,8 +1167,13 @@ function initializeCharts(pending, accepted, rejected) {
     const statusCtx = document.getElementById('statusChart');
     if (!statusCtx) return;
 
+    // Defensive: destroy any existing instance attached to the canvas
+    // (covers cases where Chart.js cached an instance even if our var is stale).
+    const existing = (typeof Chart.getChart === 'function') ? Chart.getChart(statusCtx) : null;
+    if (existing) existing.destroy();
     if (statusChart) {
         statusChart.destroy();
+        statusChart = null;
     }
 
     statusChart = new Chart(statusCtx, {
@@ -1030,8 +1256,11 @@ function updateWeekChart() {
         counts.push(dayCount);
     }
 
+    const existingWeek = (typeof Chart.getChart === 'function') ? Chart.getChart(weekCtx) : null;
+    if (existingWeek) existingWeek.destroy();
     if (weekChart) {
         weekChart.destroy();
+        weekChart = null;
     }
 
     weekChart = new Chart(weekCtx, {
@@ -1099,6 +1328,7 @@ function updateWeekChart() {
 
 function displayUpcomingAppointments(appointments) {
     const container = document.getElementById('upcomingAppointments');
+    clearSkeletonFallback('upcomingAppointments');
     const now = new Date();
 
     const upcoming = appointments
@@ -1137,6 +1367,7 @@ function displayUpcomingAppointments(appointments) {
 
 function displayPendingAppointments(appointments) {
     const container = document.getElementById('pendingAppointments');
+    clearSkeletonFallback('pendingAppointments');
 
     // Apply filters
     const searchTerm = safeLower(document.getElementById('searchPending')?.value);
@@ -1179,7 +1410,8 @@ function displayPendingAppointments(appointments) {
         return;
     }
 
-    // Paginate
+    // Sort, then paginate
+    filtered = sortAppointments(filtered, 'pending');
     const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
     if (currentPagePending > totalPages) {
         currentPagePending = totalPages;
@@ -1245,6 +1477,7 @@ function displayPendingAppointments(appointments) {
 
 function displayConfirmedAppointments(appointments) {
     const container = document.getElementById('confirmedAppointments');
+    clearSkeletonFallback('confirmedAppointments');
 
     // Apply filters
     const searchTerm = safeLower(document.getElementById('searchConfirmed')?.value);
@@ -1292,7 +1525,8 @@ function displayConfirmedAppointments(appointments) {
         return;
     }
 
-    // Paginate
+    // Sort, then paginate
+    filtered = sortAppointments(filtered, 'confirmed');
     const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
     if (currentPageConfirmed > totalPages) {
         currentPageConfirmed = totalPages;
@@ -1320,6 +1554,16 @@ function displayConfirmedAppointments(appointments) {
             data-id-url="${encodeData(apt.identificationUrl)}"
         `;
 
+        const isAccepted = apt.status === 'accepted';
+        const rowActions = `
+            <div class="appointment-actions" style="margin-top:10px;flex-wrap:wrap;">
+                ${isAccepted ? `<button class="row-action-btn" data-action="resend-email" aria-label="Reenviar email de confirmación">📧 Reenviar email</button>` : ''}
+                <button class="row-action-btn" data-action="copy-link" aria-label="Copiar link de la cita">🔗 Copiar link</button>
+                <button class="row-action-btn" data-action="open-detail" aria-label="Abrir detalle y notas internas">📝 Notas</button>
+                ${apt.identificationUrl ? `<button class="view-id-btn" data-action="view-id">Ver Identificación</button>` : ''}
+            </div>
+        `;
+
         return `
             <div class="appointment-card ${cardClass}" ${dataAttrs}>
                 <div class="appointment-header">
@@ -1338,7 +1582,7 @@ function displayConfirmedAppointments(appointments) {
                     <p><strong>Teléfono:</strong> ${displayPhone}</p>
                     ${notesHtml}
                 </div>
-                ${apt.identificationUrl ? `<button class="view-id-btn" data-action="view-id">Ver Identificación</button>` : ''}
+                ${rowActions}
             </div>
         `;
     }).join('') + createPagination('confirmedAppointments', filtered.length, currentPageConfirmed, 'goToPageConfirmed');
@@ -1465,15 +1709,22 @@ function handlePendingSelectionChange(event) {
 }
 
 function handleConfirmedActionClick(event) {
-    const button = event.target.closest('button[data-action="view-id"]');
+    const button = event.target.closest('button[data-action]');
     if (!button) return;
+    const action = button.dataset.action;
 
     const card = button.closest('.appointment-card');
     if (!card) return;
-
     const data = getAppointmentData(card);
-    if (data.idUrl) {
+
+    if (action === 'view-id' && data.idUrl) {
         viewIdentification(data.idUrl);
+    } else if (action === 'resend-email') {
+        resendConfirmationEmail(data, button);
+    } else if (action === 'copy-link') {
+        copyAppointmentLink(data, button);
+    } else if (action === 'open-detail') {
+        openAppointmentDetailModal(data.id);
     }
 }
 
@@ -1812,6 +2063,200 @@ async function rejectAppointmentSilent(appointmentId, email, name, slotId) {
 }
 
 // ============================================
+// REENVIAR EMAIL DE CONFIRMACIÓN
+// ============================================
+
+async function resendConfirmationEmail(data, btn) {
+    if (!emailjsAvailable) {
+        showToast('EmailJS no está disponible', 'error');
+        return;
+    }
+    const apt = allAppointments.find(a => a.id === data.id);
+    if (!apt) {
+        showToast('No se encontró la cita', 'error');
+        return;
+    }
+    const originalLabel = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Enviando...'; }
+    try {
+        const slotDatetime = apt.slotDatetime ? new Date(apt.slotDatetime) : null;
+        const hasSlot = slotDatetime && !Number.isNaN(slotDatetime.getTime());
+        const dateStr = hasSlot
+            ? slotDatetime.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+            : (data.dateStr || 'Sin fecha');
+        const timeStr = hasSlot
+            ? slotDatetime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+            : (data.timeStr || 'Sin hora');
+
+        await emailjs.send(emailConfig.serviceId, emailConfig.templateId, {
+            to_email: apt.email || data.email,
+            to_name: apt.name || data.name,
+            subject: 'Confirmación de Cita - Ciao Ciao',
+            message: `Hola ${apt.name || data.name},\n\nTe recordamos los detalles de tu cita:\n\nFecha: ${dateStr}\nHora: ${timeStr}\n\nTe esperamos en nuestro showroom.\n\nCiao Ciao Joyería`
+        });
+        await writeAuditLog('email_resent', apt.id);
+        showToast('Email enviado');
+    } catch (error) {
+        console.error('Error reenviando email:', error);
+        showToast('Error al enviar email', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = originalLabel; }
+    }
+}
+
+// ============================================
+// COPIAR LINK DE LA CITA
+// ============================================
+
+async function copyAppointmentLink(data, btn) {
+    const apt = allAppointments.find(a => a.id === data.id);
+    // No public route to /reserva/{id} in this repo — fall back to plain-text summary.
+    const slotDatetime = apt && apt.slotDatetime ? new Date(apt.slotDatetime) : null;
+    const hasSlot = slotDatetime && !Number.isNaN(slotDatetime.getTime());
+    const dateStr = hasSlot
+        ? slotDatetime.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : (data.dateStr || 'Sin fecha');
+    const timeStr = hasSlot
+        ? slotDatetime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        : (data.timeStr || 'Sin hora');
+
+    const summary = [
+        'Ciao Ciao — Detalle de cita',
+        `Cliente: ${(apt && apt.name) || data.name || 'Sin nombre'}`,
+        `Email: ${(apt && apt.email) || data.email || 'Sin email'}`,
+        `Teléfono: ${(apt && apt.phone) || 'Sin teléfono'}`,
+        `Fecha: ${dateStr}`,
+        `Hora: ${timeStr}`,
+        `ID: ${data.id}`
+    ].join('\n');
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(summary);
+        } else {
+            // Fallback: temporary textarea
+            const ta = document.createElement('textarea');
+            ta.value = summary;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+        showToast('Resumen copiado al portapapeles');
+    } catch (error) {
+        console.error('Error copiando link:', error);
+        showToast('No se pudo copiar', 'error');
+    }
+}
+
+// ============================================
+// MODAL DE DETALLE DE CITA + NOTAS INTERNAS
+// ============================================
+
+function bindDetailModalHandlers() {
+    if (detailModalHandlersBound) return;
+    const saveBtn = document.getElementById('saveInternalNotesBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveInternalNotes);
+    }
+    detailModalHandlersBound = true;
+}
+
+function openAppointmentDetailModal(appointmentId) {
+    const apt = allAppointments.find(a => a.id === appointmentId);
+    if (!apt) {
+        showToast('No se encontró la cita', 'error');
+        return;
+    }
+    currentDetailAppointmentId = appointmentId;
+    bindDetailModalHandlers();
+
+    const modal = document.getElementById('appointmentDetailModal');
+    const body = document.getElementById('appointmentDetailBody');
+    const notesField = document.getElementById('internalNotesField');
+    const meta = document.getElementById('internalNotesMeta');
+    if (!modal || !body || !notesField) return;
+
+    const { dateStr, timeStr } = formatDateTime(apt.slotDatetime);
+    const displayName = escapeHtml(normalizeText(apt.name, 'Sin nombre'));
+    const displayEmail = escapeHtml(normalizeText(apt.email, 'Sin email'));
+    const displayPhone = escapeHtml(normalizeText(apt.phone, 'Sin teléfono'));
+    const statusText = apt.status === 'pending' ? 'Pendiente' : apt.status === 'accepted' ? 'Aceptada' : 'Rechazada';
+    body.innerHTML = `
+        <p><strong>Cliente:</strong> ${displayName}</p>
+        <p><strong>Email:</strong> ${displayEmail}</p>
+        <p><strong>Teléfono:</strong> ${displayPhone}</p>
+        <p><strong>Fecha de cita:</strong> ${escapeHtml(dateStr)} ${escapeHtml(timeStr)}</p>
+        <p><strong>Estado:</strong> ${statusText}</p>
+    `;
+    notesField.value = normalizeText(apt.internalNotes, '');
+
+    if (meta) {
+        if (apt.internalNotesUpdatedAt) {
+            const updatedDate = apt.internalNotesUpdatedAt instanceof Date
+                ? apt.internalNotesUpdatedAt
+                : (typeof apt.internalNotesUpdatedAt.toDate === 'function'
+                    ? apt.internalNotesUpdatedAt.toDate()
+                    : new Date(apt.internalNotesUpdatedAt));
+            const by = normalizeText(apt.internalNotesUpdatedBy, 'admin');
+            meta.textContent = `Última edición: ${updatedDate.toLocaleString('es-ES')} — por ${by}`;
+        } else {
+            meta.textContent = '';
+        }
+    }
+
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setupFocusTrap(modal);
+    // Focus textarea after open
+    setTimeout(() => notesField.focus(), 50);
+}
+
+window.closeAppointmentDetailModal = function() {
+    const modal = document.getElementById('appointmentDetailModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    teardownFocusTrap(modal);
+    currentDetailAppointmentId = null;
+};
+
+async function saveInternalNotes() {
+    if (!currentDetailAppointmentId) return;
+    const notesField = document.getElementById('internalNotesField');
+    const saveBtn = document.getElementById('saveInternalNotesBtn');
+    if (!notesField) return;
+    const value = notesField.value.slice(0, 2000); // enforce maxlength
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando...'; }
+    try {
+        const apptRef = doc(db, 'appointments', currentDetailAppointmentId);
+        await updateDoc(apptRef, {
+            internalNotes: value,
+            internalNotesUpdatedAt: serverTimestamp(),
+            internalNotesUpdatedBy: getAdminIdentifier()
+        });
+        await writeAuditLog('internal_note_updated', currentDetailAppointmentId);
+
+        // Update local cache
+        const apt = allAppointments.find(a => a.id === currentDetailAppointmentId);
+        if (apt) {
+            apt.internalNotes = value;
+            apt.internalNotesUpdatedAt = new Date();
+            apt.internalNotesUpdatedBy = getAdminIdentifier();
+        }
+        showToast('Nota guardada');
+        closeAppointmentDetailModal();
+    } catch (error) {
+        console.error('Error guardando nota interna:', error);
+        showToast('Error al guardar nota', 'error');
+    } finally {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar nota'; }
+    }
+}
+
+// ============================================
 // VER IDENTIFICACIÓN
 // ============================================
 
@@ -1838,7 +2283,27 @@ window.closeIdModal = () => {
 // ============================================
 
 function appointmentsToCSV(appointments) {
-    const headers = ['Nombre', 'Email', 'Teléfono', 'Fecha', 'Hora', 'Estado', 'Notas'];
+    const headers = [
+        'Nombre',
+        'Email',
+        'Teléfono',
+        'Fecha cita',
+        'Hora cita',
+        'Estado',
+        'Notas internas',
+        'Notas cliente',
+        'Creada',
+        'Exportada',
+        'Exportada por'
+    ];
+    const exportedAtIso = new Date().toISOString();
+    const exportedBy = getAdminIdentifier();
+    const toIsoOrEmpty = (value) => {
+        if (!value) return '';
+        const d = value instanceof Date ? value : (typeof value.toDate === 'function' ? value.toDate() : new Date(value));
+        return d && !Number.isNaN(d.getTime()) ? d.toISOString() : '';
+    };
+
     const rows = appointments.map(apt => {
         const slotDatetime = apt.slotDatetime ? new Date(apt.slotDatetime) : null;
         const hasSlot = slotDatetime && !Number.isNaN(slotDatetime.getTime());
@@ -1856,11 +2321,17 @@ function appointmentsToCSV(appointments) {
             dateStr,
             timeStr,
             statusText,
-            normalizeText(apt.notes, '')
+            normalizeText(apt.internalNotes, ''),
+            normalizeText(apt.notes, ''),
+            toIsoOrEmpty(apt.createdAt),
+            exportedAtIso,
+            exportedBy
         ];
     });
 
-    let csv = headers.join(',') + '\n';
+    // BOM UTF-8 para que Excel detecte la codificación correctamente.
+    const BOM = '﻿';
+    let csv = BOM + headers.map(h => csvEscape(h)).join(',') + '\n';
     rows.forEach(row => {
         csv += row.map(cell => csvEscape(cell)).join(',') + '\n';
     });
