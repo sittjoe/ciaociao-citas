@@ -382,7 +382,44 @@ async function loadSlots() {
             });
         });
 
-        displaySlots(allSlots);
+        // Ocultar slots vencidos por defecto, con toggle opcional para revisarlos.
+        // El estado del toggle se guarda en el contenedor para sobrevivir re-renders.
+        const container = document.getElementById('slotsList');
+        const showExpired = container && container.dataset.showExpired === '1';
+        const nowMs = Date.now();
+        const expiredCount = allSlots.reduce((n, s) => n + (s.datetime.getTime() <= nowMs ? 1 : 0), 0);
+        const visible = showExpired
+            ? allSlots
+            : allSlots.filter(s => s.datetime.getTime() > nowMs);
+
+        if (container) {
+            const existingBar = document.getElementById('slotsExpiredBar');
+            if (existingBar) existingBar.remove();
+
+            if (expiredCount > 0 && container.parentNode) {
+                const bar = document.createElement('div');
+                bar.id = 'slotsExpiredBar';
+                bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin-bottom:12px;background:var(--gray-light, #f5f5f5);border-radius:8px;font-size:0.9rem;';
+                bar.innerHTML = `
+                    <span>${showExpired ? `Mostrando ${expiredCount} horario(s) vencido(s)` : `${expiredCount} horario(s) vencido(s) ocultos`}</span>
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="checkbox" id="toggleExpiredSlots" ${showExpired ? 'checked' : ''} />
+                        <span>Mostrar vencidos</span>
+                    </label>
+                `;
+                container.parentNode.insertBefore(bar, container);
+
+                const toggle = document.getElementById('toggleExpiredSlots');
+                if (toggle) {
+                    toggle.addEventListener('change', (e) => {
+                        container.dataset.showExpired = e.target.checked ? '1' : '0';
+                        loadSlots();
+                    });
+                }
+            }
+        }
+
+        displaySlots(visible);
     } catch (error) {
         console.error('Error loading slots:', error);
         document.getElementById('slotsList').innerHTML = '<p style="color: var(--error-color);">Error al cargar horarios</p>';

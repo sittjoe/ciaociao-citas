@@ -7,12 +7,19 @@ export class CalendarManager {
     constructor(containerEl, onDateSelect) {
         this.container = containerEl;
         this.onDateSelect = onDateSelect;
-        this.currentMonth = new Date().getMonth();
-        this.currentYear = new Date().getFullYear();
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        this.currentDate = today;
+        this.currentMonth = today.getMonth();
+        this.currentYear = today.getFullYear();
         this.selectedDate = null;
         this.daysWithSlots = new Set(); // Set de fechas con horarios disponibles
-        this.handleContainerClick = this.handleContainerClick.bind(this);
-        this.handleContainerKeydown = this.handleContainerKeydown.bind(this);
+
+        // Bind UNA sola vez para que el listener delegado sea estable
+        this.boundClick = this.handleContainerClick.bind(this);
+        this.boundKeydown = this.handleContainerKeydown.bind(this);
+        this.boundNavClick = this.handleNavClick.bind(this);
 
         this.monthNames = [
             'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -28,8 +35,10 @@ export class CalendarManager {
      * Inicializa el calendario
      */
     init() {
+        // Event delegation: un solo listener en el container para toda la vida del componente
+        this.container.addEventListener('click', this.boundClick);
+        this.container.addEventListener('keydown', this.boundKeydown);
         this.renderCalendar();
-        this.attachEventListeners();
     }
 
     /**
@@ -124,37 +133,21 @@ export class CalendarManager {
         return daysHTML;
     }
 
-    /**
-     * Adjunta event listeners
-     */
-    attachEventListeners() {
-        // Navegación de meses
-        const prevBtn = document.getElementById('prevMonth');
-        const nextBtn = document.getElementById('nextMonth');
-
-        if (prevBtn) {
-            prevBtn.addEventListener('click', () => this.prevMonth());
-        }
-
-        if (nextBtn) {
-            nextBtn.addEventListener('click', () => this.nextMonth());
-        }
-
-        // Click en días
-        this.container.removeEventListener('click', this.handleContainerClick);
-        this.container.addEventListener('click', this.handleContainerClick);
-
-        // Soporte para teclado
-        this.container.removeEventListener('keydown', this.handleContainerKeydown);
-        this.container.addEventListener('keydown', this.handleContainerKeydown);
-    }
-
     handleContainerClick(e) {
+        // Navegación: botones de mes (delegado al container)
+        const navBtn = e.target.closest('#prevMonth, #nextMonth');
+        if (navBtn) {
+            if (navBtn.id === 'prevMonth') this.prevMonth();
+            else this.nextMonth();
+            return;
+        }
+
         const dayEl = e.target.closest('.calendar-day');
         if (dayEl && !dayEl.classList.contains('disabled')) {
             const dateKey = dayEl.dataset.date;
             if (dateKey) {
-                this.selectDate(this.parseDateKey(dateKey));
+                const parsed = this.parseDateKey(dateKey);
+                if (parsed) this.selectDate(parsed);
             }
         }
     }
@@ -166,11 +159,16 @@ export class CalendarManager {
             if (!dayEl.classList.contains('disabled')) {
                 const dateKey = dayEl.dataset.date;
                 if (dateKey) {
-                    this.selectDate(this.parseDateKey(dateKey));
+                    const parsed = this.parseDateKey(dateKey);
+                    if (parsed) this.selectDate(parsed);
                 }
             }
         }
     }
+
+    // Mantengo el método para compatibilidad pero ya no registra listeners;
+    // los listeners delegados viven en el container desde init().
+    handleNavClick() { /* no-op: navegación ya manejada por delegación en handleContainerClick */ }
 
     /**
      * Avanza al mes siguiente
@@ -181,8 +179,9 @@ export class CalendarManager {
             this.currentMonth = 0;
             this.currentYear++;
         }
+        this.currentDate = new Date(this.currentYear, this.currentMonth, 1);
+        this.currentDate.setHours(0, 0, 0, 0);
         this.renderCalendar();
-        this.attachEventListeners();
     }
 
     /**
@@ -204,8 +203,9 @@ export class CalendarManager {
             this.currentMonth = 11;
             this.currentYear--;
         }
+        this.currentDate = new Date(this.currentYear, this.currentMonth, 1);
+        this.currentDate.setHours(0, 0, 0, 0);
         this.renderCalendar();
-        this.attachEventListeners();
     }
 
     /**
@@ -213,9 +213,11 @@ export class CalendarManager {
      * @param {Date} date - Fecha a seleccionar
      */
     selectDate(date) {
+        if (date instanceof Date) {
+            date.setHours(0, 0, 0, 0);
+        }
         this.selectedDate = date;
         this.renderCalendar();
-        this.attachEventListeners();
 
         // Callback al componente padre
         if (this.onDateSelect && typeof this.onDateSelect === 'function') {
@@ -237,7 +239,6 @@ export class CalendarManager {
         });
 
         this.renderCalendar();
-        this.attachEventListeners();
     }
 
     /**
@@ -258,8 +259,14 @@ export class CalendarManager {
      * @returns {Date}
      */
     parseDateKey(dateKey) {
+        if (typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+            return null;
+        }
         const [year, month, day] = dateKey.split('-').map(Number);
-        return new Date(year, month - 1, day);
+        const date = new Date(year, month - 1, day);
+        if (Number.isNaN(date.getTime())) return null;
+        date.setHours(0, 0, 0, 0);
+        return date;
     }
 
     /**
@@ -276,7 +283,6 @@ export class CalendarManager {
     clearSelection() {
         this.selectedDate = null;
         this.renderCalendar();
-        this.attachEventListeners();
     }
 
     /**
@@ -287,8 +293,9 @@ export class CalendarManager {
     goToMonth(month, year) {
         this.currentMonth = month;
         this.currentYear = year;
+        this.currentDate = new Date(year, month, 1);
+        this.currentDate.setHours(0, 0, 0, 0);
         this.renderCalendar();
-        this.attachEventListeners();
     }
 
     /**
@@ -296,10 +303,11 @@ export class CalendarManager {
      */
     goToToday() {
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        this.currentDate = today;
         this.currentMonth = today.getMonth();
         this.currentYear = today.getFullYear();
         this.renderCalendar();
-        this.attachEventListeners();
     }
 
     /**
@@ -327,6 +335,8 @@ export class CalendarManager {
      * Destruye el calendario y limpia event listeners
      */
     destroy() {
+        this.container.removeEventListener('click', this.boundClick);
+        this.container.removeEventListener('keydown', this.boundKeydown);
         this.container.innerHTML = '';
         this.selectedDate = null;
         this.daysWithSlots.clear();

@@ -162,9 +162,12 @@ class TimeSlotManager {
         AppState.selectedSlot = null;
         document.getElementById('step2Next').disabled = true;
 
-        // Filtrar slots para la fecha seleccionada
+        // Filtrar slots para la fecha seleccionada y descartar los que ya pasaron
+        // (re-evaluado en cada render para que slots del día de hoy se vayan ocultando con el correr del tiempo)
+        const nowMs = Date.now();
         AppState.slotsForSelectedDate = AppState.allSlots.filter(slot => {
             const slotDate = slot.datetime instanceof Date ? slot.datetime : slot.datetime.toDate();
+            if (slotDate.getTime() <= nowMs) return false;
             return DateUtils.isSameDay(slotDate, date);
         });
 
