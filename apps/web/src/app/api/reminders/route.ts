@@ -3,9 +3,73 @@ import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
 import { expirePendingGuests } from '@/lib/guests'
+import { sendAppointmentSms } from '@/lib/sms'
+import { sendWhatsAppMessage } from '@/lib/whatsapp'
+import { formatDate, formatTime } from '@/lib/utils'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
+
+// Local optional preferences shape (kept local — Agente 8 may extend the
+// Appointment type with this contract). Defaults to false for both channels.
+type ApptNotifPrefs = { sms?: boolean; whatsapp?: boolean } | undefined
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
+
+/**
+ * Fire SMS + WhatsApp notifications in parallel with the email reminder.
+ * Each channel is wrapped in its own try/catch so a failure in one channel
+ * never blocks the others or the surrounding cron flow.
+ */
+async function fanOutPhoneReminder(
+  appt: Appointment,
+  prefs: ApptNotifPrefs,
+  errors: string[],
+): Promise<void> {
+  const wantsSms = prefs?.sms === true
+  const wantsWa = prefs?.whatsapp === true
+  if (!wantsSms && !wantsWa) return
+
+  const phone = appt.phone
+  if (!phone) return
+
+  const dateStr = formatDate(appt.slotDatetime)
+  const timeStr = formatTime(appt.slotDatetime)
+  const url = `${SITE_URL}/confirmar/${appt.cancelToken}`
+
+  const tasks: Promise<unknown>[] = []
+  if (wantsSms) {
+    tasks.push(
+      sendAppointmentSms({
+        to: phone,
+        template: 'reminder_24h',
+        appointment: { name: appt.name, date: dateStr, time: timeStr, url, code: appt.confirmationCode },
+      })
+        .then(r => {
+          if (!r.ok) errors.push(`24h SMS skip/fail for ${appt.id}: ${r.error}`)
+        })
+        .catch(err => {
+          errors.push(`24h SMS threw for ${appt.id}: ${err}`)
+        }),
+    )
+  }
+  if (wantsWa) {
+    tasks.push(
+      sendWhatsAppMessage({
+        to: phone,
+        template: 'reminder_24h',
+        vars: { name: appt.name, date: dateStr, time: timeStr, url, code: appt.confirmationCode },
+      })
+        .then(r => {
+          if (!r.ok) errors.push(`24h WhatsApp skip/fail for ${appt.id}: ${r.error}`)
+        })
+        .catch(err => {
+          errors.push(`24h WhatsApp threw for ${appt.id}: ${err}`)
+        }),
+    )
+  }
+  await Promise.all(tasks)
+}
 
 // Called by Vercel cron daily at 8am CST (see vercel.json: "0 14 * * *")
 export async function GET(request: Request) {
@@ -59,6 +123,14 @@ export async function GET(request: Request) {
       } catch (err) {
         await doc.ref.update({ reminder24Sent: false })
         errors.push(`24h reminder failed for ${doc.id}: ${err}`)
+      }
+      // SMS + WhatsApp fan-out (fire-and-forget per channel; opt-in via prefs).
+      // We do NOT roll back reminder24Sent if these fail — email is the source of truth.
+      const prefs = (d.preferences ?? d.notificationPreferences) as ApptNotifPrefs
+      try {
+        await fanOutPhoneReminder(appt, prefs, errors)
+      } catch (err) {
+        errors.push(`24h phone fan-out failed for ${doc.id}: ${err}`)
       }
     }
 
