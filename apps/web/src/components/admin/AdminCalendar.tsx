@@ -6,15 +6,21 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import esLocale from '@fullcalendar/core/locales/es'
-import type { EventInput, EventSourceFuncArg } from '@fullcalendar/core'
+import type {
+  EventInput,
+  EventSourceFuncArg,
+  EventDropArg,
+  EventMountArg,
+} from '@fullcalendar/core'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AppointmentDetailModal } from './AppointmentDetailModal'
 
 type FilterKey = 'accepted' | 'pending' | 'rejected' | 'slots'
 type ApptStatus  = 'accepted' | 'pending' | 'rejected' | 'cancelled'
+type CalView = 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'
 type ApptExtended = { appointmentId: string; status: ApptStatus }
-type SlotExtended = { isSlot: true }
+type SlotExtended = { isSlot: true; slotId: string }
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   accepted: 'Confirmadas',
@@ -36,6 +42,26 @@ const STATUS_LABELS_ES: Record<string, string> = {
   pending:   'Pendiente',
   rejected:  'Rechazada',
   cancelled: 'Cancelada',
+}
+
+const VIEW_STORAGE_KEY = 'calendar.view'
+const VALID_VIEWS: ReadonlyArray<CalView> = ['dayGridMonth', 'timeGridWeek', 'timeGridDay']
+// How often to refetch events from the server so the calendar reflects
+// changes made by other admins. We don't use Firestore client onSnapshot
+// because admin auth is cookie-based (server-only) and the client SDK
+// would have no credentials to subscribe to the appointments collection.
+// 30s strikes a balance between freshness and request volume.
+const LIVE_REFETCH_MS = 30_000
+
+function readInitialView(): CalView {
+  if (typeof window === 'undefined') return 'timeGridWeek'
+  try {
+    const v = window.localStorage.getItem(VIEW_STORAGE_KEY)
+    if (v && (VALID_VIEWS as ReadonlyArray<string>).includes(v)) return v as CalView
+  } catch {
+    /* ignore — storage might be unavailable */
+  }
+  return 'timeGridWeek'
 }
 
 async function fetchAppointmentEvents(info: EventSourceFuncArg): Promise<EventInput[]> {
@@ -95,17 +121,40 @@ async function fetchSlotBackgrounds(info: EventSourceFuncArg): Promise<EventInpu
       end,
       display: 'background',
       color:   'var(--vellum)',
-      extendedProps: { isSlot: true } satisfies SlotExtended,
+      extendedProps: { isSlot: true, slotId: s.id } satisfies SlotExtended,
     }
   })
 }
 
+interface AvailableSlot { id: string; datetime: string }
+
+async function fetchAvailableSlotsAfter(after: Date): Promise<AvailableSlot[]> {
+  // 60-day horizon — same window the AppointmentDetailModal uses for reschedule.
+  const end = new Date(after.getTime() + 60 * 24 * 60 * 60 * 1000)
+    .toISOString().split('T')[0]
+  const res = await fetch(`/api/admin/slots?dateTo=${end}`)
+  if (!res.ok) throw new Error('SLOTS_FETCH_FAILED')
+  const data = await res.json() as { slots: AvailableSlot[] }
+  return data.slots
+}
+
+/** Find a slot whose datetime matches `target` to the minute (TZ-agnostic — Date.getTime). */
+function findSlotIdForDate(slots: AvailableSlot[], target: Date): string | null {
+  const targetMs = target.getTime()
+  // Allow ±60s tolerance to absorb any rounding.
+  const match = slots.find(s => Math.abs(new Date(s.datetime).getTime() - targetMs) < 60_000)
+  return match ? match.id : null
+}
+
 export function AdminCalendar() {
   const calRef = useRef<InstanceType<typeof FullCalendar>>(null)
+  const liveRegionRef = useRef<HTMLDivElement>(null)
+  const lastApptCountRef = useRef<number>(0)
   const [selectedId,    setSelectedId]    = useState<string | null>(null)
   const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(
     new Set(['accepted', 'pending', 'rejected', 'slots'])
   )
+  const [initialView] = useState<CalView>(readInitialView)
 
   const toggleFilter = (key: FilterKey) => {
     setActiveFilters(prev => {
@@ -115,6 +164,10 @@ export function AdminCalendar() {
     })
   }
 
+  const announce = useCallback((msg: string) => {
+    if (liveRegionRef.current) liveRegionRef.current.textContent = msg
+  }, [])
+
   const apptSource = useCallback(
     async (info: EventSourceFuncArg, success: (e: EventInput[]) => void, failure: (e: Error) => void) => {
       try {
@@ -123,13 +176,19 @@ export function AdminCalendar() {
           const status = (e.extendedProps as ApptExtended).status as FilterKey
           return activeFilters.has(status)
         })
+        // Aria-live: announce when the visible appointment count grows between refetches.
+        const prev = lastApptCountRef.current
+        if (prev > 0 && events.length > prev) {
+          announce(`Nueva actividad en el calendario: ${events.length - prev} cita${events.length - prev === 1 ? '' : 's'} adicional${events.length - prev === 1 ? '' : 'es'}.`)
+        }
+        lastApptCountRef.current = events.length
         success(filtered)
       } catch (err) {
         toast.error('No se pudieron cargar las citas')
         failure(err instanceof Error ? err : new Error(String(err)))
       }
     },
-    [activeFilters]
+    [activeFilters, announce]
   )
 
   const slotSource = useCallback(
@@ -146,6 +205,86 @@ export function AdminCalendar() {
 
   const handleChanged = useCallback(() => {
     calRef.current?.getApi().refetchEvents()
+  }, [])
+
+  // Drag-and-drop reschedule. Resolves the dropped time to a server slot id
+  // and POSTs to /api/admin/appointments/[id]/reschedule. Reverts on failure
+  // or user cancel so the calendar always reflects server state.
+  const handleEventDrop = useCallback(async (info: EventDropArg) => {
+    const { appointmentId, status } = info.event.extendedProps as Partial<ApptExtended>
+    if (!appointmentId) { info.revert(); return }
+    if (status !== 'accepted') {
+      toast.error('Solo se pueden reagendar citas confirmadas')
+      info.revert()
+      return
+    }
+    const newStart = info.event.start
+    if (!newStart) { info.revert(); return }
+
+    const oldTime = info.oldEvent.start?.toLocaleString('es-MX', {
+      dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Mexico_City',
+    }) ?? ''
+    const newTime = newStart.toLocaleString('es-MX', {
+      dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Mexico_City',
+    })
+    if (!window.confirm(`¿Reagendar "${info.event.title}" de ${oldTime} a ${newTime}?`)) {
+      info.revert()
+      return
+    }
+
+    try {
+      const slots = await fetchAvailableSlotsAfter(new Date())
+      const newSlotId = findSlotIdForDate(slots, newStart)
+      if (!newSlotId) {
+        toast.error('No hay un slot disponible en ese horario')
+        info.revert()
+        return
+      }
+      const res = await fetch(`/api/admin/appointments/${appointmentId}/reschedule`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ newSlotId }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(typeof data?.error === 'string' ? data.error : 'Error al reagendar')
+      }
+      toast.success('Cita reagendada')
+      announce(`Cita reagendada a ${newTime}.`)
+      calRef.current?.getApi().refetchEvents()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al reagendar'
+      toast.error(msg)
+      info.revert()
+    }
+  }, [announce])
+
+  // Persist the chosen view across visits so each operator gets their preferred layout.
+  const handleDatesSet = useCallback((arg: { view: { type: string } }) => {
+    if (typeof window === 'undefined') return
+    const type = arg.view.type
+    if ((VALID_VIEWS as ReadonlyArray<string>).includes(type)) {
+      try { window.localStorage.setItem(VIEW_STORAGE_KEY, type) } catch { /* ignore */ }
+    }
+  }, [])
+
+  // Decorate each event on mount: dim past events and add a "Vencido" tooltip suffix.
+  const handleEventDidMount = useCallback((info: EventMountArg) => {
+    const { status } = info.event.extendedProps as Partial<ApptExtended>
+    const start = info.event.start
+    const isPast = start ? start.getTime() < Date.now() : false
+
+    if (status && start) {
+      const time = start.toLocaleTimeString('es-MX', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
+      })
+      const suffix = isPast ? ' — Vencido' : ''
+      info.el.title = `${info.event.title} — ${time} (${STATUS_LABELS_ES[status] ?? status})${suffix}`
+    }
+
+    if (isPast && status) {
+      info.el.classList.add('fc-event-expired')
+    }
   }, [])
 
   // Keyboard shortcuts for the operator: j/k prev/next, t today, m/w/d view switch
@@ -172,16 +311,66 @@ export function AdminCalendar() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
+  // Live refresh: poll the API every LIVE_REFETCH_MS so the calendar reflects
+  // changes made by other admins (accept/reject/reschedule). Pauses while the
+  // tab is hidden to save quota; refetches immediately on visibility return.
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const start = () => {
+      if (timer !== null) return
+      timer = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          calRef.current?.getApi().refetchEvents()
+        }
+      }, LIVE_REFETCH_MS)
+    }
+    const stop = () => {
+      if (timer !== null) { clearInterval(timer); timer = null }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        calRef.current?.getApi().refetchEvents()
+        start()
+      } else {
+        stop()
+      }
+    }
+
+    if (document.visibilityState === 'visible') start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
+
   return (
     <>
+      {/* Visually-hidden aria-live region for announcing calendar updates to AT users */}
+      <div
+        ref={liveRegionRef}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      />
+
       {/* Filter chips */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div
+        role="group"
+        aria-label="Filtros de estado de citas"
+        className="flex flex-wrap gap-2 mb-4"
+      >
         {(Object.keys(FILTER_LABELS) as FilterKey[]).map(key => {
           const active = activeFilters.has(key)
           return (
             <button
               key={key}
+              type="button"
               onClick={() => toggleFilter(key)}
+              aria-pressed={active}
+              aria-label={`${active ? 'Ocultar' : 'Mostrar'} ${FILTER_LABELS[key]}`}
               className={cn(
                 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all',
                 active
@@ -190,6 +379,7 @@ export function AdminCalendar() {
               )}
             >
               <span
+                aria-hidden="true"
                 className="w-2 h-2 rounded-full shrink-0"
                 style={{
                   backgroundColor: CHIP_DOTS[key],
@@ -203,12 +393,16 @@ export function AdminCalendar() {
       </div>
 
       {/* Calendar */}
-      <div className="rounded-2xl border border-admin-line bg-admin-panel p-4 overflow-hidden fc-admin-wrap">
+      <div
+        role="region"
+        aria-label="Calendario de citas"
+        className="rounded-2xl border border-admin-line bg-admin-panel p-4 overflow-hidden fc-admin-wrap"
+      >
         <FullCalendar
           ref={calRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           locale={esLocale}
-          initialView="timeGridWeek"
+          initialView={initialView}
           headerToolbar={{
             left:   'prev,next today',
             center: 'title',
@@ -219,21 +413,17 @@ export function AdminCalendar() {
           height="auto"
           timeZone="America/Mexico_City"
           nowIndicator={true}
+          editable={true}
+          eventStartEditable={true}
+          eventDurationEditable={false}
           eventSources={[apptSource, slotSource]}
           eventClick={info => {
             const apptId = (info.event.extendedProps as Partial<ApptExtended>).appointmentId
             if (apptId) setSelectedId(apptId)
           }}
-          eventDidMount={info => {
-            const { status } = info.event.extendedProps as Partial<ApptExtended>
-            if (status) {
-              const start = info.event.start
-              const time = start?.toLocaleTimeString('es-MX', {
-                hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
-              }) ?? ''
-              info.el.title = `${info.event.title} — ${time} (${STATUS_LABELS_ES[status] ?? status})`
-            }
-          }}
+          eventDrop={handleEventDrop}
+          eventDidMount={handleEventDidMount}
+          datesSet={handleDatesSet}
           buttonText={{ today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día' }}
         />
       </div>
@@ -349,6 +539,18 @@ export function AdminCalendar() {
         }
         .fc-admin-wrap .fc-event-done .fc-event-title {
           text-decoration: line-through !important;
+        }
+
+        /* ── Expired events (start < now) — dim but visible ──── */
+        .fc-admin-wrap .fc-event-expired {
+          opacity: 0.5 !important;
+        }
+        .fc-admin-wrap .fc-event-expired .fc-event-title::after {
+          content: " · vencido";
+          font-size: 0.6rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          opacity: 0.7;
         }
 
         /* ── Slot background events ───────────────────────────── */
