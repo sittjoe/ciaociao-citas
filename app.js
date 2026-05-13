@@ -12,6 +12,17 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js';
 
+// Escape de HTML para evitar XSS al pintar datos del usuario en innerHTML.
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[c]));
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -385,11 +396,31 @@ class FileUploadManager {
         });
     }
 
-    handleFile(file) {
+    async handleFile(file) {
         const validation = Validators.validateFile(file);
 
         if (!validation.valid) {
             Validators.showError('identification', validation.message);
+            if (this.uploadZone) {
+                this.uploadZone.classList.add('error');
+            }
+            return;
+        }
+
+        // Verificar magic bytes para asegurar que el contenido real coincide
+        // con el tipo declarado (evita renombrar .exe → .jpg para bypass).
+        try {
+            const magicValidation = await Validators.validateFileMagicBytes(file);
+            if (!magicValidation.valid) {
+                Validators.showError('identification', magicValidation.message);
+                if (this.uploadZone) {
+                    this.uploadZone.classList.add('error');
+                }
+                return;
+            }
+        } catch (err) {
+            console.error('Error verificando magic bytes:', err);
+            Validators.showError('identification', 'No se pudo verificar el archivo');
             if (this.uploadZone) {
                 this.uploadZone.classList.add('error');
             }
@@ -494,6 +525,16 @@ function showConfirmation() {
         minute: '2-digit'
     });
 
+    // Escapar TODO dato proveniente del usuario antes de inyectar en innerHTML
+    // para prevenir XSS (notes, name, email, phone, file.name).
+    const safeName = escapeHtml(formData.name);
+    const safeEmail = escapeHtml(formData.email);
+    const safePhone = escapeHtml(formData.phone);
+    const safeNotes = escapeHtml(formData.notes).replace(/\n/g, '<br>');
+    const safeFileLine = AppState.uploadedFile
+        ? `${escapeHtml(AppState.uploadedFile.name)} (${escapeHtml(Validators.formatFileSize(AppState.uploadedFile.size))})`
+        : 'Sin archivo adjunto';
+
     summaryContainer.innerHTML = `
         <div style="background: var(--gray-light); padding: 20px; border-radius: var(--radius-md); margin-bottom: 16px;">
             <h4 style="margin-bottom: 8px; color: var(--gold-champagne);">Fecha y Hora</h4>
@@ -503,15 +544,15 @@ function showConfirmation() {
 
         <div style="background: var(--gray-light); padding: 20px; border-radius: var(--radius-md); margin-bottom: 16px;">
             <h4 style="margin-bottom: 12px; color: var(--gold-champagne);">Tus Datos</h4>
-            <p><strong>Nombre:</strong> ${formData.name}</p>
-            <p><strong>Email:</strong> ${formData.email}</p>
-            <p><strong>Teléfono:</strong> ${formData.phone}</p>
-            ${formData.notes ? `<p><strong>Motivo:</strong> ${formData.notes}</p>` : ''}
+            <p><strong>Nombre:</strong> ${safeName}</p>
+            <p><strong>Email:</strong> ${safeEmail}</p>
+            <p><strong>Teléfono:</strong> ${safePhone}</p>
+            ${formData.notes ? `<p><strong>Motivo:</strong> ${safeNotes}</p>` : ''}
         </div>
 
         <div style="background: var(--gray-light); padding: 20px; border-radius: var(--radius-md);">
             <h4 style="margin-bottom: 8px; color: var(--gold-champagne);">Identificación</h4>
-            <p>${AppState.uploadedFile ? `${AppState.uploadedFile.name} (${Validators.formatFileSize(AppState.uploadedFile.size)})` : 'Sin archivo adjunto'}</p>
+            <p>${safeFileLine}</p>
         </div>
     `;
 }
