@@ -4,6 +4,7 @@
  */
 
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, Timestamp, FieldValue } = require('firebase-admin/firestore');
@@ -134,3 +135,42 @@ exports.adminLogin = onCall(
 //       });
 //     }
 //   );
+
+// Audit-log retention: deletes auditLog docs older than 90 days. Runs daily.
+// Batches at 500 docs/run; if backlog exists the next day's run drains more.
+const AUDIT_LOG_RETENTION_DAYS = 90;
+const AUDIT_LOG_BATCH_LIMIT = 500;
+
+exports.cleanupAuditLog = onSchedule(
+  {
+    schedule: 'every 24 hours',
+    timeZone: 'America/Mexico_City',
+    region: 'us-central1',
+  },
+  async () => {
+    const db = getFirestore();
+    const cutoff = Timestamp.fromMillis(
+      Date.now() - AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000
+    );
+
+    const snap = await db
+      .collection('auditLog')
+      .where('ts', '<', cutoff)
+      .limit(AUDIT_LOG_BATCH_LIMIT)
+      .get();
+
+    if (snap.empty) {
+      console.log('cleanupAuditLog: nothing to delete.');
+      return null;
+    }
+
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+
+    console.log(
+      `cleanupAuditLog: deleted ${snap.size} auditLog docs older than ${AUDIT_LOG_RETENTION_DAYS} days.`
+    );
+    return null;
+  }
+);
