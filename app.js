@@ -35,7 +35,9 @@ const AppState = {
     formData: {},
     uploadedFile: null,
     allSlots: [],
-    slotsForSelectedDate: []
+    slotsForSelectedDate: [],
+    isSubmitting: false,
+    currentReader: null
 };
 
 // ===================
@@ -61,6 +63,16 @@ class StepManager {
 
         // Actualizar progress bar
         this.updateProgressBar();
+
+        // Regenerar resumen de confirmación cada vez que se entra al step 4
+        // para reflejar los datos más recientes del formulario y del slot.
+        if (stepNum === 4 && typeof showConfirmation === 'function') {
+            try {
+                showConfirmation();
+            } catch (err) {
+                console.error('Error regenerando resumen de confirmación:', err);
+            }
+        }
 
         // Scroll to top suave
         document.getElementById('booking').scrollIntoView({ behavior: 'smooth' });
@@ -111,9 +123,11 @@ class StepManager {
 
         if (showErrors) {
             const fields = ['name', 'email', 'phone', 'identification'];
+            let firstErrorField = null;
             fields.forEach((field) => {
                 if (errors[field]) {
                     Validators.showError(field, errors[field]);
+                    if (firstErrorField === null) firstErrorField = field;
                 } else {
                     Validators.clearError(field);
                 }
@@ -125,6 +139,14 @@ class StepManager {
                     uploadZone.classList.add('error');
                 } else {
                     uploadZone.classList.remove('error');
+                }
+            }
+
+            // Focus al primer input con error para mejorar accesibilidad
+            if (firstErrorField) {
+                const firstErrorInput = document.getElementById(firstErrorField);
+                if (firstErrorInput && typeof firstErrorInput.focus === 'function') {
+                    firstErrorInput.focus();
                 }
             }
         }
@@ -395,10 +417,29 @@ class FileUploadManager {
 
         // Preview solo para imágenes
         if (file.type.startsWith('image/')) {
+            // Cancelar lectura previa para evitar race conditions cuando el
+            // usuario reemplaza el archivo antes de que termine el FileReader anterior.
+            if (AppState.currentReader) {
+                try {
+                    AppState.currentReader.abort();
+                } catch (err) {
+                    // Ignorar errores de abort sobre readers ya finalizados
+                }
+            }
+
             const reader = new FileReader();
+            AppState.currentReader = reader;
             reader.onload = (e) => {
                 previewImage.src = e.target.result;
                 previewImage.style.display = 'block';
+                if (AppState.currentReader === reader) {
+                    AppState.currentReader = null;
+                }
+            };
+            reader.onerror = reader.onabort = () => {
+                if (AppState.currentReader === reader) {
+                    AppState.currentReader = null;
+                }
             };
             reader.readAsDataURL(file);
         } else {
@@ -514,6 +555,14 @@ async function createAppointment() {
         // 5. Mostrar éxito
         document.getElementById('loadingOverlay').classList.add('hidden');
         document.getElementById('successModal').classList.remove('hidden');
+
+        // 6. Resetear estado de la app tras éxito para evitar reenvíos con
+        //    datos viejos si el usuario interactúa antes del reload manual.
+        AppState.formData = {};
+        AppState.selectedSlot = null;
+        AppState.selectedDate = null;
+        AppState.isSubmitting = false;
+        AppState.uploadedFile = null;
 
     } catch (error) {
         console.error('Error creating appointment:', error);
@@ -648,10 +697,40 @@ function setupEventListeners() {
         stepManager.goToStep(3);
     });
 
-    // Step 4 Confirm
-    document.getElementById('step4Confirm').addEventListener('click', () => {
-        createAppointment();
+    // Step 4 Confirm — anti double-submit
+    document.getElementById('step4Confirm').addEventListener('click', async (event) => {
+        // Bloquear si ya hay un submit en curso
+        if (AppState.isSubmitting) return;
+
+        const btn = event.currentTarget;
+        const originalHTML = btn.innerHTML;
+
+        AppState.isSubmitting = true;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.classList.add('is-loading');
+        btn.innerHTML = 'Enviando...';
+
+        try {
+            await createAppointment();
+        } finally {
+            btn.disabled = false;
+            btn.setAttribute('aria-busy', 'false');
+            btn.classList.remove('is-loading');
+            btn.innerHTML = originalHTML;
+            AppState.isSubmitting = false;
+        }
     });
+
+    // Botones de los modales (anteriormente onclick="location.reload()" inline)
+    const successReload = document.getElementById('successReloadBtn');
+    if (successReload) {
+        successReload.addEventListener('click', () => location.reload());
+    }
+    const errorReload = document.getElementById('errorReloadBtn');
+    if (errorReload) {
+        errorReload.addEventListener('click', () => location.reload());
+    }
 }
 
 // ===================
