@@ -6,6 +6,10 @@ import { bookingPayloadSchema, guestInputSchema } from '@/lib/schemas'
 import { generateCode, sanitize } from '@/lib/utils'
 import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
 import { releaseExpiredHolds } from '@/lib/holds'
+import {
+  findExistingByIdempotencyKey,
+  findExistingByKeyInTx,
+} from '@/lib/appointments'
 import type { Appointment, Guest } from '@/types'
 import { randomUUID, randomBytes } from 'crypto'
 
@@ -51,6 +55,7 @@ export async function POST(request: Request) {
 
     const formData = await request.formData()
 
+    const idempotencyKeyRaw = formData.get('idempotencyKey')
     const raw = {
       slotId:   formData.get('slotId'),
       name:     formData.get('name'),
@@ -58,11 +63,24 @@ export async function POST(request: Request) {
       phone:    formData.get('phone'),
       notes:    formData.get('notes') ?? '',
       whatsapp: formData.get('whatsapp') === 'true',
+      ...(idempotencyKeyRaw ? { idempotencyKey: String(idempotencyKeyRaw) } : {}),
     }
 
     const parsed = bookingPayloadSchema.safeParse(raw)
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 422 })
+    }
+
+    // Idempotency: if the same key has already been processed, return the
+    // existing confirmationCode without creating a duplicate. The transaction
+    // below performs an in-snapshot re-check so concurrent submissions collapse
+    // to a single document.
+    const idempotencyKey = parsed.data.idempotencyKey
+    if (idempotencyKey) {
+      const existing = await findExistingByIdempotencyKey(idempotencyKey)
+      if (existing) {
+        return NextResponse.json({ confirmationCode: existing.confirmationCode }, { status: 200 })
+      }
     }
 
     const idFile = formData.get('idFile') as File | null
@@ -131,8 +149,21 @@ export async function POST(request: Request) {
       email:       g.email.toLowerCase().trim(),
     }))
 
-    // Firestore transaction: all reads first, then all writes atomically
+    // Firestore transaction: all reads first, then all writes atomically.
+    // `idempotentExistingCode` is set if a concurrent submission with the
+    // same idempotency key was found INSIDE the transaction snapshot — we
+    // then short-circuit and return the existing confirmation code.
+    let idempotentExistingCode: string | null = null
     await adminDb.runTransaction(async tx => {
+      // In-transaction idempotency re-check (MUST be the first read).
+      if (idempotencyKey) {
+        const dup = await findExistingByKeyInTx(tx, idempotencyKey, adminDb)
+        if (dup) {
+          idempotentExistingCode = dup.confirmationCode
+          return
+        }
+      }
+
       const slotRef  = adminDb.collection('slots').doc(slotId)
       const slotSnap = await tx.get(slotRef)
 
@@ -178,6 +209,7 @@ export async function POST(request: Request) {
         reminder2Sent:       false,
         guestCount:          guestList.length,
         guestsAllVerified:   guestList.length === 0,
+        ...(idempotencyKey ? { idempotencyKey } : {}),
         createdAt:           FieldValue.serverTimestamp(),
         updatedAt:           FieldValue.serverTimestamp(),
       })
@@ -207,6 +239,12 @@ export async function POST(request: Request) {
         })
       }
     })
+
+    // Idempotent replay: a prior submission with the same key already created
+    // the appointment — return its existing confirmation code without emails.
+    if (idempotentExistingCode) {
+      return NextResponse.json({ confirmationCode: idempotentExistingCode }, { status: 200 })
+    }
 
     // Build Guest objects from pre-generated entries (transaction committed)
     const createdGuests: Guest[] = guestEntries.map(g => ({

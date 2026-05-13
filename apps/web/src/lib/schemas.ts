@@ -27,6 +27,10 @@ export type BookingFormInput = z.infer<typeof bookingFormSchema>
 
 export const bookingPayloadSchema = bookingFormSchema.extend({
   slotId: z.string().min(1, 'Selecciona un horario'),
+  idempotencyKey: z
+    .string()
+    .uuid('Token de idempotencia inválido')
+    .optional(),
 })
 
 export type BookingPayloadInput = z.infer<typeof bookingPayloadSchema>

@@ -81,3 +81,56 @@ exports.adminLogin = onCall(
     return { token };
   }
 );
+
+// TODO(onAppointmentWritten): server-side double-booking invariant guard.
+//
+// The Next.js API routes already use Firestore transactions to prevent two
+// concurrent submissions from booking the same slot, but a Cloud Function
+// trigger gives us a second line of defence against:
+//   - direct Firestore writes that bypass the API (e.g. emulator / scripts)
+//   - rules misconfigurations
+//   - replicated multi-region anomalies
+//
+// Pattern (drop-in once we add a `firebase-functions/v2/firestore` import):
+//
+//   const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+//
+//   exports.onAppointmentWritten = onDocumentWritten(
+//     'appointments/{id}',
+//     async (event) => {
+//       const after = event.data?.after?.data();
+//       if (!after || (after.status !== 'pending' && after.status !== 'accepted')) return;
+//
+//       const db = getFirestore();
+//       const dupes = await db.collection('appointments')
+//         .where('slotId', '==', after.slotId)
+//         .where('status', 'in', ['pending', 'accepted'])
+//         .get();
+//
+//       if (dupes.size <= 1) return;
+//
+//       // Two or more active appointments for the same slot — keep the
+//       // earliest, reject the newest as a double-booking, audit it.
+//       const sorted = dupes.docs.sort((a, b) =>
+//         (a.data().createdAt?.toMillis?.() ?? 0) - (b.data().createdAt?.toMillis?.() ?? 0)
+//       );
+//       const newest = sorted[sorted.length - 1];
+//
+//       if (newest.id !== event.params.id) return; // only the newest write reacts
+//
+//       await db.collection('auditLog').add({
+//         ts: Timestamp.now(),
+//         action: 'double_booking_detected',
+//         slotId: after.slotId,
+//         appointmentIds: dupes.docs.map(d => d.id),
+//         rejectedId: newest.id,
+//       });
+//
+//       await newest.ref.update({
+//         status: 'rejected',
+//         adminNote: 'Rechazada automáticamente: doble reserva detectada.',
+//         decidedAt: FieldValue.serverTimestamp(),
+//         decidedBy: 'system:onAppointmentWritten',
+//       });
+//     }
+//   );

@@ -54,6 +54,7 @@ export interface Appointment {
   autoCancelledAt?: Date | null
   guestCount?: number
   guestsAllVerified?: boolean
+  idempotencyKey?: string
   createdAt: Date
   updatedAt?: Date
 }
