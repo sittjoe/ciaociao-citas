@@ -44,9 +44,19 @@
 
             <form id="loginForm" class="login-form">
                 <div class="form-group">
+                    <label for="adminEmail">Email del Administrador</label>
+                    <div class="password-input-wrapper">
+                        <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M4 6H20C21.1 6 22 6.9 22 8V16C22 17.1 21.1 18 20 18H4C2.9 18 2 17.1 2 16V8C2 6.9 2.9 6 4 6Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M22 8L12 13L2 8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <input type="email" id="adminEmail" placeholder="admin@ciaociao.mx" autocomplete="email">
+                    </div>
+                </div>
+                <div class="form-group">
                     <label for="adminPassword">Contraseña de Administrador</label>
                     <div class="password-input-wrapper">
-                        <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M8 11V7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7V11" stroke="currentColor" stroke-width="2"/>
                         </svg>
@@ -326,6 +336,14 @@
                     <button class="reject-btn" onclick="bulkReject()">Rechazar Seleccionadas</button>
                 </div>
 
+                <!-- Sort headers -->
+                <div class="sort-headers" id="sortHeadersPending" role="group" aria-label="Ordenar citas pendientes">
+                    <button class="sort-header" data-sort-list="pending" data-sort-column="name" type="button" aria-label="Ordenar por nombre">Nombre <span class="sort-indicator" aria-hidden="true"></span></button>
+                    <button class="sort-header" data-sort-list="pending" data-sort-column="slotDatetime" type="button" aria-label="Ordenar por fecha de cita">Fecha cita <span class="sort-indicator" aria-hidden="true"></span></button>
+                    <button class="sort-header" data-sort-list="pending" data-sort-column="status" type="button" aria-label="Ordenar por estado">Estado <span class="sort-indicator" aria-hidden="true"></span></button>
+                    <button class="sort-header" data-sort-list="pending" data-sort-column="createdAt" type="button" aria-label="Ordenar por fecha de creación">Creada <span class="sort-indicator" aria-hidden="true"></span></button>
+                </div>
+
                 <div id="pendingAppointments" class="appointments-list">
                     <p style="color: var(--text-light);">Cargando citas pendientes...</p>
                 </div>
@@ -361,6 +379,14 @@
                     <button class="btn-secondary" onclick="clearFilters('confirmed')">Limpiar</button>
                 </div>
 
+                <!-- Sort headers -->
+                <div class="sort-headers" id="sortHeadersConfirmed" role="group" aria-label="Ordenar citas confirmadas">
+                    <button class="sort-header" data-sort-list="confirmed" data-sort-column="name" type="button" aria-label="Ordenar por nombre">Nombre <span class="sort-indicator" aria-hidden="true"></span></button>
+                    <button class="sort-header" data-sort-list="confirmed" data-sort-column="slotDatetime" type="button" aria-label="Ordenar por fecha de cita">Fecha cita <span class="sort-indicator" aria-hidden="true"></span></button>
+                    <button class="sort-header" data-sort-list="confirmed" data-sort-column="status" type="button" aria-label="Ordenar por estado">Estado <span class="sort-indicator" aria-hidden="true"></span></button>
+                    <button class="sort-header" data-sort-list="confirmed" data-sort-column="createdAt" type="button" aria-label="Ordenar por fecha de creación">Creada <span class="sort-indicator" aria-hidden="true"></span></button>
+                </div>
+
                 <div id="confirmedAppointments" class="appointments-list">
                     <p style="color: var(--text-light);">Cargando historial...</p>
                 </div>
@@ -369,11 +395,36 @@
     </div>
 
     <!-- Modal for viewing ID -->
-    <div id="idModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; padding: 20px; overflow: auto;">
+    <div id="idModal" role="dialog" aria-modal="true" aria-labelledby="idModalTitle" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; padding: 20px; overflow: auto;">
         <div style="max-width: 800px; margin: 50px auto; background: white; padding: 30px; border-radius: 8px; position: relative;">
-            <button onclick="closeIdModal()" style="position: absolute; top: 10px; right: 10px; background: var(--error-color); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cerrar</button>
-            <h3 style="margin-bottom: 20px;">Identificación del Cliente</h3>
+            <button onclick="closeIdModal()" aria-label="Cerrar identificación" style="position: absolute; top: 10px; right: 10px; background: var(--error-color); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cerrar</button>
+            <h3 id="idModalTitle" style="margin-bottom: 20px;">Identificación del Cliente</h3>
             <div id="idContent"></div>
+        </div>
+    </div>
+
+    <!-- Modal for appointment detail (internal notes) -->
+    <div id="appointmentDetailModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="detailModalTitle" style="display: none;">
+        <div class="modal-backdrop" onclick="closeAppointmentDetailModal()"></div>
+        <div class="modal-content" style="max-width: 560px; text-align: left;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 class="modal-title" id="detailModalTitle" style="margin:0;">Detalle de la cita</h3>
+                <button onclick="closeAppointmentDetailModal()" aria-label="Cerrar detalle" class="btn-icon" style="background:none;border:none;cursor:pointer;padding:6px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="appointmentDetailBody" class="appointment-detail-body"></div>
+            <div class="form-group" style="margin-top:16px;">
+                <label for="internalNotesField" class="form-label">Notas internas (no visibles al cliente)</label>
+                <textarea id="internalNotesField" maxlength="2000" rows="5" class="filter-input" style="width:100%;resize:vertical;min-height:100px;" placeholder="Notas privadas para el equipo..."></textarea>
+                <p id="internalNotesMeta" style="font-size:0.8rem;color:var(--text-light);margin-top:6px;"></p>
+            </div>
+            <div class="modal-actions" style="margin-top:20px;">
+                <button class="btn-cancel" type="button" onclick="closeAppointmentDetailModal()">Cerrar</button>
+                <button class="btn-confirm" id="saveInternalNotesBtn" type="button">Guardar nota</button>
+            </div>
         </div>
     </div>
 

@@ -27,6 +27,10 @@ export type BookingFormInput = z.infer<typeof bookingFormSchema>
 
 export const bookingPayloadSchema = bookingFormSchema.extend({
   slotId: z.string().min(1, 'Selecciona un horario'),
+  idempotencyKey: z
+    .string()
+    .uuid('Token de idempotencia inválido')
+    .optional(),
 })
 
 export type BookingPayloadInput = z.infer<typeof bookingPayloadSchema>
@@ -78,3 +82,38 @@ export const rescheduleSchema = z.object({
 })
 
 export type RescheduleInput = z.infer<typeof rescheduleSchema>
+
+/* ------------------------------------------------------------------------ */
+/* Appointment metadata: tags, type, internal notes                          */
+/* ------------------------------------------------------------------------ */
+
+const TAG_REGEX = /^[\p{L}\p{N}\s/_.-]+$/u
+
+export const appointmentMetaSchema = z.object({
+  tags: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1, 'Etiqueta vacía')
+        .max(32, 'Etiqueta demasiado larga')
+        .regex(TAG_REGEX, 'Caracteres no válidos en la etiqueta'),
+    )
+    .max(12, 'Máximo 12 etiquetas')
+    .optional(),
+  type: z.enum(['vip', 'first-time', 'returning', 'other']).optional().nullable(),
+  internalNotes: z
+    .string()
+    .max(2000, 'Máximo 2000 caracteres')
+    .optional()
+    .nullable(),
+})
+
+export type AppointmentMetaInput = z.infer<typeof appointmentMetaSchema>
+
+export const clientRequestSchema = z.object({
+  action: z.enum(['reschedule', 'cancel']),
+  reason: z.string().max(500).optional(),
+})
+
+export type ClientRequestInput = z.infer<typeof clientRequestSchema>

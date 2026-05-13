@@ -15,6 +15,8 @@ export async function GET(request: Request) {
   const search   = searchParams.get('search')     // name/email/phone
   const dateFrom = searchParams.get('dateFrom')   // ISO
   const dateTo   = searchParams.get('dateTo')     // ISO
+  const tag      = searchParams.get('tag')        // single tag filter (client-side)
+  const type     = searchParams.get('type')       // appointment type filter (client-side)
   const cursor   = searchParams.get('cursor')     // doc ID
   const limit    = Math.min(Number(searchParams.get('limit') ?? '20'), 500)
 
@@ -60,6 +62,18 @@ export async function GET(request: Request) {
       })
     }
 
+    if (tag) {
+      const t = tag.toLowerCase()
+      docs = docs.filter(doc => {
+        const tags = doc.data().tags
+        return Array.isArray(tags) && tags.some(x => String(x).toLowerCase() === t)
+      })
+    }
+
+    if (type) {
+      docs = docs.filter(doc => String(doc.data().type ?? '') === type)
+    }
+
     const hasMore    = docs.length > limit
     const resultDocs = hasMore ? docs.slice(0, limit) : docs
     const nextCursor = hasMore ? resultDocs[resultDocs.length - 1].id : null
@@ -89,6 +103,16 @@ export async function GET(request: Request) {
         identificationUrl: d.identificationUrl,
         guestCount:          d.guestCount ?? 0,
         guestsAllVerified:   d.guestsAllVerified ?? false,
+        tags:                Array.isArray(d.tags) ? d.tags : [],
+        type:                d.type ?? null,
+        internalNotes:       d.internalNotes ?? '',
+        internalNotesUpdatedBy: d.internalNotesUpdatedBy ?? null,
+        rescheduleRequestedAt: d.rescheduleRequestedAt
+          ? (d.rescheduleRequestedAt as Timestamp)?.toDate().toISOString()
+          : null,
+        cancelRequestedAt:   d.cancelRequestedAt
+          ? (d.cancelRequestedAt as Timestamp)?.toDate().toISOString()
+          : null,
       }
     })
 

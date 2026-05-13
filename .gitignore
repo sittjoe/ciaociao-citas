@@ -25,3 +25,19 @@ npm-debug.log*
 
 # Claude Code runtime state (locks, worktrees, plans, scheduled tasks)
 .claude/
+
+# Secrets and env
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
+
+# Firebase local artefacts
+.firebase/
+
+# Playwright artefacts
+test-results/
+playwright-report/
+playwright/.cache/

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { StatsCards, UpcomingList } from '@/components/admin/StatsCards'
+import { AnalyticsPanel } from '@/components/admin/AnalyticsPanel'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import type { AdminStats, Appointment, AppointmentStatus } from '@/types'
 
@@ -115,6 +116,14 @@ export default async function AdminDashboard() {
         </div>
       </Card>
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <p className="h-eyebrow mb-2">Analítica · 30 días</p>
+          <h2 className="font-serif text-xl font-light text-ink">Indicadores</h2>
+        </div>
+        <AnalyticsPanel />
+      </section>
     </div>
   )
 }

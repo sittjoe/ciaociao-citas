@@ -3,6 +3,7 @@ import type { Timestamp } from 'firebase/firestore'
 export type SlotStatus = 'available' | 'held' | 'booked'
 export type AppointmentStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled'
 export type GuestStatus = 'pending' | 'verified' | 'expired' | 'excluded'
+export type AppointmentType = 'vip' | 'first-time' | 'returning' | 'other'
 
 export interface Guest {
   id: string
@@ -54,8 +55,23 @@ export interface Appointment {
   autoCancelledAt?: Date | null
   guestCount?: number
   guestsAllVerified?: boolean
+  idempotencyKey?: string
+  tags?: string[]
+  type?: AppointmentType
+  internalNotes?: string
+  internalNotesUpdatedAt?: Date | null
+  internalNotesUpdatedBy?: string | null
+  rescheduleRequestedAt?: Date | null
+  cancelRequestedAt?: Date | null
   createdAt: Date
   updatedAt?: Date
+}
+
+export interface AppointmentNoteHistoryEntry {
+  id: string
+  notes: string
+  updatedAt: Date
+  updatedBy: string
 }
 
 export interface BookingFormData {

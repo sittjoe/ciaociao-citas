@@ -12,6 +12,17 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js';
 
+// Escape de HTML para evitar XSS al pintar datos del usuario en innerHTML.
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[c]));
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -35,7 +46,9 @@ const AppState = {
     formData: {},
     uploadedFile: null,
     allSlots: [],
-    slotsForSelectedDate: []
+    slotsForSelectedDate: [],
+    isSubmitting: false,
+    currentReader: null
 };
 
 // ===================
@@ -61,6 +74,16 @@ class StepManager {
 
         // Actualizar progress bar
         this.updateProgressBar();
+
+        // Regenerar resumen de confirmación cada vez que se entra al step 4
+        // para reflejar los datos más recientes del formulario y del slot.
+        if (stepNum === 4 && typeof showConfirmation === 'function') {
+            try {
+                showConfirmation();
+            } catch (err) {
+                console.error('Error regenerando resumen de confirmación:', err);
+            }
+        }
 
         // Scroll to top suave
         document.getElementById('booking').scrollIntoView({ behavior: 'smooth' });
@@ -111,9 +134,11 @@ class StepManager {
 
         if (showErrors) {
             const fields = ['name', 'email', 'phone', 'identification'];
+            let firstErrorField = null;
             fields.forEach((field) => {
                 if (errors[field]) {
                     Validators.showError(field, errors[field]);
+                    if (firstErrorField === null) firstErrorField = field;
                 } else {
                     Validators.clearError(field);
                 }
@@ -125,6 +150,14 @@ class StepManager {
                     uploadZone.classList.add('error');
                 } else {
                     uploadZone.classList.remove('error');
+                }
+            }
+
+            // Focus al primer input con error para mejorar accesibilidad
+            if (firstErrorField) {
+                const firstErrorInput = document.getElementById(firstErrorField);
+                if (firstErrorInput && typeof firstErrorInput.focus === 'function') {
+                    firstErrorInput.focus();
                 }
             }
         }
@@ -162,9 +195,12 @@ class TimeSlotManager {
         AppState.selectedSlot = null;
         document.getElementById('step2Next').disabled = true;
 
-        // Filtrar slots para la fecha seleccionada
+        // Filtrar slots para la fecha seleccionada y descartar los que ya pasaron
+        // (re-evaluado en cada render para que slots del día de hoy se vayan ocultando con el correr del tiempo)
+        const nowMs = Date.now();
         AppState.slotsForSelectedDate = AppState.allSlots.filter(slot => {
             const slotDate = slot.datetime instanceof Date ? slot.datetime : slot.datetime.toDate();
+            if (slotDate.getTime() <= nowMs) return false;
             return DateUtils.isSameDay(slotDate, date);
         });
 
@@ -360,11 +396,31 @@ class FileUploadManager {
         });
     }
 
-    handleFile(file) {
+    async handleFile(file) {
         const validation = Validators.validateFile(file);
 
         if (!validation.valid) {
             Validators.showError('identification', validation.message);
+            if (this.uploadZone) {
+                this.uploadZone.classList.add('error');
+            }
+            return;
+        }
+
+        // Verificar magic bytes para asegurar que el contenido real coincide
+        // con el tipo declarado (evita renombrar .exe → .jpg para bypass).
+        try {
+            const magicValidation = await Validators.validateFileMagicBytes(file);
+            if (!magicValidation.valid) {
+                Validators.showError('identification', magicValidation.message);
+                if (this.uploadZone) {
+                    this.uploadZone.classList.add('error');
+                }
+                return;
+            }
+        } catch (err) {
+            console.error('Error verificando magic bytes:', err);
+            Validators.showError('identification', 'No se pudo verificar el archivo');
             if (this.uploadZone) {
                 this.uploadZone.classList.add('error');
             }
@@ -392,10 +448,29 @@ class FileUploadManager {
 
         // Preview solo para imágenes
         if (file.type.startsWith('image/')) {
+            // Cancelar lectura previa para evitar race conditions cuando el
+            // usuario reemplaza el archivo antes de que termine el FileReader anterior.
+            if (AppState.currentReader) {
+                try {
+                    AppState.currentReader.abort();
+                } catch (err) {
+                    // Ignorar errores de abort sobre readers ya finalizados
+                }
+            }
+
             const reader = new FileReader();
+            AppState.currentReader = reader;
             reader.onload = (e) => {
                 previewImage.src = e.target.result;
                 previewImage.style.display = 'block';
+                if (AppState.currentReader === reader) {
+                    AppState.currentReader = null;
+                }
+            };
+            reader.onerror = reader.onabort = () => {
+                if (AppState.currentReader === reader) {
+                    AppState.currentReader = null;
+                }
             };
             reader.readAsDataURL(file);
         } else {
@@ -450,6 +525,16 @@ function showConfirmation() {
         minute: '2-digit'
     });
 
+    // Escapar TODO dato proveniente del usuario antes de inyectar en innerHTML
+    // para prevenir XSS (notes, name, email, phone, file.name).
+    const safeName = escapeHtml(formData.name);
+    const safeEmail = escapeHtml(formData.email);
+    const safePhone = escapeHtml(formData.phone);
+    const safeNotes = escapeHtml(formData.notes).replace(/\n/g, '<br>');
+    const safeFileLine = AppState.uploadedFile
+        ? `${escapeHtml(AppState.uploadedFile.name)} (${escapeHtml(Validators.formatFileSize(AppState.uploadedFile.size))})`
+        : 'Sin archivo adjunto';
+
     summaryContainer.innerHTML = `
         <div style="background: var(--gray-light); padding: 20px; border-radius: var(--radius-md); margin-bottom: 16px;">
             <h4 style="margin-bottom: 8px; color: var(--gold-champagne);">Fecha y Hora</h4>
@@ -459,15 +544,15 @@ function showConfirmation() {
 
         <div style="background: var(--gray-light); padding: 20px; border-radius: var(--radius-md); margin-bottom: 16px;">
             <h4 style="margin-bottom: 12px; color: var(--gold-champagne);">Tus Datos</h4>
-            <p><strong>Nombre:</strong> ${formData.name}</p>
-            <p><strong>Email:</strong> ${formData.email}</p>
-            <p><strong>Teléfono:</strong> ${formData.phone}</p>
-            ${formData.notes ? `<p><strong>Motivo:</strong> ${formData.notes}</p>` : ''}
+            <p><strong>Nombre:</strong> ${safeName}</p>
+            <p><strong>Email:</strong> ${safeEmail}</p>
+            <p><strong>Teléfono:</strong> ${safePhone}</p>
+            ${formData.notes ? `<p><strong>Motivo:</strong> ${safeNotes}</p>` : ''}
         </div>
 
         <div style="background: var(--gray-light); padding: 20px; border-radius: var(--radius-md);">
             <h4 style="margin-bottom: 8px; color: var(--gold-champagne);">Identificación</h4>
-            <p>${AppState.uploadedFile ? `${AppState.uploadedFile.name} (${Validators.formatFileSize(AppState.uploadedFile.size)})` : 'Sin archivo adjunto'}</p>
+            <p>${safeFileLine}</p>
         </div>
     `;
 }
@@ -511,6 +596,14 @@ async function createAppointment() {
         // 5. Mostrar éxito
         document.getElementById('loadingOverlay').classList.add('hidden');
         document.getElementById('successModal').classList.remove('hidden');
+
+        // 6. Resetear estado de la app tras éxito para evitar reenvíos con
+        //    datos viejos si el usuario interactúa antes del reload manual.
+        AppState.formData = {};
+        AppState.selectedSlot = null;
+        AppState.selectedDate = null;
+        AppState.isSubmitting = false;
+        AppState.uploadedFile = null;
 
     } catch (error) {
         console.error('Error creating appointment:', error);
@@ -645,10 +738,40 @@ function setupEventListeners() {
         stepManager.goToStep(3);
     });
 
-    // Step 4 Confirm
-    document.getElementById('step4Confirm').addEventListener('click', () => {
-        createAppointment();
+    // Step 4 Confirm — anti double-submit
+    document.getElementById('step4Confirm').addEventListener('click', async (event) => {
+        // Bloquear si ya hay un submit en curso
+        if (AppState.isSubmitting) return;
+
+        const btn = event.currentTarget;
+        const originalHTML = btn.innerHTML;
+
+        AppState.isSubmitting = true;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.classList.add('is-loading');
+        btn.innerHTML = 'Enviando...';
+
+        try {
+            await createAppointment();
+        } finally {
+            btn.disabled = false;
+            btn.setAttribute('aria-busy', 'false');
+            btn.classList.remove('is-loading');
+            btn.innerHTML = originalHTML;
+            AppState.isSubmitting = false;
+        }
     });
+
+    // Botones de los modales (anteriormente onclick="location.reload()" inline)
+    const successReload = document.getElementById('successReloadBtn');
+    if (successReload) {
+        successReload.addEventListener('click', () => location.reload());
+    }
+    const errorReload = document.getElementById('errorReloadBtn');
+    if (errorReload) {
+        errorReload.addEventListener('click', () => location.reload());
+    }
 }
 
 // ===================

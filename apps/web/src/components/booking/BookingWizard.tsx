@@ -42,6 +42,15 @@ export function BookingWizard() {
   const [submitting,   setSubmitting]  = useState(false)
   const [confirmCode,  setConfirmCode] = useState('')
   const direction = useRef<1 | -1>(1)
+  // Idempotency key tied to this wizard instance. Stored in a ref (not state
+  // or localStorage) so retries / accidental double-submits collapse to one
+  // appointment server-side, but a fresh visit always creates a new key.
+  const idempotencyKeyRef = useRef<string>('')
+  if (idempotencyKeyRef.current === '') {
+    idempotencyKeyRef.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+  }
 
   const {
     register,
@@ -81,13 +90,14 @@ export function BookingWizard() {
     setSubmitting(true)
 
     const fd = new FormData()
-    fd.append('slotId',   selectedSlot.id)
-    fd.append('name',     data.name)
-    fd.append('email',    data.email)
-    fd.append('phone',    data.phone)
-    fd.append('notes',    data.notes ?? '')
-    fd.append('whatsapp', String(data.whatsapp))
-    fd.append('idFile',   idFile)
+    fd.append('slotId',         selectedSlot.id)
+    fd.append('name',           data.name)
+    fd.append('email',          data.email)
+    fd.append('phone',          data.phone)
+    fd.append('notes',          data.notes ?? '')
+    fd.append('whatsapp',       String(data.whatsapp))
+    fd.append('idFile',         idFile)
+    fd.append('idempotencyKey', idempotencyKeyRef.current)
     if (guests.length > 0) {
       fd.append('guests', JSON.stringify(
         guests.map(g => ({ name: g.name.trim(), email: g.email.trim().toLowerCase() }))

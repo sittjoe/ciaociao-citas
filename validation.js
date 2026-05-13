@@ -17,16 +17,26 @@ export const Validators = {
             };
         }
 
-        if (name.trim().length < 3) {
+        const trimmed = name.trim();
+
+        if (trimmed.length < 3) {
             return {
                 valid: false,
                 message: 'El nombre debe tener al menos 3 caracteres'
             };
         }
 
+        // Rechazar nombres compuestos solo por espacios o guiones (ej: "---", "   ")
+        if (trimmed.replace(/[\s-]/g, '').length < 2) {
+            return {
+                valid: false,
+                message: 'El nombre debe tener al menos 2 letras'
+            };
+        }
+
         // Solo letras, espacios, acentos y guiones
         const nameRegex = /^[a-záéíóúñü\s-]+$/i;
-        if (!nameRegex.test(name.trim())) {
+        if (!nameRegex.test(trimmed)) {
             return {
                 valid: false,
                 message: 'El nombre solo puede contener letras'
@@ -81,22 +91,28 @@ export const Validators = {
             };
         }
 
-        // Remover espacios, guiones y paréntesis
-        const cleanPhone = phone.replace(/[\s\-()]/g, '');
+        // Extraer solo dígitos para validar longitud exacta
+        const digits = phone.replace(/\D/g, '');
 
-        // Validar formato: +52XXXXXXXXXX o 10 dígitos
-        const phoneRegex = /^(\+?52)?(\d{10})$/;
-
-        if (!phoneRegex.test(cleanPhone)) {
+        if (digits.length === 10) {
             return {
-                valid: false,
-                message: 'Formato válido: +52 XXX XXX XXXX o 10 dígitos'
+                valid: true,
+                message: '',
+                phone: digits
+            };
+        }
+
+        if (digits.length === 12 && digits.startsWith('52')) {
+            return {
+                valid: true,
+                message: '',
+                phone: digits.slice(2)
             };
         }
 
         return {
-            valid: true,
-            message: ''
+            valid: false,
+            message: 'Debe tener 10 dígitos (formato: +52 XXX XXX XXXX o 10 dígitos)'
         };
     },
 
@@ -106,13 +122,17 @@ export const Validators = {
      * @returns {string} - Teléfono formateado
      */
     formatPhone(phone) {
+        // Detectar si el usuario incluyó prefijo internacional explícito (+52)
+        // para preservarlo en el output formateado.
+        const hasPlus52 = /^\s*\+\s*52\b/.test(phone) || /^\s*\+52/.test(phone);
+
         // Remover todo excepto dígitos y +
         let cleaned = phone.replace(/[^\d+]/g, '');
 
         // Si empieza con +52
         if (cleaned.startsWith('+52')) {
             cleaned = cleaned.substring(3);
-        } else if (cleaned.startsWith('52')) {
+        } else if (cleaned.startsWith('52') && hasPlus52) {
             cleaned = cleaned.substring(2);
         }
 
@@ -120,13 +140,20 @@ export const Validators = {
         cleaned = cleaned.substring(0, 10);
 
         // Formatear: XXX XXX XXXX
+        let formatted;
         if (cleaned.length <= 3) {
-            return cleaned;
+            formatted = cleaned;
         } else if (cleaned.length <= 6) {
-            return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+            formatted = `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
         } else {
-            return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
+            formatted = `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
         }
+
+        // Si el input crudo traía +52, conservarlo en el output formateado
+        if (hasPlus52 && formatted.length > 0) {
+            return `+52 ${formatted}`;
+        }
+        return formatted;
     },
 
     /**
@@ -181,6 +208,67 @@ export const Validators = {
             valid: true,
             message: ''
         };
+    },
+
+    /**
+     * Verifica los magic bytes del archivo para asegurar que el contenido real
+     * coincide con el tipo MIME declarado (evita renombrar .exe → .jpg).
+     * Async porque lee los primeros bytes vía File.slice().arrayBuffer().
+     * @param {File} file
+     * @returns {Promise<Object>} { valid: boolean, message: string, detectedType?: string }
+     */
+    async validateFileMagicBytes(file) {
+        if (!file) {
+            return { valid: false, message: 'Debes adjuntar tu identificación' };
+        }
+
+        let buf;
+        try {
+            buf = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+        } catch (err) {
+            return { valid: false, message: 'No se pudo leer el archivo' };
+        }
+
+        if (buf.length < 4) {
+            return { valid: false, message: 'Archivo demasiado pequeño o corrupto' };
+        }
+
+        // JPEG: FF D8 FF
+        const isJpeg = buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+        // PNG: 89 50 4E 47
+        const isPng = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+        // PDF: 25 50 44 46  (%PDF)
+        const isPdf = buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46;
+        // WebP: "RIFF"....."WEBP"
+        const isWebp = buf.length >= 12 &&
+            buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+            buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;
+
+        const mime = (file.type || '').toLowerCase();
+        const declaredImage = mime.startsWith('image/');
+        const declaredPdf = mime === 'application/pdf';
+
+        if (declaredPdf && !isPdf) {
+            return { valid: false, message: 'Tipo de archivo no válido' };
+        }
+
+        if (declaredImage && !(isJpeg || isPng || isWebp)) {
+            return { valid: false, message: 'Tipo de archivo no válido' };
+        }
+
+        // Si el MIME no estaba en las categorías esperadas, exigir que al menos
+        // los magic bytes correspondan a un formato permitido.
+        if (!declaredImage && !declaredPdf && !(isJpeg || isPng || isPdf || isWebp)) {
+            return { valid: false, message: 'Tipo de archivo no válido' };
+        }
+
+        let detectedType = null;
+        if (isJpeg) detectedType = 'jpeg';
+        else if (isPng) detectedType = 'png';
+        else if (isPdf) detectedType = 'pdf';
+        else if (isWebp) detectedType = 'webp';
+
+        return { valid: true, message: '', detectedType };
     },
 
     /**

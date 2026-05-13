@@ -7,6 +7,7 @@ import { LayoutDashboard, CalendarDays, CalendarRange, Settings, LogOut, Menu, X
 import { motion, AnimatePresence, LayoutGroup } from '@/components/motion'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { GlobalSearch } from '@/components/admin/GlobalSearch'
 
 const navItems = [
   { href: '/admin',             label: 'Dashboard',  Icon: LayoutDashboard },
@@ -179,6 +180,12 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
 
       {/* Main content */}
       <main id="main-content" className="flex-1 lg:ml-56 pt-16 lg:pt-0">
+        <div className="hidden lg:flex sticky top-0 z-20 items-center justify-end gap-4 border-b border-admin-line bg-admin-surface/85 backdrop-blur px-6 py-3">
+          <GlobalSearch />
+        </div>
+        <div className="lg:hidden px-4 py-2 bg-admin-surface/85 backdrop-blur border-b border-admin-line">
+          <GlobalSearch />
+        </div>
         <div className="p-4 sm:p-6 lg:p-8">
           {children}
         </div>
