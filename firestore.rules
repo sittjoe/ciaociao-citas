@@ -71,5 +71,17 @@ service cloud.firestore {
     match /slotDatetimeLocks/{lockId} {
       allow read, write: if false;
     }
+
+    match /bookingIdempotency/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /emailOutbox/{emailId} {
+      allow read, write: if false;
+    }
+
+    match /maintenanceRuns/{runId} {
+      allow read, write: if false;
+    }
   }
 }

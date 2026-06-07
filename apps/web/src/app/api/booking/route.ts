@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024 // 5 MB
 type UploadedFileRef = { delete: () => Promise<unknown> }
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 
 async function checkBookingRateLimit(ip: string): Promise<boolean> {
   const key       = ip.replace(/[^\w.-]/g, '_').slice(0, 128)
@@ -44,6 +45,7 @@ const HOLD_MS = 30 * 60 * 1000
 
 export async function POST(request: Request) {
   let uploadedFileRef: UploadedFileRef | null = null
+  let idempotencyRef: FirebaseFirestore.DocumentReference | null = null
   try {
     const contentType = request.headers.get('content-type') ?? ''
     if (!contentType.toLowerCase().includes('multipart/form-data')) {
@@ -85,6 +87,43 @@ export async function POST(request: Request) {
     }
 
     const { slotId, name, email, phone, notes, whatsapp } = parsed.data
+    const idempotencyKeyRaw = String(formData.get('idempotencyKey') ?? '').trim()
+    const idempotencyKey = /^[a-zA-Z0-9_-]{16,80}$/.test(idempotencyKeyRaw) ? idempotencyKeyRaw : randomUUID()
+    idempotencyRef = adminDb
+      .collection('bookingIdempotency')
+      .doc(`${email.toLowerCase().trim().replace(/[^\w.-]/g, '_').slice(0, 120)}_${idempotencyKey}`)
+
+    try {
+      await idempotencyRef.create({
+        status: 'processing',
+        email: email.toLowerCase().trim(),
+        slotId,
+        createdAtMs: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    } catch {
+      const existing = await idempotencyRef.get()
+      const existingData = existing.data()
+      if (
+        existingData?.status === 'completed' &&
+        typeof existingData.confirmationCode === 'string'
+      ) {
+        return NextResponse.json({ confirmationCode: existingData.confirmationCode, reused: true }, { status: 200 })
+      }
+      const createdAtMs = Number(existingData?.createdAtMs ?? 0)
+      if (existingData?.status === 'processing' && Date.now() - createdAtMs < IDEMPOTENCY_TTL_MS) {
+        return NextResponse.json({ error: 'Tu solicitud ya se está procesando. Revisa tu correo o intenta en unos minutos.' }, { status: 409 })
+      }
+      await idempotencyRef.set({
+        status: 'processing',
+        email: email.toLowerCase().trim(),
+        slotId,
+        createdAtMs: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+    }
 
     // Parse optional guests array (JSON-encoded in FormData)
     const guestsRaw    = formData.get('guests')
@@ -236,6 +275,13 @@ export async function POST(request: Request) {
       }
     })
 
+    await idempotencyRef.update({
+      status: 'completed',
+      appointmentId,
+      confirmationCode,
+      updatedAt: FieldValue.serverTimestamp(),
+    }).catch(() => {})
+
     // Build Guest objects from pre-generated entries (transaction committed)
     const createdGuests: Guest[] = guestEntries.map(g => ({
       id:                g.ref.id,
@@ -297,6 +343,13 @@ export async function POST(request: Request) {
       await uploadedFileRef.delete().catch(deleteErr => {
         console.error('Failed to cleanup uploaded ID after booking error:', deleteErr)
       })
+    }
+    if (idempotencyRef) {
+      await idempotencyRef.update({
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err),
+        updatedAt: FieldValue.serverTimestamp(),
+      }).catch(() => {})
     }
     const msg = err instanceof Error ? err.message : 'Error desconocido'
     if (msg === 'SLOT_UNAVAILABLE' || msg === 'SLOT_NOT_FOUND') {

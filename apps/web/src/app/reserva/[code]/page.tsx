@@ -104,9 +104,9 @@ export default async function ReservaPage({ params }: PageProps) {
                 ['Hora',    formatTime(appt.slotDatetime)],
                 ...(appt.notes ? [['Notas', appt.notes]] : [] as [string, string][]),
               ] as [string, string][]).map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-5 border-b border-ink-line py-2.5 last:border-0">
+                <div key={label} className="flex flex-col gap-1 border-b border-ink-line py-2.5 last:border-0 sm:flex-row sm:justify-between sm:gap-5">
                   <span className="text-ink-muted">{label}</span>
-                  <span className="max-w-[60%] text-right text-ink">{value}</span>
+                  <span className="break-words text-ink sm:max-w-[60%] sm:text-right">{value}</span>
                 </div>
               ))}
             </div>

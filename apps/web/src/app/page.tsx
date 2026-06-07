@@ -58,6 +58,12 @@ export default function HomePage() {
             >
               Reservar
             </a>
+            <a
+              href="/reserva"
+              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-eyebrow text-porcelain/78 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
+            >
+              Ver mi reserva
+            </a>
           </header>
 
           <div className="grid gap-10 pb-10 sm:pb-16 lg:grid-cols-[minmax(0,680px)_280px] lg:items-end">
@@ -86,10 +92,10 @@ export default function HomePage() {
                     Reservar cita
                   </a>
                   <a
-                    href="mailto:hola@ciaociao.mx"
+                    href="/reserva"
                     className="inline-flex items-center justify-center rounded-xl border border-white/25 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:border-white/55 hover:bg-white/10"
                   >
-                    Contactar showroom
+                    Ver mi reserva
                   </a>
                 </div>
               </StaggerItem>
@@ -134,7 +140,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── Booking section ──────────────────────────── */}
-      <section id="booking" className="surface-atelier px-6 py-14 sm:py-20">
+      <section id="booking" className="surface-atelier px-4 py-14 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl lg:grid lg:grid-cols-[340px_1fr] lg:gap-20 lg:items-start">
 
             <div className="text-center lg:text-left mb-10 lg:mb-0 lg:sticky lg:top-20">

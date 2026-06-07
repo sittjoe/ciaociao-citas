@@ -9,7 +9,7 @@ const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
 const SHOWROOM_ADDRESS = process.env.SHOWROOM_ADDRESS || 'Ciudad de México'
 
-type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'confirmation_request' | 'calendar_error' | 'guest_invitation' | 'guest_reminder'
+type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'confirmation_request' | 'calendar_error' | 'guest_invitation' | 'guest_reminder' | 'reservation_recovery'
 
 let resendClient: Resend | null = null
 
@@ -80,6 +80,25 @@ async function sendTracked(params: {
   html: string
   attachments?: { filename: string; content: string }[]
 }) {
+  const outboxRef = adminDb.collection('emailOutbox').doc()
+  const payload = {
+    kind: params.kind,
+    appointmentId: params.appointmentId ?? null,
+    from: params.from,
+    to: Array.isArray(params.to) ? params.to : [params.to],
+    subject: params.subject,
+    html: params.html,
+    attachments: params.attachments ?? [],
+  }
+  await outboxRef.set({
+    ...payload,
+    status: 'sending',
+    attempts: 1,
+    lastAttemptAt: FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }).catch(err => console.error('Unable to create email outbox entry:', err))
+
   try {
     const result = await getResend().emails.send({
       from: params.from,
@@ -96,9 +115,20 @@ async function sendTracked(params: {
       appointmentId: params.appointmentId,
       ok: true,
     })
+    await outboxRef.update({
+      status: 'sent',
+      resendId: result.data?.id ?? null,
+      sentAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }).catch(() => {})
     return result
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    await outboxRef.update({
+      status: 'failed',
+      error: message,
+      updatedAt: FieldValue.serverTimestamp(),
+    }).catch(() => {})
     await recordEmailEvent({
       kind: params.kind,
       to: params.to,
@@ -109,6 +139,64 @@ async function sendTracked(params: {
     })
     throw err
   }
+}
+
+export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; sent: number; failed: number; errors: string[] }> {
+  const snap = await adminDb
+    .collection('emailOutbox')
+    .where('status', '==', 'failed')
+    .limit(limit)
+    .get()
+
+  let sent = 0
+  let failed = 0
+  const errors: string[] = []
+
+  for (const doc of snap.docs) {
+    const data = doc.data()
+    const attempts = Number(data.attempts ?? 0)
+    try {
+      await doc.ref.update({
+        status: 'sending',
+        attempts: attempts + 1,
+        lastAttemptAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      const result = await getResend().emails.send({
+        from: data.from,
+        to: data.to,
+        subject: data.subject,
+        html: data.html,
+        ...(Array.isArray(data.attachments) && data.attachments.length > 0 ? { attachments: data.attachments } : {}),
+        headers: { 'List-Unsubscribe': `<mailto:${FROM}?subject=Baja>` },
+      })
+      await doc.ref.update({
+        status: 'sent',
+        resendId: result.data?.id ?? null,
+        sentAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      await recordEmailEvent({
+        kind: data.kind,
+        to: data.to,
+        subject: data.subject,
+        appointmentId: data.appointmentId ?? undefined,
+        ok: true,
+      })
+      sent++
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      await doc.ref.update({
+        status: 'failed',
+        error: message,
+        updatedAt: FieldValue.serverTimestamp(),
+      }).catch(() => {})
+      errors.push(`${doc.id}: ${message}`)
+      failed++
+    }
+  }
+
+  return { retried: snap.size, sent, failed, errors }
 }
 
 function escapeHtml(value: string): string {
@@ -536,6 +624,28 @@ export async function sendRescheduleNotice(appt: Appointment) {
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>
+    `),
+  })
+}
+
+export async function sendReservationRecovery(appt: Appointment) {
+  await sendTracked({
+    kind: 'reservation_recovery',
+    appointmentId: appt.id,
+    from: `Ciao Ciao Joyería <${FROM}>`,
+    to: appt.email,
+    subject: 'Tu link de cita en Ciao Ciao',
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Link de tu cita</p>
+        <p class="copy">Hola ${escapeHtml(appt.name)}, aquí puedes consultar el estado de tu cita y hacer cambios disponibles.</p>
+        ${details([
+          ['Fecha', formatDate(appt.slotDatetime)],
+          ['Hora', formatTime(appt.slotDatetime)],
+          ['Código', appt.confirmationCode],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver mi cita</a></p>
     `),
   })
 }

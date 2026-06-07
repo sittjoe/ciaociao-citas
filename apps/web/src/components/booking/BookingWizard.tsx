@@ -21,9 +21,20 @@ import { cn, formatDate, formatTime } from '@/lib/utils'
 interface Slot { id: string; datetime: string }
 
 type Step = 'calendar' | 'slots' | 'form' | 'upload' | 'review' | 'done'
+interface BookingDraft {
+  savedAt: number
+  step: Step
+  selectedDate: string | null
+  selectedSlotId: string | null
+  values: Partial<BookingFormInput>
+  guests: GuestInput[]
+  idempotencyKey: string
+}
 
 const STEPS: Step[] = ['calendar', 'slots', 'form', 'upload', 'review', 'done']
 const STEP_LABELS   = ['Fecha', 'Horario', 'Datos', 'Identificación', 'Confirmar', '']
+const DRAFT_KEY = 'ciaociao-booking-draft-v1'
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 
 const stepVariants = {
   initial: (dir: number) => ({ opacity: 0, x: dir * 36 }),
@@ -42,8 +53,15 @@ export function BookingWizard() {
   const [guests,       setGuests]      = useState<GuestInput[]>([])
   const [submitting,   setSubmitting]  = useState(false)
   const [confirmCode,  setConfirmCode] = useState('')
+  const [submitNotice, setSubmitNotice]= useState<string | null>(null)
+  const [needsIdAgain, setNeedsIdAgain]= useState(false)
   const direction = useRef<1 | -1>(1)
   const submitInFlight = useRef(false)
+  const restoredSlotId = useRef<string | null>(null)
+  const didRestoreDraft = useRef(false)
+  const idempotencyKey = useRef<string>(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+  )
 
   const {
     register,
@@ -52,6 +70,7 @@ export function BookingWizard() {
     trigger,
     watch,
     setFocus,
+    reset,
     formState: { errors },
   } = useForm<BookingFormInput>({
     resolver: zodResolver(bookingFormSchema),
@@ -81,9 +100,64 @@ export function BookingWizard() {
     void loadSlots()
   }, [loadSlots])
 
+  useEffect(() => {
+    if (didRestoreDraft.current) return
+    didRestoreDraft.current = true
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw) as BookingDraft
+      if (!draft.savedAt || Date.now() - draft.savedAt > DRAFT_TTL_MS) {
+        localStorage.removeItem(DRAFT_KEY)
+        return
+      }
+      reset({
+        name: draft.values.name ?? '',
+        email: draft.values.email ?? '',
+        phone: draft.values.phone ?? '',
+        notes: draft.values.notes ?? '',
+        whatsapp: draft.values.whatsapp ?? false,
+      })
+      setGuests(draft.guests ?? [])
+      setSelectedDate(draft.selectedDate)
+      restoredSlotId.current = draft.selectedSlotId
+      idempotencyKey.current = draft.idempotencyKey || idempotencyKey.current
+      if (draft.step === 'upload' || draft.step === 'review') {
+        setNeedsIdAgain(true)
+        setStep('upload')
+      } else if (draft.step !== 'done') {
+        setStep(draft.step)
+      }
+    } catch {
+      localStorage.removeItem(DRAFT_KEY)
+    }
+  }, [reset])
+
+  useEffect(() => {
+    if (!restoredSlotId.current || slots.length === 0) return
+    const restored = slots.find(slot => slot.id === restoredSlotId.current)
+    if (restored) setSelectedSlot(restored)
+    restoredSlotId.current = null
+  }, [slots])
+
   const stepIndex = STEPS.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
   const hostEmail = watch('email') ?? ''
+  const watchedValues = watch()
+
+  useEffect(() => {
+    if (step === 'done') return
+    const draft: BookingDraft = {
+      savedAt: Date.now(),
+      step,
+      selectedDate,
+      selectedSlotId: selectedSlot?.id ?? null,
+      values: watchedValues,
+      guests,
+      idempotencyKey: idempotencyKey.current,
+    }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  }, [step, selectedDate, selectedSlot?.id, watchedValues, guests])
 
   const goTo = useCallback((next: Step) => {
     const nextIdx = STEPS.indexOf(next)
@@ -98,6 +172,7 @@ export function BookingWizard() {
     if (!selectedSlot) { toast.error('Selecciona un horario antes de continuar'); goTo('calendar'); return }
     if (!idFile)       { toast.error('Sube tu identificación antes de continuar'); goTo('upload'); return }
     submitInFlight.current = true
+    setSubmitNotice(null)
     setSubmitting(true)
 
     const fd = new FormData()
@@ -108,6 +183,7 @@ export function BookingWizard() {
     fd.append('notes',    data.notes ?? '')
     fd.append('whatsapp', String(data.whatsapp))
     fd.append('idFile',   idFile)
+    fd.append('idempotencyKey', idempotencyKey.current)
     if (guests.length > 0) {
       fd.append('guests', JSON.stringify(
         guests.map(g => ({ name: g.name.trim(), email: g.email.trim().toLowerCase() }))
@@ -123,18 +199,25 @@ export function BookingWizard() {
       if (!res.ok) {
         const msg = res.status === 409
           ? 'Este horario ya fue tomado. Por favor selecciona otro.'
+          : res.status === 429
+          ? 'Recibimos demasiados intentos. Tus datos siguen guardados; intenta otra vez en una hora.'
           : typeof json.error === 'string' ? json.error
           : `Error al enviar solicitud (${res.status})`
         toast.error(msg)
+        setSubmitNotice(msg)
         if (res.status === 409) { goTo('calendar'); setSelectedSlot(null) }
         return
       }
       if (!json.confirmationCode) { toast.error('Respuesta inesperada del servidor'); return }
       setConfirmCode(json.confirmationCode)
+      localStorage.removeItem(DRAFT_KEY)
+      idempotencyKey.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
       direction.current = 1
       setStep('done')
     } catch {
-      toast.error('Error de conexión. Por favor intenta de nuevo.')
+      const msg = 'No se pudo enviar. Tus datos siguen guardados en este dispositivo.'
+      toast.error(msg)
+      setSubmitNotice(msg)
     } finally {
       submitInFlight.current = false
       setSubmitting(false)
@@ -393,6 +476,11 @@ export function BookingWizard() {
                 </p>
               </div>
               <IDUploader value={idFile} onChange={setIdFile} />
+              {needsIdAgain && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                  Recuperamos tu avance. Por seguridad, vuelve a subir tu identificación.
+                </p>
+              )}
               <Button className="w-full" disabled={!idFile} onClick={() => goTo('review')}>
                 <ShieldCheck size={15} strokeWidth={1.5} /> Continuar
               </Button>
@@ -475,6 +563,12 @@ export function BookingWizard() {
                   Al confirmar, tu solicitud será revisada por nuestro equipo y recibirás un email con la confirmación o actualización.
                 </p>
 
+                {submitNotice && (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800" role="alert">
+                    {submitNotice}
+                  </p>
+                )}
+
                 <Button type="submit" loading={submitting} className="w-full">
                   <Send size={15} strokeWidth={1.5} /> Enviar solicitud
                 </Button>
@@ -499,13 +593,13 @@ export function BookingWizard() {
               <div className="space-y-2">
                 <h2 className="font-serif font-light text-3xl text-ink">Solicitud recibida</h2>
                 <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
-                  Revisaremos tu solicitud y te notificaremos a la brevedad por email.
+                  Tu cita aún está pendiente de revisión. Te notificaremos a la brevedad por email.
                 </p>
               </div>
 
               <div className="bg-vellum border border-ink-line rounded-2xl py-5 px-8 inline-block mx-auto">
                 <p className="h-eyebrow mb-2">Código de referencia</p>
-                <p className="font-mono text-3xl font-bold text-champagne tracking-[0.18em]">{confirmCode}</p>
+                <p className="font-mono text-2xl font-bold text-champagne tracking-[0.18em] sm:text-3xl">{confirmCode}</p>
               </div>
 
               <div className="space-y-2.5">

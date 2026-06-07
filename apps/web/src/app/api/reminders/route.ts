@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
+import { retryEmailOutbox, sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
 import { expirePendingGuests } from '@/lib/guests'
 import { cleanupOrphanedIdentifications } from '@/lib/storage-cleanup'
 import type { Appointment } from '@/types'
@@ -114,6 +114,7 @@ export async function GET(request: Request) {
     let sentGuest24  = 0
     let expiredCount = 0
     let idCleanup: Awaited<ReturnType<typeof cleanupOrphanedIdentifications>> | null = null
+    let emailRetry: Awaited<ReturnType<typeof retryEmailOutbox>> | null = null
 
     const from48g = new Date(now.getTime() + 36 * 60 * 60 * 1000)
     const to48g   = new Date(now.getTime() + 60 * 60 * 60 * 1000)
@@ -239,7 +240,29 @@ export async function GET(request: Request) {
       errors.push(`ID cleanup failed: ${err}`)
     }
 
-    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, idCleanup, errors })
+    try {
+      emailRetry = await retryEmailOutbox()
+    } catch (err) {
+      errors.push(`Email retry failed: ${err}`)
+    }
+
+    await adminDb.collection('maintenanceRuns').add({
+      type: 'daily_reminders',
+      sent24,
+      sent2,
+      sentGuest48,
+      sentGuest24,
+      expiredCount,
+      idCleanup,
+      emailRetry,
+      errors,
+      ok: errors.length === 0,
+      createdAt: Timestamp.now(),
+    }).catch(err => {
+      console.error('Unable to record reminders maintenance run:', err)
+    })
+
+    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, idCleanup, emailRetry, errors })
   } catch (err) {
     console.error('GET /api/reminders', err)
     return NextResponse.json({ error: 'Error en reminders' }, { status: 500 })
