@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Calendar, ExternalLink, FileText, Loader2 } from 'lucide-react'
+import { CheckCircle, XCircle, Calendar, ExternalLink, FileText, Loader2, Mail } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -141,6 +141,23 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
     }
   }
 
+  const resendAppointmentEmail = async () => {
+    if (!appt) return
+    setActing(true)
+    try {
+      const res = await fetch(`/api/admin/appointments/${appt.id}/resend`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json() as { error?: string }
+        throw new Error(err.error ?? 'Error')
+      }
+      toast.success('Email reenviado')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al reenviar email')
+    } finally {
+      setActing(false)
+    }
+  }
+
   return (
     <Modal
       open={!!appointmentId}
@@ -195,6 +212,22 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
               La cita quedó confirmada, pero Google Calendar no pudo crear el evento.
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <Mail size={16} strokeWidth={1.5} className="text-champagne shrink-0" />
+              <p className="text-sm font-medium text-ink">Email de estado</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={acting}
+              onClick={resendAppointmentEmail}
+            >
+              Reenviar
+            </Button>
+          </div>
 
           {appt.identificationUrl && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">

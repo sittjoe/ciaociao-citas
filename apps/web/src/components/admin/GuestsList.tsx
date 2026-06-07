@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { ShieldCheck, UserX, ExternalLink } from 'lucide-react'
+import { ShieldCheck, UserX, ExternalLink, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from '@/components/motion'
 import { Badge } from '@/components/ui/Badge'
@@ -94,6 +94,25 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
     }
   }, [appointmentId, fetchGuests])
 
+  const resendInvitation = useCallback(async (guestId: string) => {
+    setActing(guestId)
+    try {
+      const res = await fetch(
+        `/api/admin/appointments/${appointmentId}/guests/${guestId}/resend`,
+        { method: 'POST' },
+      )
+      if (!res.ok) {
+        const err = await res.json() as { error?: string }
+        throw new Error(err.error ?? 'Error')
+      }
+      toast.success('Invitación reenviada')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al reenviar invitación')
+    } finally {
+      setActing(null)
+    }
+  }, [appointmentId])
+
   if (loading) {
     return (
       <div className="space-y-2 py-1">
@@ -149,6 +168,18 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
               )}
               {!g.identificationUrl && (
                 <span className="text-[10px] text-ink-subtle whitespace-nowrap">Sin ID</span>
+              )}
+
+              {g.status === 'pending' && (
+                <button
+                  onClick={() => resendInvitation(g.id)}
+                  disabled={acting === g.id}
+                  className="text-ink-muted hover:text-champagne transition-colors disabled:opacity-40"
+                  title="Reenviar invitación"
+                  aria-label={`Reenviar invitación a ${g.name}`}
+                >
+                  <Mail size={14} strokeWidth={1.5} />
+                </button>
               )}
 
               {(g.status === 'pending' || g.status === 'expired') && (

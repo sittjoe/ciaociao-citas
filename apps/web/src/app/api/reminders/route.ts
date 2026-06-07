@@ -3,6 +3,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
 import { expirePendingGuests } from '@/lib/guests'
+import { cleanupOrphanedIdentifications } from '@/lib/storage-cleanup'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -112,6 +113,7 @@ export async function GET(request: Request) {
     let sentGuest48  = 0
     let sentGuest24  = 0
     let expiredCount = 0
+    let idCleanup: Awaited<ReturnType<typeof cleanupOrphanedIdentifications>> | null = null
 
     const from48g = new Date(now.getTime() + 36 * 60 * 60 * 1000)
     const to48g   = new Date(now.getTime() + 60 * 60 * 60 * 1000)
@@ -231,7 +233,13 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, errors })
+    try {
+      idCleanup = await cleanupOrphanedIdentifications()
+    } catch (err) {
+      errors.push(`ID cleanup failed: ${err}`)
+    }
+
+    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, idCleanup, errors })
   } catch (err) {
     console.error('GET /api/reminders', err)
     return NextResponse.json({ error: 'Error en reminders' }, { status: 500 })
