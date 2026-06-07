@@ -57,7 +57,9 @@ export function sanitize(text: string): string {
 
 export function csvRow(values: (string | number | undefined | null)[]): string {
   return values.map(v => {
-    const s = String(v ?? '').replace(/\r?\n/g, ' ').replace(/"/g, '""')
+    const raw = String(v ?? '')
+    const formulaSafe = /^[\s\t\r]*[=+\-@]/.test(raw) ? `'${raw}` : raw
+    const s = formulaSafe.replace(/\r?\n/g, ' ').replace(/"/g, '""')
     return `"${s}"`
   }).join(',')
 }

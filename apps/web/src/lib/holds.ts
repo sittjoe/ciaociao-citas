@@ -1,5 +1,6 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from './firebase-admin'
+import { releaseSlotLock } from './slot-locks'
 
 export async function releaseExpiredHolds(limit = 50): Promise<number> {
   const now = Timestamp.now()
@@ -53,6 +54,7 @@ export async function releaseExpiredHolds(limit = 50): Promise<number> {
         updatedAt: FieldValue.serverTimestamp(),
       })
     }
+    if (slot.datetime) releaseSlotLock(batch, slot.datetime as Timestamp)
     released++
   }
 

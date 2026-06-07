@@ -1,5 +1,11 @@
 # Firebase config con credenciales sensibles
 firebase-config.js
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
 
 # Node modules
 node_modules/

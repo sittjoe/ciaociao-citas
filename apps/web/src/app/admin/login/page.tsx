@@ -71,27 +71,35 @@ export default function AdminLoginPage() {
           </div>
 
           <Field label="Email" required error={errors.email?.message}>
-            <div className="relative">
-              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-              <input
-                {...register('email')}
-                type="email"
-                className="input-clean pl-9"
-                placeholder="admin@ciaociao.mx"
-                autoComplete="email"
-                autoFocus
-              />
-            </div>
+            {(id, ariaProps) => (
+              <div className="relative">
+                <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                <input
+                  id={id}
+                  {...ariaProps}
+                  {...register('email')}
+                  type="email"
+                  className="input-clean pl-9"
+                  placeholder="admin@ciaociao.mx"
+                  autoComplete="email"
+                  autoFocus
+                />
+              </div>
+            )}
           </Field>
 
           <Field label="Contraseña" required error={errors.password?.message}>
-            <input
-              {...register('password')}
-              type="password"
-              className="input-clean"
-              placeholder="••••••••••••"
-              autoComplete="current-password"
-            />
+            {(id, ariaProps) => (
+              <input
+                id={id}
+                {...ariaProps}
+                {...register('password')}
+                type="password"
+                className="input-clean"
+                placeholder="••••••••••••"
+                autoComplete="current-password"
+              />
+            )}
           </Field>
 
           <Button type="submit" loading={loading} className="w-full">

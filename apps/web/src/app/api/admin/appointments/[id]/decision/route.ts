@@ -5,6 +5,7 @@ import { appointmentDecisionSchema } from '@/lib/schemas'
 import { sendStatusUpdate, sendCalendarError } from '@/lib/email'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { createAppointmentCalendarEvent } from '@/lib/google-calendar'
+import { releaseSlotLock } from '@/lib/slot-locks'
 import type { Appointment, AppointmentStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -85,6 +86,7 @@ export async function POST(
           heldUntil: null,
           bookedBy: null,
         })
+        releaseSlotLock(tx, freshData.slotDatetime as Timestamp)
       }
 
       appointment = mapAppointment(id, freshData, newStatus)

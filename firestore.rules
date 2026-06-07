@@ -32,15 +32,9 @@ service cloud.firestore {
     // APPOINTMENTS: Citas de clientes
     // ============================================
     match /appointments/{appointmentId} {
-      // Clientes pueden crear citas con status 'pending' sin autenticación
-      allow create: if request.resource.data.status == 'pending'
-                    && request.resource.data.keys().hasAll(['name', 'email', 'phone', 'slotId', 'slotDatetime', 'identificationUrl', 'status', 'createdAt'])
-                    && request.resource.data.email is string
-                    && request.resource.data.email.matches('.*@.*\\..*')
-                    && request.resource.data.phone is string
-                    && request.resource.data.name is string
-                    && request.resource.data.name.size() >= 3
-                    && request.resource.data.name.size() <= 100;
+      // Las reservas públicas deben pasar por /api/booking para preservar
+      // validación, rate limit, uploads server-side y transacciones de slot.
+      allow create: if false;
 
       // Solo admin autenticado puede leer, actualizar y eliminar citas
       allow read:   if isAdmin();
@@ -70,6 +64,11 @@ service cloud.firestore {
     // AUDIT LOG: Solo Cloud Functions via Admin SDK
     // ============================================
     match /auditLog/{logId} {
+      allow read, write: if false;
+    }
+
+    // Internal server-side concurrency guard for one active appointment per datetime.
+    match /slotDatetimeLocks/{lockId} {
       allow read, write: if false;
     }
   }

@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     const batch    = adminDb.batch()
     let   created  = 0
     const skipped: string[] = []
+    const seenDatetimes = new Set<number>()
 
     for (const date of dates) {
       for (const time of times) {
@@ -77,6 +78,15 @@ export async function POST(request: Request) {
 
         // Skip past slots
         if (dt <= new Date()) { skipped.push(`${date}T${time}`); continue }
+        if (seenDatetimes.has(dt.getTime())) { skipped.push(`${date}T${time}`); continue }
+        seenDatetimes.add(dt.getTime())
+
+        const duplicateSnap = await adminDb
+          .collection('slots')
+          .where('datetime', '==', Timestamp.fromDate(dt))
+          .limit(1)
+          .get()
+        if (!duplicateSnap.empty) { skipped.push(`${date}T${time}`); continue }
 
         const ref = adminDb.collection('slots').doc()
         batch.set(ref, {

@@ -6,12 +6,14 @@ import { bookingPayloadSchema, guestInputSchema } from '@/lib/schemas'
 import { generateCode, sanitize } from '@/lib/utils'
 import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
 import { releaseExpiredHolds } from '@/lib/holds'
+import { createSlotLock } from '@/lib/slot-locks'
 import type { Appointment, Guest } from '@/types'
 import { randomUUID, randomBytes } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024 // 5 MB
+type UploadedFileRef = { delete: () => Promise<unknown> }
 
 async function checkBookingRateLimit(ip: string): Promise<boolean> {
   const key       = ip.replace(/[^\w.-]/g, '_').slice(0, 128)
@@ -41,15 +43,21 @@ const ALLOWED_MIME   = ['image/jpeg', 'image/png', 'image/webp', 'application/pd
 const HOLD_MS = 30 * 60 * 1000
 
 export async function POST(request: Request) {
+  let uploadedFileRef: UploadedFileRef | null = null
   try {
-    const ip = (request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0].trim()
-    if (await checkBookingRateLimit(ip)) {
-      return NextResponse.json({ error: 'Demasiadas solicitudes. Intenta de nuevo en una hora.' }, { status: 429 })
+    const contentType = request.headers.get('content-type') ?? ''
+    if (!contentType.toLowerCase().includes('multipart/form-data')) {
+      return NextResponse.json({ error: 'Solicitud inválida' }, { status: 415 })
     }
 
     await releaseExpiredHolds()
 
-    const formData = await request.formData()
+    let formData: FormData
+    try {
+      formData = await request.formData()
+    } catch {
+      return NextResponse.json({ error: 'Formulario inválido' }, { status: 400 })
+    }
 
     const raw = {
       slotId:   formData.get('slotId'),
@@ -103,6 +111,14 @@ export async function POST(request: Request) {
       }
     }
 
+    const ip = (request.headers.get('x-real-ip') ?? request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0].trim()
+    if (await checkBookingRateLimit(ip)) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes. Intenta de nuevo en una hora.' },
+        { status: 429, headers: { 'Retry-After': '3600' } },
+      )
+    }
+
     // Upload ID first (outside transaction — idempotent with UUID path)
     const extByMime: Record<string, string> = {
       'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf',
@@ -113,6 +129,7 @@ export async function POST(request: Request) {
     const bucket        = adminStorage.bucket()
     const fileRef       = bucket.file(storageKey)
     await fileRef.save(fileBuffer, { contentType: idFile.type, resumable: false })
+    uploadedFileRef = fileRef
     // identificationUrl is the storage path; signed URLs generated on-demand in admin panel
     const identificationUrl = storageKey
 
@@ -160,7 +177,18 @@ export async function POST(request: Request) {
 
       if (!existingSnap.empty) throw new Error('SLOT_UNAVAILABLE')
 
+      const existingDatetimeQuery = adminDb
+        .collection('appointments')
+        .where('slotDatetime', '==', Timestamp.fromDate(slotDatetime))
+        .where('status', 'in', ['pending', 'accepted'])
+        .limit(1)
+      const existingDatetimeSnap = await tx.get(existingDatetimeQuery)
+
+      if (!existingDatetimeSnap.empty) throw new Error('SLOT_UNAVAILABLE')
+
       const heldUntil = new Date(Date.now() + HOLD_MS)
+
+      createSlotLock(tx, slotDatetime, appointmentId)
 
       tx.set(apptRef, {
         slotId,
@@ -265,8 +293,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ confirmationCode }, { status: 201 })
   } catch (err: unknown) {
+    if (uploadedFileRef) {
+      await uploadedFileRef.delete().catch(deleteErr => {
+        console.error('Failed to cleanup uploaded ID after booking error:', deleteErr)
+      })
+    }
     const msg = err instanceof Error ? err.message : 'Error desconocido'
     if (msg === 'SLOT_UNAVAILABLE' || msg === 'SLOT_NOT_FOUND') {
+      return NextResponse.json({ error: 'Este horario ya no está disponible. Por favor selecciona otro.' }, { status: 409 })
+    }
+    if (typeof (err as { code?: unknown })?.code === 'number' && (err as { code?: number }).code === 6) {
       return NextResponse.json({ error: 'Este horario ya no está disponible. Por favor selecciona otro.' }, { status: 409 })
     }
     if (msg === 'GUESTS_TOO_LATE') {

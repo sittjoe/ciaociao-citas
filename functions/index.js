@@ -21,6 +21,10 @@ exports.adminLogin = onCall(
     invoker: 'public',
   },
   async (request) => {
+    if (process.env.ENABLE_LEGACY_ADMIN_LOGIN !== 'true') {
+      throw new HttpsError('failed-precondition', 'Legacy admin login disabled');
+    }
+
     const { password } = request.data;
     if (!password || typeof password !== 'string' || password.length > 200) {
       throw new HttpsError('invalid-argument', 'Contraseña requerida');

@@ -3,6 +3,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendCancellationEmail } from '@/lib/email'
+import { releaseSlotLock } from '@/lib/slot-locks'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -76,6 +77,7 @@ export async function POST(
         heldUntil: null,
         bookedBy:  null,
       })
+      releaseSlotLock(tx, data.slotDatetime as Timestamp)
     })
 
     after(sendCancellationEmail(appointment).catch(err =>

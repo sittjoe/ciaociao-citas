@@ -5,6 +5,7 @@ import { requireAdminSession } from '@/lib/admin-auth'
 import { rescheduleSchema } from '@/lib/schemas'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendRescheduleNotice, sendCalendarError } from '@/lib/email'
+import { createSlotLock, releaseSlotLock } from '@/lib/slot-locks'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -44,8 +45,21 @@ export async function POST(
 
       const oldSlotRef = adminDb.collection('slots').doc(apptData.slotId)
       const newDatetime = (newSlotData.datetime as Timestamp).toDate()
+      const oldDatetime = apptData.slotDatetime as Timestamp
+
+      if (newDatetime <= new Date()) throw new Error('SLOT_UNAVAILABLE')
+
+      const existingDatetimeQuery = adminDb
+        .collection('appointments')
+        .where('slotDatetime', '==', Timestamp.fromDate(newDatetime))
+        .where('status', 'in', ['pending', 'accepted'])
+        .limit(2)
+      const existingDatetimeSnap = await tx.get(existingDatetimeQuery)
+      if (existingDatetimeSnap.docs.some(doc => doc.id !== id)) throw new Error('SLOT_UNAVAILABLE')
 
       // Swap slots
+      releaseSlotLock(tx, oldDatetime)
+      createSlotLock(tx, newSlotData.datetime as Timestamp, id)
       tx.update(oldSlotRef, { available: true, bookedBy: null, heldUntil: null })
       tx.update(newSlotRef, { available: false, bookedBy: id, heldUntil: null })
 
@@ -56,6 +70,10 @@ export async function POST(
         updatedAt:    FieldValue.serverTimestamp(),
         rescheduledBy: admin.email,
         calendarSyncFailed: false,
+        reminder24Sent: false,
+        reminder2Sent: false,
+        clientConfirmed: false,
+        clientConfirmedAt: FieldValue.delete(),
       })
 
       updatedAppt = {
@@ -70,8 +88,8 @@ export async function POST(
         status:       'accepted',
         confirmationCode: apptData.confirmationCode,
         cancelToken:  apptData.cancelToken,
-        reminder24Sent: apptData.reminder24Sent ?? false,
-        reminder2Sent:  apptData.reminder2Sent ?? false,
+        reminder24Sent: false,
+        reminder2Sent:  false,
         googleCalendarEventId: apptData.googleCalendarEventId ?? null,
         createdAt:    (apptData.createdAt as Timestamp).toDate(),
       }
@@ -97,6 +115,9 @@ export async function POST(
     if (msg === 'SLOT_NOT_FOUND')    return NextResponse.json({ error: 'Slot no encontrado' },         { status: 404 })
     if (msg === 'NOT_ACCEPTED')      return NextResponse.json({ error: 'Solo se reagendan citas aceptadas' }, { status: 409 })
     if (msg === 'SLOT_UNAVAILABLE')  return NextResponse.json({ error: 'El slot ya no está disponible' }, { status: 409 })
+    if (typeof (err as { code?: unknown })?.code === 'number' && (err as { code?: number }).code === 6) {
+      return NextResponse.json({ error: 'El slot ya no está disponible' }, { status: 409 })
+    }
     console.error(`POST /api/admin/appointments/${id}/reschedule`, err)
     return NextResponse.json({ error: 'Error al reagendar' }, { status: 500 })
   }

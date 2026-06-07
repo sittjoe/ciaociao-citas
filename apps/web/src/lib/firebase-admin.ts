@@ -18,7 +18,10 @@ function app(): App {
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
       privateKey,
     }),
-    storageBucket: `${process.env.FIREBASE_PROJECT_ID}.firebasestorage.app`,
+    storageBucket:
+      process.env.FIREBASE_STORAGE_BUCKET ??
+      process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ??
+      `${process.env.FIREBASE_PROJECT_ID}.firebasestorage.app`,
   }))
 }
 

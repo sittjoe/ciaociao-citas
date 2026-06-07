@@ -9,8 +9,13 @@ export const dynamic = 'force-dynamic'
 
 // Called by Vercel cron daily at 8am CST (see vercel.json: "0 14 * * *")
 export async function GET(request: Request) {
+  const secret = process.env.CRON_SECRET?.trim()
+  if (!secret) {
+    return NextResponse.json({ error: 'Cron not configured' }, { status: 503 })
+  }
+
   const authHeader = request.headers.get('Authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

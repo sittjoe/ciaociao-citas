@@ -21,11 +21,12 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
   const today = startOfDay(new Date())
 
   const slotDates = useMemo(() => {
-    const set = new Set<string>()
+    const set = new Map<string, number>()
     const nowMs = Date.now()
     for (const s of slots) {
       if (parseISO(s.datetime).getTime() <= nowMs) continue
-      set.add(formatInTimeZone(parseISO(s.datetime), BUSINESS_TZ, 'yyyy-MM-dd'))
+      const key = formatInTimeZone(parseISO(s.datetime), BUSINESS_TZ, 'yyyy-MM-dd')
+      set.set(key, (set.get(key) ?? 0) + 1)
     }
     return set
   }, [slots])
@@ -82,16 +83,24 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
 
         {days.map(day => {
           const key      = format(day, 'yyyy-MM-dd')
-          const hasSlots = slotDates.has(key)
+          const slotCount = slotDates.get(key) ?? 0
+          const hasSlots = slotCount > 0
           const isPast   = isBefore(startOfDay(day), today)
           const isSel    = selectedDate === format(day, 'yyyy-MM-dd')
           const isNow    = isToday(day)
+          const dateLabel = format(day, "EEEE d 'de' MMMM", { locale: es })
 
           return (
             <button
               key={key}
               disabled={!hasSlots || isPast}
               onClick={() => onSelectDate(format(day, 'yyyy-MM-dd'))}
+              aria-current={isNow ? 'date' : undefined}
+              aria-label={
+                hasSlots && !isPast
+                  ? `${dateLabel}, ${slotCount} horario${slotCount === 1 ? '' : 's'} disponible${slotCount === 1 ? '' : 's'}`
+                  : `${dateLabel}, sin horarios disponibles`
+              }
               className={cn(
                 'relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-colors duration-150',
                 isPast && 'opacity-30 cursor-not-allowed',

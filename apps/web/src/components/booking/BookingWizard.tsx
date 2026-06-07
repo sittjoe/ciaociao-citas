@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Send, ShieldCheck, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { motion, AnimatePresence } from '@/components/motion'
+import { motion } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { CalendarView } from './CalendarView'
@@ -35,6 +35,7 @@ export function BookingWizard() {
   const [step,         setStep]        = useState<Step>('calendar')
   const [slots,        setSlots]       = useState<Slot[]>([])
   const [loadingSlots, setLoadingSlots]= useState(true)
+  const [slotsError,   setSlotsError]  = useState(false)
   const [selectedDate, setSelectedDate]= useState<string | null>(null)
   const [selectedSlot, setSelectedSlot]= useState<Slot | null>(null)
   const [idFile,       setIdFile]      = useState<File | null>(null)
@@ -42,6 +43,7 @@ export function BookingWizard() {
   const [submitting,   setSubmitting]  = useState(false)
   const [confirmCode,  setConfirmCode] = useState('')
   const direction = useRef<1 | -1>(1)
+  const submitInFlight = useRef(false)
 
   const {
     register,
@@ -49,19 +51,35 @@ export function BookingWizard() {
     getValues,
     trigger,
     watch,
+    setFocus,
     formState: { errors },
   } = useForm<BookingFormInput>({
     resolver: zodResolver(bookingFormSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: { whatsapp: false },
   })
 
-  useEffect(() => {
-    fetch('/api/slots')
-      .then(r => r.json())
-      .then((d: { slots: Slot[] }) => setSlots(d.slots ?? []))
-      .catch(() => toast.error('Error al cargar horarios'))
-      .finally(() => setLoadingSlots(false))
+  const loadSlots = useCallback(async () => {
+    setLoadingSlots(true)
+    setSlotsError(false)
+    try {
+      const res = await fetch('/api/slots')
+      if (!res.ok) throw new Error('SLOTS_FAILED')
+      const d = await res.json() as { slots?: Slot[] }
+      setSlots(d.slots ?? [])
+    } catch {
+      setSlots([])
+      setSlotsError(true)
+      toast.error('Error al cargar horarios')
+    } finally {
+      setLoadingSlots(false)
+    }
   }, [])
+
+  useEffect(() => {
+    void loadSlots()
+  }, [loadSlots])
 
   const stepIndex = STEPS.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
@@ -76,8 +94,10 @@ export function BookingWizard() {
   const goBack = useCallback(() => goTo(STEPS[stepIndex - 1]), [stepIndex, goTo])
 
   const onSubmit = useCallback(async (data: BookingFormInput) => {
+    if (submitInFlight.current) return
     if (!selectedSlot) { toast.error('Selecciona un horario antes de continuar'); goTo('calendar'); return }
     if (!idFile)       { toast.error('Sube tu identificación antes de continuar'); goTo('upload'); return }
+    submitInFlight.current = true
     setSubmitting(true)
 
     const fd = new FormData()
@@ -116,6 +136,7 @@ export function BookingWizard() {
     } catch {
       toast.error('Error de conexión. Por favor intenta de nuevo.')
     } finally {
+      submitInFlight.current = false
       setSubmitting(false)
     }
   }, [selectedSlot, idFile, guests, goTo])
@@ -132,6 +153,7 @@ export function BookingWizard() {
                 type="button"
                 onClick={() => i < stepIndex && goTo(s)}
                 disabled={i > stepIndex}
+                aria-current={i === stepIndex ? 'step' : undefined}
                 className={cn(
                   'rounded-xl border px-3 py-2 text-left transition-colors',
                   i < stepIndex && 'border-champagne-soft bg-champagne-tint text-champagne-deep',
@@ -158,7 +180,7 @@ export function BookingWizard() {
             ))}
           </div>
           <p className="text-[0.6rem] text-ink-muted text-right tracking-widest uppercase font-semibold">
-            {STEP_LABELS[stepIndex]}
+            Paso {Math.min(stepIndex + 1, 5)} de 5 · {STEP_LABELS[stepIndex]}
           </p>
         </div>
       )}
@@ -173,15 +195,13 @@ export function BookingWizard() {
         </button>
       )}
 
-      <AnimatePresence mode="wait" custom={direction.current}>
-        <motion.div
-          key={step}
-          custom={direction.current}
-          variants={stepVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-        >
+      <motion.div
+        key={step}
+        custom={direction.current}
+        variants={stepVariants}
+        initial="initial"
+        animate="animate"
+      >
           {/* STEP: Calendar */}
           {step === 'calendar' && (
             <Card variant="atelier" className="p-5 sm:p-7">
@@ -194,6 +214,15 @@ export function BookingWizard() {
               </div>
               {loadingSlots ? (
                 <div className="h-64 shimmer rounded-xl" />
+              ) : slotsError ? (
+                <div className="text-center py-12 px-4" role="alert">
+                  <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
+                    No pudimos cargar los horarios. Intenta de nuevo en un momento.
+                  </p>
+                  <Button type="button" variant="outline" className="mt-5" onClick={() => void loadSlots()}>
+                    Reintentar
+                  </Button>
+                </div>
               ) : slots.length === 0 ? (
                 <div className="text-center py-12 px-4">
                   <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
@@ -245,6 +274,9 @@ export function BookingWizard() {
                 const formOk = await trigger(['name', 'email', 'phone', 'notes', 'whatsapp'])
                 if (!formOk) {
                   toast.error('Completa tus datos antes de continuar')
+                  if (errors.name) setFocus('name')
+                  else if (errors.email) setFocus('email')
+                  else if (errors.phone) setFocus('phone')
                   return
                 }
                 if (guests.length > 0) {
@@ -373,7 +405,11 @@ export function BookingWizard() {
               onSubmit={handleSubmit(onSubmit, errs => {
                 const first = Object.values(errs)[0]?.message
                 toast.error(first ?? 'Revisa los datos del formulario')
-                if (errs.name || errs.email || errs.phone || errs.notes) goTo('form')
+                if (errs.name || errs.email || errs.phone || errs.notes) {
+                  goTo('form')
+                  const field = errs.name ? 'name' : errs.email ? 'email' : errs.phone ? 'phone' : 'notes'
+                  window.setTimeout(() => setFocus(field), 0)
+                }
               })}
             >
               <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
@@ -394,14 +430,14 @@ export function BookingWizard() {
                   ] as [string, string][]).map(([label, value]) => (
                     <div key={label} className="flex justify-between py-2.5 text-sm">
                       <span className="text-ink-muted">{label}</span>
-                      <span className="text-ink text-right max-w-[60%] truncate">{value}</span>
+                      <span className="text-ink text-right max-w-[60%] break-words">{value}</span>
                     </div>
                   ))}
                   {guests.length > 0 && (
                     <div className="py-2.5 text-sm">
                       <p className="text-ink-muted mb-1.5">Invitados ({guests.length})</p>
                       {guests.map((g, i) => (
-                        <p key={i} className="text-ink text-right truncate">· {g.name} — {g.email}</p>
+                        <p key={i} className="text-ink text-right break-words">· {g.name} — {g.email}</p>
                       ))}
                     </div>
                   )}
@@ -488,8 +524,7 @@ export function BookingWizard() {
               </div>
             </Card>
           )}
-        </motion.div>
-      </AnimatePresence>
+      </motion.div>
     </div>
   )
 }
