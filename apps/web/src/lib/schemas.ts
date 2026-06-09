@@ -12,9 +12,7 @@ export const productTypeOptions = [
 ] as const
 
 export const budgetRangeOptions = [
-  'Menos de $5,000 MXN',
-  '$5,000 - $15,000 MXN',
-  '$15,000 - $30,000 MXN',
+  '$20,000 - $30,000 MXN',
   '$30,000 - $60,000 MXN',
   'Más de $60,000 MXN',
   'Aún no lo sé',
