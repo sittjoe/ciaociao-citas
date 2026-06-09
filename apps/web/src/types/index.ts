@@ -5,6 +5,17 @@ export type AppointmentStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled
 export type GuestStatus = 'pending' | 'verified' | 'expired' | 'excluded'
 export type CommercialStatus = 'pending' | 'prepared' | 'completed' | 'purchased' | 'not_purchased' | 'follow_up'
 export type CommercialPriority = 'high' | 'medium' | 'normal'
+export type AppointmentType = 'showroom' | 'video_engagement_rings'
+
+export interface EngagementBrief {
+  proposalTimeline?: string
+  ringStage?: string
+  metalPreference?: string
+  stonePreference?: string
+  ringSizeKnown?: string
+  partnerStyle?: string
+  referenceLinks?: string
+}
 
 export interface Guest {
   id: string
@@ -27,6 +38,7 @@ export interface Slot {
   id: string
   datetime: Date
   available: boolean
+  slotType?: AppointmentType
   heldUntil?: Date | null
   bookedBy?: string | null
   createdAt: Date
@@ -36,6 +48,7 @@ export interface Appointment {
   id: string
   slotId: string
   slotDatetime: Date
+  appointmentType?: AppointmentType
   name: string
   email: string
   phone: string
@@ -43,7 +56,8 @@ export interface Appointment {
   productType?: string
   budgetRange?: string
   lookingFor?: string
-  identificationUrl: string
+  engagementBrief?: EngagementBrief
+  identificationUrl: string | null
   status: AppointmentStatus
   confirmationCode: string
   cancelToken: string
@@ -57,6 +71,9 @@ export interface Appointment {
   internalNote?: string | null
   commercialStatus?: CommercialStatus
   followUpAt?: Date | null
+  meetingUrl?: string | null
+  meetingProvider?: string | null
+  meetingInstructions?: string | null
   clientConfirmed?: boolean
   clientConfirmedAt?: Date | null
   autoCancelledAt?: Date | null
@@ -67,6 +84,7 @@ export interface Appointment {
 }
 
 export interface BookingFormData {
+  appointmentType?: AppointmentType
   name: string
   email: string
   phone: string
@@ -74,6 +92,7 @@ export interface BookingFormData {
   productType?: string
   budgetRange?: string
   lookingFor?: string
+  engagementBrief?: EngagementBrief
   idFile: File
 }
 

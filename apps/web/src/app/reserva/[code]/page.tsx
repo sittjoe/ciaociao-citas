@@ -4,9 +4,10 @@ import { notFound } from 'next/navigation'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { formatDate, formatTime } from '@/lib/utils'
+import { appointmentTypeLabels, isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
-import { CalendarPlus, Gem } from 'lucide-react'
+import { CalendarPlus, Gem, Monitor } from 'lucide-react'
 import type { AppointmentStatus } from '@/types'
 import CancelButton from './CancelButton'
 
@@ -15,11 +16,22 @@ export const metadata: Metadata = { title: 'Estado de tu cita' }
 
 interface PageProps { params: Promise<{ code: string }> }
 
-const STATUS_MESSAGES: Record<AppointmentStatus, string> = {
-  pending:   'Tu solicitud fue recibida y está pendiente de revisión por nuestro equipo.',
-  accepted:  'Tu cita está confirmada. Te esperamos en el showroom.',
-  rejected:  'En este momento no podemos confirmar tu cita. Te invitamos a agendar en otro horario.',
-  cancelled: 'Esta cita fue cancelada.',
+function statusMessage(status: AppointmentStatus, isVideo: boolean, hasMeetingUrl: boolean): string {
+  if (status === 'pending') {
+    return isVideo
+      ? 'Tu solicitud de video consulta fue recibida y está pendiente de revisión por nuestro equipo.'
+      : 'Tu solicitud fue recibida y está pendiente de revisión por nuestro equipo.'
+  }
+  if (status === 'accepted') {
+    if (!isVideo) return 'Tu cita está confirmada. Te esperamos en el showroom.'
+    return hasMeetingUrl
+      ? 'Tu video consulta está confirmada. El enlace está listo abajo.'
+      : 'Tu video consulta está confirmada. Te enviaremos el enlace antes de la llamada.'
+  }
+  if (status === 'rejected') {
+    return 'En este momento no podemos confirmar tu cita. Te invitamos a agendar en otro horario.'
+  }
+  return 'Esta cita fue cancelada.'
 }
 
 export default async function ReservaPage({ params }: PageProps) {
@@ -45,11 +57,16 @@ export default async function ReservaPage({ params }: PageProps) {
     confirmationCode:  data.confirmationCode as string,
     cancelToken:       data.cancelToken as string,
     notes:             data.notes as string | undefined,
+    appointmentType:   normalizeAppointmentType(data.appointmentType),
+    meetingUrl:        data.meetingUrl as string | undefined,
+    meetingProvider:   data.meetingProvider as string | undefined,
+    meetingInstructions: data.meetingInstructions as string | undefined,
     guestCount:        (data.guestCount as number | undefined) ?? 0,
     guestsAllVerified: (data.guestsAllVerified as boolean | undefined) ?? true,
   }
 
   const canCancel = appt.status === 'pending' || appt.status === 'accepted'
+  const isVideo = isVideoEngagement(appt.appointmentType)
 
   return (
     <main className="min-h-screen bg-cream">
@@ -66,13 +83,13 @@ export default async function ReservaPage({ params }: PageProps) {
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
           <header>
             <p className="mb-4 text-[0.6rem] font-semibold uppercase tracking-display-eyebrow text-champagne">
-              Ciao Ciao · Showroom privado
+              Ciao Ciao · {isVideo ? 'Video consulta' : 'Showroom privado'}
             </p>
             <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">
               Estado de tu cita
             </h1>
             <p className="mt-6 max-w-md text-sm leading-7 text-ink-muted">
-              Conserva este código. El equipo lo usará para ubicar tu solicitud y preparar tu visita.
+              Conserva este código. El equipo lo usará para ubicar tu solicitud y preparar {isVideo ? 'tu llamada' : 'tu visita'}.
             </p>
           </header>
 
@@ -85,9 +102,9 @@ export default async function ReservaPage({ params }: PageProps) {
               <StatusBadge status={appt.status} />
             </div>
 
-            <p className="text-sm leading-6 text-ink-muted">{STATUS_MESSAGES[appt.status]}</p>
+            <p className="text-sm leading-6 text-ink-muted">{statusMessage(appt.status, isVideo, Boolean(appt.meetingUrl))}</p>
 
-            {appt.status === 'accepted' && appt.guestCount > 0 && !appt.guestsAllVerified && (
+            {appt.status === 'accepted' && !isVideo && appt.guestCount > 0 && !appt.guestsAllVerified && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
                 <p className="font-semibold text-amber-900">Invitados pendientes de verificación</p>
                 <p className="mt-1 text-xs leading-relaxed text-amber-700">
@@ -99,9 +116,13 @@ export default async function ReservaPage({ params }: PageProps) {
 
             <div className="rounded-2xl border border-ink-line bg-porcelain/70 px-4 py-2 text-sm">
               {([
+                ['Tipo',    appointmentTypeLabels[appt.appointmentType]],
                 ['Código',  appt.confirmationCode],
                 ['Fecha',   formatDate(appt.slotDatetime)],
                 ['Hora',    formatTime(appt.slotDatetime)],
+                ...(isVideo ? [['Link', appt.meetingUrl || 'Pendiente por enviar']] : []),
+                ...(isVideo && appt.meetingProvider ? [['Plataforma', appt.meetingProvider]] : []),
+                ...(isVideo && appt.meetingInstructions ? [['Indicaciones', appt.meetingInstructions]] : []),
                 ...(appt.notes ? [['Notas', appt.notes]] : [] as [string, string][]),
               ] as [string, string][]).map(([label, value]) => (
                 <div key={label} className="flex flex-col gap-1 border-b border-ink-line py-2.5 last:border-0 sm:flex-row sm:justify-between sm:gap-5">
@@ -112,21 +133,32 @@ export default async function ReservaPage({ params }: PageProps) {
             </div>
 
             {appt.status === 'accepted' && (
-              <a
-                href={`/api/calendar/${appt.id}`}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
-              >
-                <CalendarPlus size={15} strokeWidth={1.5} />
-                Agregar a mi calendario
-              </a>
+              <div className="space-y-2.5">
+                {isVideo && appt.meetingUrl && (
+                  <a
+                    href={appt.meetingUrl}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-champagne px-5 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-champagne-deep"
+                  >
+                    <Monitor size={15} strokeWidth={1.5} />
+                    Entrar a la videollamada
+                  </a>
+                )}
+                <a
+                  href={`/api/calendar/${appt.id}`}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
+                >
+                  <CalendarPlus size={15} strokeWidth={1.5} />
+                  Agregar a mi calendario
+                </a>
+              </div>
             )}
 
             {canCancel && <CancelButton token={appt.cancelToken} />}
 
             <div className="flex items-center justify-between border-t border-ink-line pt-3">
               <span className="inline-flex items-center gap-2 text-xs text-ink-subtle">
-                <Gem size={13} strokeWidth={1.5} className="text-champagne" />
-                Showroom privado CDMX
+                {isVideo ? <Monitor size={13} strokeWidth={1.5} className="text-champagne" /> : <Gem size={13} strokeWidth={1.5} className="text-champagne" />}
+                {isVideo ? 'Video consulta' : 'Showroom privado CDMX'}
               </span>
               <a href="/" className="text-xs font-medium text-champagne hover:text-champagne-deep transition-colors">
                 Nueva cita

@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { formatInTimeZone } from 'date-fns-tz'
 import { formatDate, formatTime, BUSINESS_TZ } from './utils'
 import { adminDb } from './firebase-admin'
+import { appointmentTypeLabels, engagementBriefRows, isVideoEngagement } from './commercial'
 import type { Appointment } from '@/types'
 
 const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
@@ -239,7 +240,7 @@ function baseTemplate(body: string): string {
 <div class="wrap">
   <div class="logo">
     <h1>CIAO CIAO</h1>
-    <p>Joyería fina · Showroom privado</p>
+    <p>Joyería fina · Citas privadas</p>
   </div>
   ${body}
   <div class="footer">
@@ -257,6 +258,19 @@ function details(rows: [string, string][]): string {
   ).join('')
 }
 
+function isVideoAppointment(appt: Appointment): boolean {
+  return isVideoEngagement(appt.appointmentType)
+}
+
+function videoMeetingRows(appt: Appointment): [string, string][] {
+  if (!isVideoAppointment(appt)) return []
+  return [
+    ...(appt.meetingProvider ? [['Plataforma', appt.meetingProvider] as [string, string]] : []),
+    ['Link', appt.meetingUrl || 'Pendiente por enviar'],
+    ...(appt.meetingInstructions ? [['Indicaciones', appt.meetingInstructions] as [string, string]] : []),
+  ]
+}
+
 export async function sendBookingConfirmation(
   appt: Appointment,
   guestNames: string[] = [],
@@ -264,8 +278,9 @@ export async function sendBookingConfirmation(
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
   const url = `${SITE}/reserva/${appt.confirmationCode}`
+  const isVideo = isVideoAppointment(appt)
 
-  const guestBlock = guestNames.length > 0
+  const guestBlock = !isVideo && guestNames.length > 0
     ? `<div style="margin:16px 0;padding:14px 16px;background:#FAF7F2;border-radius:12px;border:1px solid #E7E2D7;">
         <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px;font-weight:600;">Invitados agregados</p>
         ${guestNames.map(n => `<p style="font-size:13px;color:#1A1A1A;margin:2px 0;">· ${escapeHtml(n)}</p>`).join('')}
@@ -282,8 +297,9 @@ export async function sendBookingConfirmation(
     html: baseTemplate(`
       <div class="card">
         <p class="title">Solicitud recibida</p>
-        <p class="copy">Gracias, ${escapeHtml(appt.name)}. Nuestro equipo revisará tu solicitud y te notificará la confirmación.</p>
+        <p class="copy">Gracias, ${escapeHtml(appt.name)}. Nuestro equipo revisará tu solicitud de ${isVideo ? 'video consulta para anillo de compromiso' : 'cita en showroom'} y te notificará la confirmación.</p>
         ${details([
+          ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
@@ -307,6 +323,7 @@ export async function sendBookingConfirmation(
           <p class="title">Nueva solicitud de cita</p>
           <p class="copy">Hay una nueva solicitud pendiente en el panel administrativo.</p>
           ${details([
+            ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
             ['Nombre', appt.name],
             ['Email', appt.email],
             ['Teléfono', appt.phone],
@@ -315,6 +332,8 @@ export async function sendBookingConfirmation(
             ...(appt.productType ? [['Producto', appt.productType] as [string, string]] : []),
             ...(appt.budgetRange ? [['Presupuesto', appt.budgetRange] as [string, string]] : []),
             ...(appt.lookingFor ? [['Busca', appt.lookingFor] as [string, string]] : []),
+            ...engagementBriefRows(appt.engagementBrief),
+            ...videoMeetingRows(appt),
           ])}
         </div>
         <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Gestionar cita</a></p>
@@ -327,6 +346,7 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
   const accepted = action === 'accept'
+  const isVideo = isVideoAppointment(appt)
   const icsContent = accepted ? generateICS(appt) : null
   const attachments = icsContent
     ? [{ filename: 'cita-ciaociao.ics', content: Buffer.from(icsContent).toString('base64') }]
@@ -334,7 +354,20 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
 
   const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(SHOWROOM_ADDRESS)}`
   const body = accepted
-    ? `<div class="card">
+    ? isVideo
+      ? `<div class="card">
+        <p class="title">Tu video consulta está confirmada</p>
+        <p class="copy">${appt.meetingUrl ? 'Tu enlace de videollamada aparece abajo y también en el .ics adjunto.' : 'Encontrarás el .ics adjunto. El equipo te enviará el enlace de videollamada antes de la consulta.'}</p>
+        ${details([
+          ['Fecha', dateStr],
+          ['Hora', timeStr],
+          ['Código', appt.confirmationCode],
+          ...videoMeetingRows(appt),
+        ])}
+       </div>
+       ${appt.meetingUrl ? `<p style="text-align:center"><a class="btn" href="${escapeHtml(appt.meetingUrl)}">Entrar a la videollamada</a></p>` : ''}
+       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>`
+      : `<div class="card">
         <p class="title">Tu cita está confirmada</p>
         <p class="copy">Te esperamos en nuestro showroom privado. Encontrarás el .ics adjunto para agregar la cita a tu calendario.</p>
         ${details([
@@ -370,6 +403,7 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
   const label = hoursAhead === 24 ? 'mañana' : 'en 2 horas'
+  const isVideo = isVideoAppointment(appt)
 
   await sendTracked({
     kind: 'reminder',
@@ -379,11 +413,13 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
     subject: `Recordatorio: tu cita es ${label}`,
     html: baseTemplate(`
       <div class="card">
-        <p class="title">Tu cita es ${label}</p>
+        <p class="title">Tu ${isVideo ? 'video consulta' : 'cita'} es ${label}</p>
+        ${isVideo ? `<p class="copy">${appt.meetingUrl ? 'Usa el link guardado para entrar a la videollamada.' : 'El equipo te compartirá el enlace de videollamada antes de iniciar.'}</p>` : ''}
         ${details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
+          ...videoMeetingRows(appt),
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver detalles</a></p>
@@ -394,6 +430,7 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
 export async function sendReminder24Confirm(appt: Appointment) {
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
+  const isVideo = isVideoAppointment(appt)
 
   await sendTracked({
     kind: 'confirmation_request',
@@ -403,12 +440,13 @@ export async function sendReminder24Confirm(appt: Appointment) {
     subject: `Confirma tu cita de mañana — ${dateStr}`,
     html: baseTemplate(`
       <div class="card">
-        <p class="title">Tu cita es mañana</p>
-        <p class="copy">Hola ${escapeHtml(appt.name)}, te esperamos mañana en el showroom privado de Ciao Ciao Joyería. Para ayudarnos a prepararnos, confírmanos que podrás asistir.</p>
+        <p class="title">Tu ${isVideo ? 'video consulta' : 'cita'} es mañana</p>
+        <p class="copy">Hola ${escapeHtml(appt.name)}, ${isVideo ? 'mañana será tu video consulta con Ciao Ciao Joyería' : 'te esperamos mañana en el showroom privado de Ciao Ciao Joyería'}. Para ayudarnos a prepararnos, confírmanos que podrás asistir.</p>
         ${details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
+          ...videoMeetingRows(appt),
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
@@ -526,6 +564,14 @@ function generateICS(appt: Appointment): string {
   const fmtLocal = (d: Date) => formatInTimeZone(d, BUSINESS_TZ, "yyyyMMdd'T'HHmmss")
   const dtstamp  = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
   const admin    = getConfiguredAdminEmails()[0] ?? 'info@ciaociao.mx'
+  const isVideo  = isVideoAppointment(appt)
+  const description = isVideo
+    ? [
+        'Video consulta para anillo de compromiso en Ciao Ciao Joyería.',
+        appt.meetingUrl ? `Link: ${appt.meetingUrl}` : 'Link: pendiente por enviar.',
+        appt.meetingInstructions ? `Indicaciones: ${appt.meetingInstructions}` : '',
+      ].filter(Boolean).join('\\n')
+    : 'Tu cita personalizada en el showroom privado de Ciao Ciao Joyería.'
 
   return [
     'BEGIN:VCALENDAR',
@@ -546,9 +592,9 @@ function generateICS(appt: Appointment): string {
     `DTSTAMP:${dtstamp}`,
     `DTSTART;TZID=${BUSINESS_TZ}:${fmtLocal(start)}`,
     `DTEND;TZID=${BUSINESS_TZ}:${fmtLocal(end)}`,
-    'SUMMARY:Cita en Ciao Ciao Joyería',
-    'DESCRIPTION:Tu cita personalizada en el showroom privado de Ciao Ciao Joyería.',
-    'LOCATION:Showroom Ciao Ciao Joyería',
+    `SUMMARY:${isVideo ? 'Video consulta Ciao Ciao' : 'Cita en Ciao Ciao Joyería'}`,
+    `DESCRIPTION:${description}`,
+    `LOCATION:${isVideo ? (appt.meetingUrl || 'Videollamada') : 'Showroom Ciao Ciao Joyería'}`,
     `ORGANIZER;CN=Ciao Ciao Joyería:mailto:${admin}`,
     `ATTENDEE;RSVP=TRUE;CN=${appt.name}:mailto:${appt.email}`,
     'STATUS:CONFIRMED',
@@ -560,6 +606,7 @@ function generateICS(appt: Appointment): string {
 export async function sendCancellationEmail(appt: Appointment) {
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
+  const isVideo = isVideoAppointment(appt)
 
   await sendTracked({
     kind: 'status_update',
@@ -570,7 +617,7 @@ export async function sendCancellationEmail(appt: Appointment) {
     html: baseTemplate(`
       <div class="card">
         <p class="title">Cita cancelada</p>
-        <p class="copy">Tu cita del ${dateStr} a las ${timeStr} ha sido cancelada. Si deseas agendar una nueva visita, puedes hacerlo en cualquier momento.</p>
+        <p class="copy">Tu ${isVideo ? 'video consulta' : 'cita'} del ${dateStr} a las ${timeStr} ha sido cancelada. Si deseas agendar de nuevo, puedes hacerlo en cualquier momento.</p>
         ${details([
           ['Fecha',  dateStr],
           ['Hora',   timeStr],
@@ -609,6 +656,7 @@ export async function sendCancellationEmail(appt: Appointment) {
 export async function sendRescheduleNotice(appt: Appointment) {
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
+  const isVideo = isVideoAppointment(appt)
 
   await sendTracked({
     kind: 'status_update',
@@ -619,11 +667,12 @@ export async function sendRescheduleNotice(appt: Appointment) {
     html: baseTemplate(`
       <div class="card">
         <p class="title">Tu cita fue reprogramada</p>
-        <p class="copy">Hemos actualizado el horario de tu visita al showroom. A continuación encontrarás los nuevos detalles.</p>
+        <p class="copy">Hemos actualizado el horario de tu ${isVideo ? 'video consulta' : 'visita al showroom'}. A continuación encontrarás los nuevos detalles.</p>
         ${details([
           ['Nueva fecha', dateStr],
           ['Nueva hora',  timeStr],
           ['Código',      appt.confirmationCode],
+          ...videoMeetingRows(appt),
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>

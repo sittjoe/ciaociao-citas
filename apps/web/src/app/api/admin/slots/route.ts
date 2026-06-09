@@ -5,6 +5,7 @@ import { fromZonedTime } from 'date-fns-tz'
 import { bulkSlotsSchema } from '@/lib/schemas'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { BUSINESS_TZ } from '@/lib/utils'
+import { normalizeAppointmentType } from '@/lib/commercial'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,7 @@ export async function GET(request: Request) {
         id:        doc.id,
         datetime:  (d.datetime as Timestamp).toDate().toISOString(),
         available: d.available as boolean,
+        slotType:  normalizeAppointmentType(d.slotType),
         bookedBy:  d.bookedBy ?? null,
         heldUntil: d.heldUntil ? (d.heldUntil as Timestamp).toDate().toISOString() : null,
       }
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   }
 
-  const { dates, times } = parsed.data
+  const { dates, times, slotType } = parsed.data
 
   try {
     const batch    = adminDb.batch()
@@ -78,8 +80,9 @@ export async function POST(request: Request) {
 
         // Skip past slots
         if (dt <= new Date()) { skipped.push(`${date}T${time}`); continue }
-        if (seenDatetimes.has(dt.getTime())) { skipped.push(`${date}T${time}`); continue }
-        seenDatetimes.add(dt.getTime())
+        const seenKey = dt.getTime()
+        if (seenDatetimes.has(seenKey)) { skipped.push(`${date}T${time}`); continue }
+        seenDatetimes.add(seenKey)
 
         const duplicateSnap = await adminDb
           .collection('slots')
@@ -92,6 +95,7 @@ export async function POST(request: Request) {
         batch.set(ref, {
           datetime:  Timestamp.fromDate(dt),
           available: true,
+          slotType,
           heldUntil: null,
           bookedBy:  null,
           createdAt: FieldValue.serverTimestamp(),

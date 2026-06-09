@@ -19,14 +19,15 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Textarea } from '@/components/ui/Input'
 import { GuestsList } from './GuestsList'
 import { formatShortDate, csvRow, cn } from '@/lib/utils'
-import { commercialStatusLabels, formatWhatsAppUrl } from '@/lib/commercial'
-import { budgetRangeOptions, commercialStatusOptions, productTypeOptions } from '@/lib/schemas'
-import type { Appointment, AppointmentStatus, CommercialPriority, CommercialStatus } from '@/types'
+import { appointmentTypeLabels, commercialStatusLabels, engagementBriefRows, formatWhatsAppUrl } from '@/lib/commercial'
+import { appointmentTypeOptions, budgetRangeOptions, commercialStatusOptions, productTypeOptions } from '@/lib/schemas'
+import type { Appointment, AppointmentStatus, AppointmentType, CommercialPriority, CommercialStatus } from '@/types'
 
 type CustomerHistoryItem = {
   id: string
   name: string
   status: AppointmentStatus
+  appointmentType?: AppointmentType
   slotDatetime: string | null
   productType?: string
   budgetRange?: string
@@ -50,6 +51,15 @@ const columns = [
   col.accessor('name', {
     header: 'Nombre',
     cell: info => <span className="font-medium text-ink">{info.getValue()}</span>,
+  }),
+  col.accessor('appointmentType', {
+    header: 'Tipo',
+    enableSorting: false,
+    cell: info => (
+      <span className="whitespace-nowrap rounded-full border border-admin-line bg-admin-surface px-2 py-0.5 text-[10px] font-semibold text-ink-muted">
+        {appointmentTypeLabels[info.getValue() ?? 'showroom']}
+      </span>
+    ),
   }),
   col.accessor('productType', {
     header: 'Producto',
@@ -138,6 +148,7 @@ export function AppointmentTable() {
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
   const [search,      setSearch]        = useState('')
   const [statusFilter,setStatusFilter]  = useState<AppointmentStatus | ''>('')
+  const [appointmentTypeFilter, setAppointmentTypeFilter] = useState<AppointmentType | ''>('')
   const [productFilter, setProductFilter] = useState('')
   const [budgetFilter, setBudgetFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<CommercialPriority | ''>('')
@@ -151,12 +162,16 @@ export function AppointmentTable() {
   const [commercialStatus, setCommercialStatus] = useState<CommercialStatus>('pending')
   const [internalNote, setInternalNote] = useState('')
   const [followUpAt, setFollowUpAt] = useState('')
+  const [meetingUrl, setMeetingUrl] = useState('')
+  const [meetingProvider, setMeetingProvider] = useState('')
+  const [meetingInstructions, setMeetingInstructions] = useState('')
 
   const fetchAppointments = useCallback(async (reset = true) => {
     if (reset) setLoading(true)
     const params = new URLSearchParams()
     if (search)       params.set('search', search)
     if (statusFilter) params.set('status', statusFilter)
+    if (appointmentTypeFilter) params.set('appointmentType', appointmentTypeFilter)
     if (productFilter) params.set('productType', productFilter)
     if (budgetFilter) params.set('budgetRange', budgetFilter)
     if (priorityFilter) params.set('priority', priorityFilter)
@@ -178,15 +193,18 @@ export function AppointmentTable() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, nextCursor])
+  }, [search, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, nextCursor])
 
-  useEffect(() => { fetchAppointments(true) }, [search, statusFilter, productFilter, budgetFilter, priorityFilter, commercialFilter]) // eslint-disable-line
+  useEffect(() => { fetchAppointments(true) }, [search, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter]) // eslint-disable-line
 
   useEffect(() => {
     if (!selected) return
     setCommercialStatus(selected.commercialStatus ?? 'pending')
     setInternalNote(selected.internalNote ?? '')
     setFollowUpAt(selected.followUpAt ? selected.followUpAt.slice(0, 16) : '')
+    setMeetingUrl(selected.meetingUrl ?? '')
+    setMeetingProvider(selected.meetingProvider ?? '')
+    setMeetingInstructions(selected.meetingInstructions ?? '')
   }, [selected])
 
   const openAppointment = useCallback(async (appt: SerialAppt) => {
@@ -244,6 +262,9 @@ export function AppointmentTable() {
           commercialStatus,
           internalNote,
           followUpAt: followUpIso,
+          meetingUrl,
+          meetingProvider,
+          meetingInstructions,
         }),
       })
       if (!res.ok) {
@@ -256,6 +277,9 @@ export function AppointmentTable() {
         commercialStatus,
         internalNote,
         followUpAt: followUpIso || null,
+        meetingUrl,
+        meetingProvider,
+        meetingInstructions,
       } : prev)
       fetchAppointments(true)
     } catch (err) {
@@ -263,13 +287,14 @@ export function AppointmentTable() {
     } finally {
       setSavingCommercial(false)
     }
-  }, [selected, commercialStatus, internalNote, followUpAt, fetchAppointments])
+  }, [selected, commercialStatus, internalNote, followUpAt, meetingUrl, meetingProvider, meetingInstructions, fetchAppointments])
 
   const exportCSV = useCallback(() => {
     const BOM  = '﻿'
-    const head = csvRow(['Código', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Prioridad', 'Seguimiento', 'Producto', 'Presupuesto', 'Busca', 'Notas cliente', 'Nota interna', 'Follow-up', 'Aprobado por'])
+    const head = csvRow(['Código', 'Tipo', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Prioridad', 'Seguimiento', 'Producto', 'Presupuesto', 'Busca', 'Brief anillo', 'Meeting link', 'Notas cliente', 'Nota interna', 'Follow-up', 'Aprobado por'])
     const rows = appointments.map(a => csvRow([
       a.confirmationCode,
+      appointmentTypeLabels[a.appointmentType ?? 'showroom'],
       a.name,
       a.email,
       a.phone,
@@ -280,6 +305,8 @@ export function AppointmentTable() {
       a.productType ?? '',
       a.budgetRange ?? '',
       a.lookingFor ?? '',
+      engagementBriefRows(a.engagementBrief).map(([label, value]) => `${label}: ${value}`).join(' | '),
+      a.meetingUrl ?? '',
       a.notes ?? '',
       a.internalNote ?? '',
       a.followUpAt ? new Date(a.followUpAt).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }) : '',
@@ -307,7 +334,7 @@ export function AppointmentTable() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="grid gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_170px_190px_130px_150px_auto]">
+      <div className="grid gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_165px_170px_190px_130px_150px_auto]">
         <div className="relative sm:col-span-2 xl:col-span-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
           <input
@@ -327,6 +354,16 @@ export function AppointmentTable() {
           <option value="accepted">Confirmadas</option>
           <option value="rejected">Rechazadas</option>
           <option value="cancelled">Canceladas</option>
+        </select>
+        <select
+          value={appointmentTypeFilter}
+          onChange={e => setAppointmentTypeFilter(e.target.value as AppointmentType | '')}
+          className="input-clean"
+        >
+          <option value="">Todo tipo</option>
+          {appointmentTypeOptions.map(option => (
+            <option key={option} value={option}>{appointmentTypeLabels[option]}</option>
+          ))}
         </select>
         <select
           value={productFilter}
@@ -372,7 +409,7 @@ export function AppointmentTable() {
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
-          <TableSkeleton rows={6} cols={7} />
+          <TableSkeleton rows={6} cols={8} />
         ) : appointments.length === 0 ? (
           <EmptyState
             title="Sin citas"
@@ -510,6 +547,7 @@ export function AppointmentTable() {
             <dl className="divide-y divide-admin-line rounded-2xl border border-admin-line bg-admin-surface/60 px-4 text-sm">
               {[
                 ['Código',    selected.confirmationCode],
+                ['Tipo',      appointmentTypeLabels[selected.appointmentType ?? 'showroom']],
                 ['Nombre',    selected.name],
                 ['Email',     selected.email],
                 ['Teléfono',  selected.phone],
@@ -517,6 +555,9 @@ export function AppointmentTable() {
                 ...(selected.productType ? [['Producto', selected.productType]] : []),
                 ...(selected.budgetRange ? [['Presupuesto', selected.budgetRange]] : []),
                 ...(selected.lookingFor ? [['Busca', selected.lookingFor]] : []),
+                ...engagementBriefRows(selected.engagementBrief),
+                ...(selected.meetingUrl ? [['Link videollamada', selected.meetingUrl]] : []),
+                ...(selected.meetingInstructions ? [['Instrucciones video', selected.meetingInstructions]] : []),
                 ['Seguimiento', selected.commercialStatus ? commercialStatusLabels[selected.commercialStatus] : 'Pendiente'],
                 ...(selected.followUpAt ? [['Follow-up', formatShortDate(selected.followUpAt)]] : []),
                 ['Calendar',  selected.googleCalendarEventId
@@ -597,6 +638,46 @@ export function AppointmentTable() {
                   className="mt-1"
                 />
               </div>
+              {selected.appointmentType === 'video_engagement_rings' && (
+                <div className="mt-3 rounded-xl border border-champagne-soft bg-champagne-tint/50 p-3">
+                  <p className="h-eyebrow mb-3">Videollamada</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="label-clean">Proveedor</label>
+                      <input
+                        value={meetingProvider}
+                        onChange={e => setMeetingProvider(e.target.value)}
+                        placeholder="Google Meet, Zoom..."
+                        className="input-clean mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="label-clean">Link</label>
+                      <input
+                        value={meetingUrl}
+                        onChange={e => setMeetingUrl(e.target.value)}
+                        placeholder="https://meet.google.com/..."
+                        className="input-clean mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className="label-clean">Instrucciones</label>
+                    <Textarea
+                      value={meetingInstructions}
+                      onChange={e => setMeetingInstructions(e.target.value)}
+                      placeholder="Ej: entra 5 minutos antes y ten referencias a la mano."
+                      rows={2}
+                      className="mt-1"
+                    />
+                  </div>
+                  {!meetingUrl && selected.status === 'accepted' && (
+                    <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Esta video cita ya está aceptada pero todavía no tiene link.
+                    </p>
+                  )}
+                </div>
+              )}
               <Button size="sm" className="mt-3" loading={savingCommercial} onClick={() => void saveCommercial()}>
                 <Save size={14} strokeWidth={1.5} />
                 Guardar seguimiento
@@ -631,6 +712,7 @@ export function AppointmentTable() {
               </div>
             )}
 
+            {selected.appointmentType !== 'video_engagement_rings' ? (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
               <div className="flex items-center gap-2 min-w-0">
                 <FileText size={16} strokeWidth={1.5} className="text-champagne shrink-0" />
@@ -653,8 +735,16 @@ export function AppointmentTable() {
                 </a>
               )}
             </div>
+            ) : (
+              <div className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5 text-sm">
+                <p className="font-medium text-ink">Consulta por video</p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {selected.meetingUrl ? 'El link ya está guardado para emails, calendario y página de estado.' : 'Agrega el link de videollamada en seguimiento comercial.'}
+                </p>
+              </div>
+            )}
 
-            {(selected.guestCount ?? 0) > 0 && (
+            {selected.appointmentType !== 'video_engagement_rings' && (selected.guestCount ?? 0) > 0 && (
               <div className="pt-1">
                 <p className="h-eyebrow mb-2">Invitados ({selected.guestCount})</p>
                 <GuestsList appointmentId={selected.id} />

@@ -6,6 +6,7 @@ import { rescheduleSchema } from '@/lib/schemas'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendRescheduleNotice, sendCalendarError } from '@/lib/email'
 import { createSlotLock, releaseSlotLock } from '@/lib/slot-locks'
+import { normalizeAppointmentType } from '@/lib/commercial'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +43,9 @@ export async function POST(
 
       if (apptData.status !== 'accepted') throw new Error('NOT_ACCEPTED')
       if (!newSlotData.available)         throw new Error('SLOT_UNAVAILABLE')
+      if (normalizeAppointmentType(newSlotData.slotType) !== normalizeAppointmentType(apptData.appointmentType)) {
+        throw new Error('SLOT_TYPE_MISMATCH')
+      }
 
       const oldSlotRef = adminDb.collection('slots').doc(apptData.slotId)
       const newDatetime = (newSlotData.datetime as Timestamp).toDate()
@@ -80,6 +84,7 @@ export async function POST(
         id,
         slotId:       newSlotId,
         slotDatetime: newDatetime,
+        appointmentType: normalizeAppointmentType(apptData.appointmentType),
         name:         apptData.name,
         email:        apptData.email,
         phone:        apptData.phone,
@@ -87,6 +92,7 @@ export async function POST(
         productType:  apptData.productType,
         budgetRange:  apptData.budgetRange,
         lookingFor:   apptData.lookingFor,
+        engagementBrief: apptData.engagementBrief ?? {},
         identificationUrl: apptData.identificationUrl,
         status:       'accepted',
         confirmationCode: apptData.confirmationCode,
@@ -94,6 +100,9 @@ export async function POST(
         reminder24Sent: false,
         reminder2Sent:  false,
         googleCalendarEventId: apptData.googleCalendarEventId ?? null,
+        meetingUrl: apptData.meetingUrl ?? null,
+        meetingProvider: apptData.meetingProvider ?? null,
+        meetingInstructions: apptData.meetingInstructions ?? null,
         createdAt:    (apptData.createdAt as Timestamp).toDate(),
       }
     })
@@ -118,6 +127,7 @@ export async function POST(
     if (msg === 'SLOT_NOT_FOUND')    return NextResponse.json({ error: 'Slot no encontrado' },         { status: 404 })
     if (msg === 'NOT_ACCEPTED')      return NextResponse.json({ error: 'Solo se reagendan citas aceptadas' }, { status: 409 })
     if (msg === 'SLOT_UNAVAILABLE')  return NextResponse.json({ error: 'El slot ya no está disponible' }, { status: 409 })
+    if (msg === 'SLOT_TYPE_MISMATCH') return NextResponse.json({ error: 'El slot no corresponde al tipo de cita' }, { status: 409 })
     if (typeof (err as { code?: unknown })?.code === 'number' && (err as { code?: number }).code === 6) {
       return NextResponse.json({ error: 'El slot ya no está disponible' }, { status: 409 })
     }

@@ -29,7 +29,63 @@ export const commercialStatusOptions = [
   'follow_up',
 ] as const
 
+export const appointmentTypeOptions = [
+  'showroom',
+  'video_engagement_rings',
+] as const
+
+export const appointmentTypeLabels = {
+  showroom: 'Showroom privado',
+  video_engagement_rings: 'Video consulta de anillo',
+} as const
+
+export const proposalTimelineOptions = [
+  '0-1 mes',
+  '1-3 meses',
+  '3-6 meses',
+  'Sin fecha definida',
+] as const
+
+export const ringStageOptions = [
+  'Solo explorando',
+  'Tengo idea clara',
+  'Quiero diseñar desde cero',
+  'Busco pieza lista',
+] as const
+
+export const metalPreferenceOptions = [
+  'Oro amarillo',
+  'Oro blanco',
+  'Oro rosa',
+  'Platino',
+  'No sé',
+] as const
+
+export const stonePreferenceOptions = [
+  'Diamante natural',
+  'Diamante laboratorio',
+  'Piedra de color',
+  'No sé',
+] as const
+
+export const ringSizeKnownOptions = [
+  'Sí',
+  'No',
+  'Aproximado',
+] as const
+
+export const engagementBriefSchema = z.object({
+  proposalTimeline: z.enum(proposalTimelineOptions).optional().or(z.literal('')),
+  ringStage: z.enum(ringStageOptions).optional().or(z.literal('')),
+  metalPreference: z.enum(metalPreferenceOptions).optional().or(z.literal('')),
+  stonePreference: z.enum(stonePreferenceOptions).optional().or(z.literal('')),
+  ringSizeKnown: z.enum(ringSizeKnownOptions).optional().or(z.literal('')),
+  partnerStyle: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
+  referenceLinks: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
+})
+
 export const bookingFormSchema = z.object({
+  appointmentType: z.enum(appointmentTypeOptions).default('showroom'),
   name: z
     .string()
     .min(3, 'Mínimo 3 caracteres')
@@ -56,6 +112,7 @@ export const bookingFormSchema = z.object({
     .max(700, 'Máximo 700 caracteres')
     .optional()
     .or(z.literal('')),
+  engagementBrief: engagementBriefSchema.optional(),
   whatsapp: z.boolean().default(false),
 })
 
@@ -88,6 +145,7 @@ export const slotSchema = z.object({
 export const bulkSlotsSchema = z.object({
   dates: z.array(z.string()).min(1),
   times: z.array(z.string()).min(1),
+  slotType: z.enum(appointmentTypeOptions).default('showroom'),
 })
 
 export const guestInputSchema = z.object({
@@ -138,6 +196,9 @@ export const commercialUpdateSchema = z.object({
   commercialStatus: z.enum(commercialStatusOptions).default('pending'),
   internalNote: z.string().max(1000, 'Máximo 1000 caracteres').optional().or(z.literal('')),
   followUpAt: z.string().datetime('Fecha inválida').optional().or(z.literal('')),
+  meetingUrl: z.string().url('URL inválida').max(500).optional().or(z.literal('')),
+  meetingProvider: z.string().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
+  meetingInstructions: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
 })
 
 export type CommercialUpdateInput = z.infer<typeof commercialUpdateSchema>

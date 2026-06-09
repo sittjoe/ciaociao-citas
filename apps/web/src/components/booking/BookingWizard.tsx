@@ -1,11 +1,12 @@
 'use client'
 
+import Image from 'next/image'
 import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Send, ShieldCheck, UserPlus } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Gem, Monitor, Send, ShieldCheck, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
@@ -17,16 +18,23 @@ import { GuestsField } from './GuestsField'
 import { Button } from '@/components/ui/Button'
 import {
   bookingFormSchema,
+  appointmentTypeLabels,
   budgetRangeOptions,
+  metalPreferenceOptions,
   productTypeOptions,
+  proposalTimelineOptions,
+  ringSizeKnownOptions,
+  ringStageOptions,
+  stonePreferenceOptions,
   type BookingFormInput,
   type GuestInput,
 } from '@/lib/schemas'
 import { cn, formatDate, formatTime } from '@/lib/utils'
+import type { AppointmentType } from '@/types'
 
-interface Slot { id: string; datetime: string }
+interface Slot { id: string; datetime: string; slotType?: AppointmentType }
 
-type Step = 'calendar' | 'slots' | 'form' | 'upload' | 'review' | 'done'
+type Step = 'type' | 'calendar' | 'slots' | 'form' | 'upload' | 'review' | 'done'
 interface BookingDraft {
   savedAt: number
   step: Step
@@ -37,8 +45,17 @@ interface BookingDraft {
   idempotencyKey: string
 }
 
-const STEPS: Step[] = ['calendar', 'slots', 'form', 'upload', 'review', 'done']
-const STEP_LABELS   = ['Fecha', 'Horario', 'Datos', 'Identificación', 'Confirmar', '']
+const SHOWROOM_STEPS: Step[] = ['type', 'calendar', 'slots', 'form', 'upload', 'review', 'done']
+const VIDEO_STEPS: Step[] = ['type', 'calendar', 'slots', 'form', 'review', 'done']
+const STEP_LABELS: Record<Step, string> = {
+  type: 'Tipo',
+  calendar: 'Fecha',
+  slots: 'Horario',
+  form: 'Datos',
+  upload: 'Identificación',
+  review: 'Confirmar',
+  done: '',
+}
 const DRAFT_KEY = 'ciaociao-booking-draft-v1'
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const SUPPORT_EMAIL = 'hola@ciaociao.mx'
@@ -50,7 +67,7 @@ const stepVariants = {
 }
 
 export function BookingWizard() {
-  const [step,         setStep]        = useState<Step>('calendar')
+  const [step,         setStep]        = useState<Step>('type')
   const [slots,        setSlots]       = useState<Slot[]>([])
   const [loadingSlots, setLoadingSlots]= useState(true)
   const [slotsError,   setSlotsError]  = useState(false)
@@ -78,20 +95,25 @@ export function BookingWizard() {
     trigger,
     watch,
     setFocus,
+    setValue,
     reset,
     formState: { errors },
   } = useForm<BookingFormInput>({
     resolver: zodResolver(bookingFormSchema),
     mode: 'onSubmit',
     reValidateMode: 'onChange',
-    defaultValues: { whatsapp: false },
+    defaultValues: { appointmentType: 'showroom', whatsapp: false },
   })
+
+  const appointmentType = (watch('appointmentType') ?? 'showroom') as AppointmentType
+  const isVideo = appointmentType === 'video_engagement_rings'
+  const activeSteps = isVideo ? VIDEO_STEPS : SHOWROOM_STEPS
 
   const loadSlots = useCallback(async () => {
     setLoadingSlots(true)
     setSlotsError(false)
     try {
-      const res = await fetch('/api/slots')
+      const res = await fetch(`/api/slots?appointmentType=${appointmentType}`)
       if (!res.ok) throw new Error('SLOTS_FAILED')
       const d = await res.json() as { slots?: Slot[] }
       setSlots(d.slots ?? [])
@@ -102,7 +124,7 @@ export function BookingWizard() {
     } finally {
       setLoadingSlots(false)
     }
-  }, [])
+  }, [appointmentType])
 
   useEffect(() => {
     void loadSlots()
@@ -120,6 +142,7 @@ export function BookingWizard() {
         return
       }
       reset({
+        appointmentType: draft.values.appointmentType ?? 'showroom',
         name: draft.values.name ?? '',
         email: draft.values.email ?? '',
         phone: draft.values.phone ?? '',
@@ -127,6 +150,7 @@ export function BookingWizard() {
         productType: draft.values.productType ?? '',
         budgetRange: draft.values.budgetRange ?? '',
         lookingFor: draft.values.lookingFor ?? '',
+        engagementBrief: draft.values.engagementBrief ?? {},
         whatsapp: draft.values.whatsapp ?? false,
       })
       setDraftRestored(true)
@@ -134,7 +158,10 @@ export function BookingWizard() {
       setSelectedDate(draft.selectedDate)
       restoredSlotId.current = draft.selectedSlotId
       idempotencyKey.current = draft.idempotencyKey || idempotencyKey.current
-      if (draft.step === 'upload' || draft.step === 'review') {
+      const draftType = draft.values.appointmentType ?? 'showroom'
+      if (draft.step === 'upload' && draftType === 'video_engagement_rings') {
+        setStep('review')
+      } else if (draft.step === 'upload' || draft.step === 'review') {
         setNeedsIdAgain(true)
         setStep('upload')
       } else if (draft.step !== 'done') {
@@ -152,7 +179,17 @@ export function BookingWizard() {
     restoredSlotId.current = null
   }, [slots])
 
-  const stepIndex = STEPS.indexOf(step)
+  useEffect(() => {
+    setSelectedDate(null)
+    setSelectedSlot(null)
+    if (isVideo) {
+      setGuests([])
+      setIdFile(null)
+      setValue('productType', 'Anillo')
+    }
+  }, [isVideo, setValue])
+
+  const stepIndex = activeSteps.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
   const hostEmail = watch('email') ?? ''
   const watchedValues = watch()
@@ -165,30 +202,31 @@ export function BookingWizard() {
       selectedDate,
       selectedSlotId: selectedSlot?.id ?? null,
       values: watchedValues,
-      guests,
+    guests: isVideo ? [] : guests,
       idempotencyKey: idempotencyKey.current,
     }
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
-  }, [step, selectedDate, selectedSlot?.id, watchedValues, guests])
+  }, [step, selectedDate, selectedSlot?.id, watchedValues, guests, isVideo])
 
   const goTo = useCallback((next: Step) => {
-    const nextIdx = STEPS.indexOf(next)
+    const nextIdx = activeSteps.indexOf(next)
     direction.current = nextIdx > stepIndex ? 1 : -1
     setStep(next)
-  }, [stepIndex])
+  }, [activeSteps, stepIndex])
 
-  const goBack = useCallback(() => goTo(STEPS[stepIndex - 1]), [stepIndex, goTo])
+  const goBack = useCallback(() => goTo(activeSteps[stepIndex - 1]), [activeSteps, stepIndex, goTo])
 
   const onSubmit = useCallback(async (data: BookingFormInput) => {
     if (submitInFlight.current) return
     if (!selectedSlot) { toast.error('Selecciona un horario antes de continuar'); goTo('calendar'); return }
-    if (!idFile)       { toast.error('Sube tu identificación antes de continuar'); goTo('upload'); return }
+    if (!isVideo && !idFile) { toast.error('Sube tu identificación antes de continuar'); goTo('upload'); return }
     submitInFlight.current = true
     setSubmitNotice(null)
     setSubmitting(true)
 
     const fd = new FormData()
     fd.append('slotId',   selectedSlot.id)
+    fd.append('appointmentType', data.appointmentType ?? appointmentType)
     fd.append('name',     data.name)
     fd.append('email',    data.email)
     fd.append('phone',    data.phone)
@@ -196,10 +234,11 @@ export function BookingWizard() {
     fd.append('productType', data.productType ?? '')
     fd.append('budgetRange', data.budgetRange ?? '')
     fd.append('lookingFor', data.lookingFor ?? '')
+    fd.append('engagementBrief', JSON.stringify(data.engagementBrief ?? {}))
     fd.append('whatsapp', String(data.whatsapp))
-    fd.append('idFile',   idFile)
+    if (idFile) fd.append('idFile', idFile)
     fd.append('idempotencyKey', idempotencyKey.current)
-    if (guests.length > 0) {
+    if (!isVideo && guests.length > 0) {
       fd.append('guests', JSON.stringify(
         guests.map(g => ({ name: g.name.trim(), email: g.email.trim().toLowerCase() }))
       ))
@@ -237,7 +276,7 @@ export function BookingWizard() {
       submitInFlight.current = false
       setSubmitting(false)
     }
-  }, [selectedSlot, idFile, guests, goTo])
+  }, [selectedSlot, idFile, guests, goTo, isVideo, appointmentType])
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -250,8 +289,11 @@ export function BookingWizard() {
       {/* Progress bar */}
       {step !== 'done' && (
         <div className="mb-6">
-          <div className="mb-3 hidden grid-cols-5 gap-2 sm:grid">
-            {STEPS.slice(0, -1).map((s, i) => (
+          <div
+            className="mb-3 hidden gap-2 sm:grid"
+            style={{ gridTemplateColumns: `repeat(${activeSteps.length - 1}, minmax(0, 1fr))` }}
+          >
+            {activeSteps.slice(0, -1).map((s, i) => (
               <button
                 key={s}
                 type="button"
@@ -266,12 +308,12 @@ export function BookingWizard() {
                 )}
               >
                 <span className="block text-[0.62rem] font-semibold uppercase tracking-eyebrow">{i + 1}</span>
-                <span className="block truncate text-xs font-medium">{STEP_LABELS[i]}</span>
+                <span className="block truncate text-xs font-medium">{STEP_LABELS[s]}</span>
               </button>
             ))}
           </div>
           <div className="flex items-center gap-1 mb-2 sm:hidden">
-            {STEPS.slice(0, -1).map((s, i) => (
+            {activeSteps.slice(0, -1).map((s, i) => (
               <div
                 key={s}
                 className={cn(
@@ -284,7 +326,7 @@ export function BookingWizard() {
             ))}
           </div>
           <p className="text-[0.6rem] text-ink-muted text-right tracking-widest uppercase font-semibold">
-            Paso {Math.min(stepIndex + 1, 5)} de 5 · {STEP_LABELS[stepIndex]}
+            Paso {Math.min(stepIndex + 1, activeSteps.length - 1)} de {activeSteps.length - 1} · {STEP_LABELS[step]}
           </p>
         </div>
       )}
@@ -306,15 +348,76 @@ export function BookingWizard() {
         initial="initial"
         animate="animate"
       >
+          {/* STEP: Type */}
+          {step === 'type' && (
+            <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
+              <div>
+                <p className="h-eyebrow mb-2">Paso 1</p>
+                <h2 className="font-serif font-light text-2xl text-ink">Elige tu experiencia</h2>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {([
+                  {
+                    type: 'showroom' as const,
+                    Icon: Gem,
+                    title: appointmentTypeLabels.showroom,
+                    copy: 'Visita privada al showroom para ver piezas en persona. Requiere identificación oficial.',
+                  },
+                  {
+                    type: 'video_engagement_rings' as const,
+                    Icon: Monitor,
+                    title: appointmentTypeLabels.video_engagement_rings,
+                    copy: 'Llamada guiada para elegir anillo de compromiso, presupuesto, tiempos y estilo.',
+                  },
+                ]).map(option => (
+                  <button
+                    key={option.type}
+                    type="button"
+                    onClick={() => setValue('appointmentType', option.type)}
+                    className={cn(
+                      'rounded-2xl border p-4 text-left transition-all',
+                      appointmentType === option.type
+                        ? 'border-champagne bg-champagne-tint shadow-soft'
+                        : 'border-ink-line bg-porcelain hover:border-champagne-soft',
+                    )}
+                  >
+                    <option.Icon size={20} strokeWidth={1.5} className="text-champagne" />
+                    <span className="mt-3 block font-serif text-xl font-light text-ink">{option.title}</span>
+                    <span className="mt-2 block text-sm leading-6 text-ink-muted">{option.copy}</span>
+                  </button>
+                ))}
+              </div>
+
+              {isVideo && (
+                <div className="overflow-hidden rounded-2xl border border-ink-line">
+                  <Image
+                    src="/video-engagement-consultation.png"
+                    alt="Consulta por video para elegir un anillo de compromiso"
+                    width={900}
+                    height={520}
+                    className="h-48 w-full object-cover"
+                  />
+                </div>
+              )}
+
+              <Button className="w-full" onClick={() => goTo('calendar')}>
+                Continuar
+              </Button>
+            </Card>
+          )}
+
           {/* STEP: Calendar */}
           {step === 'calendar' && (
             <Card variant="atelier" className="p-5 sm:p-7">
               <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
-                  <p className="h-eyebrow mb-2">Paso 1</p>
+                  <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Selecciona una fecha</h2>
                 </div>
-                <span className="hidden text-xs text-ink-muted sm:block">Horarios CDMX</span>
+                <span className="hidden text-xs text-ink-muted sm:block">
+                  {isVideo ? 'Horarios de videollamada' : 'Horarios CDMX'}
+                </span>
               </div>
               {loadingSlots ? (
                 <div className="h-64 shimmer rounded-xl" />
@@ -347,7 +450,7 @@ export function BookingWizard() {
           {step === 'slots' && selectedDate && (
             <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso 2</p>
+                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                 <h2 className="font-serif font-light text-2xl text-ink capitalize">
                   {format(parseISO(selectedDate), "EEEE d 'de' MMMM", { locale: es })}
                 </h2>
@@ -370,7 +473,7 @@ export function BookingWizard() {
               className="space-y-4"
               onSubmit={async e => {
                 e.preventDefault()
-                const formOk = await trigger(['name', 'email', 'phone', 'notes', 'productType', 'budgetRange', 'lookingFor', 'whatsapp'])
+                const formOk = await trigger(['name', 'email', 'phone', 'notes', 'productType', 'budgetRange', 'lookingFor', 'engagementBrief', 'whatsapp'])
                 if (!formOk) {
                   toast.error('Completa tus datos antes de continuar')
                   if (errors.name) setFocus('name')
@@ -378,7 +481,7 @@ export function BookingWizard() {
                   else if (errors.phone) setFocus('phone')
                   return
                 }
-                if (guests.length > 0) {
+                if (!isVideo && guests.length > 0) {
                   const emails    = guests.map(g => g.email.trim().toLowerCase())
                   const hostEmail = getValues('email').trim().toLowerCase()
                   if (guests.some(g => !g.name.trim() || !g.email.trim())) {
@@ -394,12 +497,12 @@ export function BookingWizard() {
                     return
                   }
                 }
-                goTo('upload')
+                goTo(isVideo ? 'review' : 'upload')
               }}
             >
               <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
                 <div>
-                  <p className="h-eyebrow mb-2">Paso 3</p>
+                  <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Tus datos</h2>
                 </div>
 
@@ -452,7 +555,7 @@ export function BookingWizard() {
                       {...register('notes')}
                       className="input-clean resize-none"
                       rows={3}
-                      placeholder="¿Hay algo que quieras contarnos antes de tu visita?"
+                      placeholder={isVideo ? '¿Hay algo que quieras contarnos antes de la videollamada?' : '¿Hay algo que quieras contarnos antes de tu visita?'}
                     />
                   )}
                 </Field>
@@ -504,6 +607,82 @@ export function BookingWizard() {
                   )}
                 </Field>
 
+                {isVideo && (
+                  <div className="space-y-4 rounded-2xl border border-champagne-soft bg-champagne-tint/45 p-4">
+                    <div>
+                      <p className="h-eyebrow mb-1">Brief de compromiso</p>
+                      <p className="text-xs leading-5 text-ink-muted">
+                        Estas respuestas ayudan al asesor a llegar con opciones concretas a la llamada.
+                      </p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Timeline de propuesta">
+                        {(id, ariaProps) => (
+                          <select id={id} {...ariaProps} {...register('engagementBrief.proposalTimeline')} className="input-clean">
+                            <option value="">Seleccionar</option>
+                            {proposalTimelineOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        )}
+                      </Field>
+                      <Field label="Etapa">
+                        {(id, ariaProps) => (
+                          <select id={id} {...ariaProps} {...register('engagementBrief.ringStage')} className="input-clean">
+                            <option value="">Seleccionar</option>
+                            {ringStageOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        )}
+                      </Field>
+                      <Field label="Metal preferido">
+                        {(id, ariaProps) => (
+                          <select id={id} {...ariaProps} {...register('engagementBrief.metalPreference')} className="input-clean">
+                            <option value="">Seleccionar</option>
+                            {metalPreferenceOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        )}
+                      </Field>
+                      <Field label="Piedra preferida">
+                        {(id, ariaProps) => (
+                          <select id={id} {...ariaProps} {...register('engagementBrief.stonePreference')} className="input-clean">
+                            <option value="">Seleccionar</option>
+                            {stonePreferenceOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        )}
+                      </Field>
+                      <Field label="¿Conoces la talla?">
+                        {(id, ariaProps) => (
+                          <select id={id} {...ariaProps} {...register('engagementBrief.ringSizeKnown')} className="input-clean">
+                            <option value="">Seleccionar</option>
+                            {ringSizeKnownOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        )}
+                      </Field>
+                      <Field label="Links de referencia">
+                        {(id, ariaProps) => (
+                          <input
+                            id={id}
+                            {...ariaProps}
+                            {...register('engagementBrief.referenceLinks')}
+                            className="input-clean"
+                            placeholder="Pinterest, Instagram, web..."
+                          />
+                        )}
+                      </Field>
+                    </div>
+                    <Field label="Estilo de tu pareja">
+                      {(id, ariaProps) => (
+                        <textarea
+                          id={id}
+                          {...ariaProps}
+                          {...register('engagementBrief.partnerStyle')}
+                          className="input-clean resize-none"
+                          rows={3}
+                          placeholder="Minimalista, clásico, llamativo, vintage..."
+                        />
+                      )}
+                    </Field>
+                  </div>
+                )}
+
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">
                   <input
                     {...register('whatsapp')}
@@ -515,6 +694,7 @@ export function BookingWizard() {
                   </span>
                 </label>
 
+                {!isVideo && (
                 <div className="border-t border-ink-line pt-4">
                   <GuestsField
                     value={guests}
@@ -522,6 +702,7 @@ export function BookingWizard() {
                     hostEmail={hostEmail}
                   />
                 </div>
+                )}
 
                 <Button type="submit" className="w-full">Continuar</Button>
               </Card>
@@ -532,7 +713,7 @@ export function BookingWizard() {
           {step === 'upload' && (
             <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso 4</p>
+                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                 <h2 className="font-serif font-light text-2xl text-ink">Identificación oficial</h2>
                 <p className="text-sm text-ink-muted mt-1">
                   Requerida para confirmar tu visita al showroom privado.
@@ -556,7 +737,7 @@ export function BookingWizard() {
               onSubmit={handleSubmit(onSubmit, errs => {
                 const first = Object.values(errs)[0]?.message
                 toast.error(first ?? 'Revisa los datos del formulario')
-                if (errs.name || errs.email || errs.phone || errs.notes || errs.productType || errs.budgetRange || errs.lookingFor) {
+                if (errs.name || errs.email || errs.phone || errs.notes || errs.productType || errs.budgetRange || errs.lookingFor || errs.engagementBrief) {
                   goTo('form')
                   const field = errs.name ? 'name'
                     : errs.email ? 'email'
@@ -571,12 +752,13 @@ export function BookingWizard() {
             >
               <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
                 <div>
-                  <p className="h-eyebrow mb-2">Paso 5</p>
+                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Confirmar solicitud</h2>
                 </div>
 
                 <div className="divide-y divide-ink-line">
                   {([
+                    ['Tipo',          appointmentTypeLabels[appointmentType]],
                     ['Fecha',         formatDate(selectedSlot.datetime)],
                     ['Hora',          formatTime(selectedSlot.datetime)],
                     ['Nombre',        getValues('name')],
@@ -586,14 +768,30 @@ export function BookingWizard() {
                     ...(getValues('productType') ? [['Producto', getValues('productType')!]] : []),
                     ...(getValues('budgetRange') ? [['Presupuesto', getValues('budgetRange')!]] : []),
                     ...(getValues('lookingFor') ? [['Busca', getValues('lookingFor')!]] : []),
-                    ['Identificación', idFile?.name ?? ''],
+                    ...(!isVideo ? [['Identificación', idFile?.name ?? '']] : []),
                   ] as [string, string][]).map(([label, value]) => (
                     <div key={label} className="flex justify-between py-2.5 text-sm">
                       <span className="text-ink-muted">{label}</span>
                       <span className="text-ink text-right max-w-[60%] break-words">{value}</span>
                     </div>
                   ))}
-                  {guests.length > 0 && (
+                  {isVideo && getValues('engagementBrief') && (
+                    <div className="py-2.5 text-sm">
+                      <p className="text-ink-muted mb-1.5">Brief de anillo</p>
+                      {([
+                        ['Timeline', getValues('engagementBrief.proposalTimeline') ?? ''],
+                        ['Etapa', getValues('engagementBrief.ringStage') ?? ''],
+                        ['Metal', getValues('engagementBrief.metalPreference') ?? ''],
+                        ['Piedra', getValues('engagementBrief.stonePreference') ?? ''],
+                        ['Talla', getValues('engagementBrief.ringSizeKnown') ?? ''],
+                        ['Estilo', getValues('engagementBrief.partnerStyle') ?? ''],
+                        ['Referencias', getValues('engagementBrief.referenceLinks') ?? ''],
+                      ] as [string, string][]).filter(([, value]) => value).map(([label, value]) => (
+                        <p key={label} className="text-ink text-right break-words">{label}: {value}</p>
+                      ))}
+                    </div>
+                  )}
+                  {!isVideo && guests.length > 0 && (
                     <div className="py-2.5 text-sm">
                       <p className="text-ink-muted mb-1.5">Invitados ({guests.length})</p>
                       {guests.map((g, i) => (
@@ -603,7 +801,7 @@ export function BookingWizard() {
                   )}
                 </div>
 
-                {guests.length < 3 && (
+                {!isVideo && guests.length < 3 && (
                   <div className="rounded-xl border border-ink-line bg-cream-soft p-3.5">
                     <p className="text-xs text-ink leading-relaxed mb-2">
                       {guests.length === 0
@@ -621,7 +819,7 @@ export function BookingWizard() {
                   </div>
                 )}
 
-                {guests.length > 0 && (
+                {!isVideo && guests.length > 0 && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex gap-2.5">
                     <AlertTriangle size={15} strokeWidth={1.5} className="text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-900 leading-relaxed">

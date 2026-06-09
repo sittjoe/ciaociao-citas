@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendCancellationEmail } from '@/lib/email'
 import { releaseSlotLock } from '@/lib/slot-locks'
+import { normalizeAppointmentType } from '@/lib/commercial'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +43,7 @@ export async function POST(
       id: doc.id,
       slotId: data.slotId,
       slotDatetime: (data.slotDatetime as Timestamp).toDate(),
+      appointmentType: normalizeAppointmentType(data.appointmentType),
       name: data.name,
       email: data.email,
       phone: data.phone,
@@ -49,6 +51,7 @@ export async function POST(
       productType: data.productType,
       budgetRange: data.budgetRange,
       lookingFor: data.lookingFor,
+      engagementBrief: data.engagementBrief ?? {},
       identificationUrl: data.identificationUrl,
       status: 'cancelled',
       confirmationCode: data.confirmationCode,
@@ -56,6 +59,9 @@ export async function POST(
       reminder24Sent: data.reminder24Sent ?? false,
       reminder2Sent: data.reminder2Sent ?? false,
       googleCalendarEventId: null,
+      meetingUrl: data.meetingUrl ?? null,
+      meetingProvider: data.meetingProvider ?? null,
+      meetingInstructions: data.meetingInstructions ?? null,
       createdAt: (data.createdAt as Timestamp).toDate(),
     }
 

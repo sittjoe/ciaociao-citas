@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { requireAdminSession } from '@/lib/admin-auth'
-import { getCommercialPriority } from '@/lib/commercial'
+import { getCommercialPriority, normalizeAppointmentType } from '@/lib/commercial'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +51,7 @@ export async function GET(
         const item = doc.data()
         return {
           id: doc.id,
+          appointmentType: normalizeAppointmentType(item.appointmentType),
           name: item.name ?? '',
           status: item.status ?? '',
           slotDatetime: item.slotDatetime ? (item.slotDatetime as Timestamp).toDate().toISOString() : null,
@@ -64,6 +65,7 @@ export async function GET(
       id: snap.id,
       slotId:           d.slotId,
       slotDatetime:     (d.slotDatetime as Timestamp)?.toDate().toISOString(),
+      appointmentType:  normalizeAppointmentType(d.appointmentType),
       name:             d.name,
       email:            d.email,
       phone:            d.phone,
@@ -71,6 +73,7 @@ export async function GET(
       productType:      d.productType ?? '',
       budgetRange:      d.budgetRange ?? '',
       lookingFor:       d.lookingFor ?? '',
+      engagementBrief:  d.engagementBrief ?? {},
       commercialPriority: getCommercialPriority({
         productType: d.productType,
         budgetRange: d.budgetRange,
@@ -79,6 +82,9 @@ export async function GET(
       commercialStatus: d.commercialStatus ?? 'pending',
       internalNote:     d.internalNote ?? '',
       followUpAt:       d.followUpAt ? (d.followUpAt as Timestamp)?.toDate().toISOString() : null,
+      meetingUrl:       d.meetingUrl ?? null,
+      meetingProvider:  d.meetingProvider ?? null,
+      meetingInstructions: d.meetingInstructions ?? null,
       whatsapp:         d.whatsapp ?? false,
       status:           d.status,
       confirmationCode: d.confirmationCode,

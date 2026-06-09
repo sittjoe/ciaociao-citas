@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { retryEmailOutbox, sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
 import { expirePendingGuests } from '@/lib/guests'
 import { cleanupOrphanedIdentifications } from '@/lib/storage-cleanup'
+import { normalizeAppointmentType } from '@/lib/commercial'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +45,7 @@ export async function GET(request: Request) {
         id: doc.id,
         slotId: d.slotId,
         slotDatetime: (d.slotDatetime as Timestamp).toDate(),
+        appointmentType: normalizeAppointmentType(d.appointmentType),
         name: d.name,
         email: d.email,
         phone: d.phone,
@@ -51,6 +53,7 @@ export async function GET(request: Request) {
         productType: d.productType,
         budgetRange: d.budgetRange,
         lookingFor: d.lookingFor,
+        engagementBrief: d.engagementBrief ?? {},
         identificationUrl: d.identificationUrl,
         status: d.status,
         confirmationCode: d.confirmationCode,
@@ -58,6 +61,9 @@ export async function GET(request: Request) {
         reminder24Sent: d.reminder24Sent,
         reminder2Sent: d.reminder2Sent,
         googleCalendarEventId: d.googleCalendarEventId ?? null,
+        meetingUrl: d.meetingUrl ?? null,
+        meetingProvider: d.meetingProvider ?? null,
+        meetingInstructions: d.meetingInstructions ?? null,
         createdAt: (d.createdAt as Timestamp).toDate(),
       }
       // Mark before send for idempotency; rollback on failure so the next cron retries
@@ -89,6 +95,7 @@ export async function GET(request: Request) {
         id: doc.id,
         slotId: d.slotId,
         slotDatetime: (d.slotDatetime as Timestamp).toDate(),
+        appointmentType: normalizeAppointmentType(d.appointmentType),
         name: d.name,
         email: d.email,
         phone: d.phone,
@@ -96,6 +103,7 @@ export async function GET(request: Request) {
         productType: d.productType,
         budgetRange: d.budgetRange,
         lookingFor: d.lookingFor,
+        engagementBrief: d.engagementBrief ?? {},
         identificationUrl: d.identificationUrl,
         status: d.status,
         confirmationCode: d.confirmationCode,
@@ -103,6 +111,9 @@ export async function GET(request: Request) {
         reminder24Sent: d.reminder24Sent,
         reminder2Sent: d.reminder2Sent,
         googleCalendarEventId: d.googleCalendarEventId ?? null,
+        meetingUrl: d.meetingUrl ?? null,
+        meetingProvider: d.meetingProvider ?? null,
+        meetingInstructions: d.meetingInstructions ?? null,
         createdAt: (d.createdAt as Timestamp).toDate(),
       }
       await doc.ref.update({ reminder2Sent: true, updatedAt: FieldValue.serverTimestamp() })
@@ -139,6 +150,7 @@ export async function GET(request: Request) {
         id: apptDoc.id,
         slotId: apptData.slotId,
         slotDatetime,
+        appointmentType: normalizeAppointmentType(apptData.appointmentType),
         name: apptData.name,
         email: apptData.email,
         phone: apptData.phone,
@@ -146,6 +158,7 @@ export async function GET(request: Request) {
         productType: apptData.productType,
         budgetRange: apptData.budgetRange,
         lookingFor: apptData.lookingFor,
+        engagementBrief: apptData.engagementBrief ?? {},
         identificationUrl: apptData.identificationUrl,
         status: apptData.status,
         confirmationCode: apptData.confirmationCode,
@@ -153,6 +166,9 @@ export async function GET(request: Request) {
         reminder24Sent: apptData.reminder24Sent ?? false,
         reminder2Sent: apptData.reminder2Sent ?? false,
         googleCalendarEventId: apptData.googleCalendarEventId ?? null,
+        meetingUrl: apptData.meetingUrl ?? null,
+        meetingProvider: apptData.meetingProvider ?? null,
+        meetingInstructions: apptData.meetingInstructions ?? null,
         createdAt: (apptData.createdAt as Timestamp).toDate(),
       }
 
@@ -206,6 +222,7 @@ export async function GET(request: Request) {
         id: apptDoc.id,
         slotId: apptData.slotId,
         slotDatetime,
+        appointmentType: normalizeAppointmentType(apptData.appointmentType),
         name: apptData.name,
         email: apptData.email,
         phone: apptData.phone,
@@ -213,6 +230,7 @@ export async function GET(request: Request) {
         productType: apptData.productType,
         budgetRange: apptData.budgetRange,
         lookingFor: apptData.lookingFor,
+        engagementBrief: apptData.engagementBrief ?? {},
         identificationUrl: apptData.identificationUrl,
         status: apptData.status,
         confirmationCode: apptData.confirmationCode,
@@ -220,6 +238,9 @@ export async function GET(request: Request) {
         reminder24Sent: apptData.reminder24Sent ?? false,
         reminder2Sent: apptData.reminder2Sent ?? false,
         googleCalendarEventId: apptData.googleCalendarEventId ?? null,
+        meetingUrl: apptData.meetingUrl ?? null,
+        meetingProvider: apptData.meetingProvider ?? null,
+        meetingInstructions: apptData.meetingInstructions ?? null,
         createdAt: (apptData.createdAt as Timestamp).toDate(),
       }
 

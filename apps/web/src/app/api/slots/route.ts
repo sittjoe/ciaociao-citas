@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { releaseExpiredHolds } from '@/lib/holds'
 import { fromZonedTime } from 'date-fns-tz'
 import { BUSINESS_TZ } from '@/lib/utils'
+import { normalizeAppointmentType } from '@/lib/commercial'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month') // YYYY-MM
     const year  = searchParams.get('year')
+    const requestedType = normalizeAppointmentType(searchParams.get('appointmentType'))
 
     const now = new Date()
     let start: Date
@@ -57,14 +59,17 @@ export async function GET(request: Request) {
       .orderBy('datetime')
       .get()
 
-    const slots = snap.docs.map(doc => {
-      const data = doc.data()
-      return {
-        id:        doc.id,
-        datetime:  (data.datetime as Timestamp).toDate().toISOString(),
-        available: data.available as boolean,
-      }
-    })
+    const slots = snap.docs
+      .map(doc => {
+        const data = doc.data()
+        return {
+          id:        doc.id,
+          datetime:  (data.datetime as Timestamp).toDate().toISOString(),
+          available: data.available as boolean,
+          slotType:  normalizeAppointmentType(data.slotType),
+        }
+      })
+      .filter(slot => slot.slotType === requestedType)
 
     return NextResponse.json({ slots })
   } catch (err) {

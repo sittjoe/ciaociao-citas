@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { requireAdminSession } from '@/lib/admin-auth'
-import { getCommercialPriority } from '@/lib/commercial'
+import { getCommercialPriority, normalizeAppointmentType } from '@/lib/commercial'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +15,7 @@ export async function GET(request: Request) {
   const status   = searchParams.get('status')     // pending|accepted|rejected|cancelled
   const search   = searchParams.get('search')     // name/email/phone
   const productType = searchParams.get('productType')
+  const appointmentType = searchParams.get('appointmentType')
   const budgetRange = searchParams.get('budgetRange')
   const priority = searchParams.get('priority')
   const commercialStatus = searchParams.get('commercialStatus')
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
       if (cursorDoc.exists) query = query.startAfter(cursorDoc)
     }
 
-    const hasClientFilters = Boolean(search || productType || budgetRange || priority || commercialStatus)
+    const hasClientFilters = Boolean(search || productType || appointmentType || budgetRange || priority || commercialStatus)
     query = query.limit(hasClientFilters ? 500 : limit + 1)
 
     const snap  = await query.get()
@@ -81,6 +82,9 @@ export async function GET(request: Request) {
     if (productType) {
       docs = docs.filter(doc => String(doc.data().productType ?? '') === productType)
     }
+    if (appointmentType) {
+      docs = docs.filter(doc => normalizeAppointmentType(doc.data().appointmentType) === appointmentType)
+    }
     if (budgetRange) {
       docs = docs.filter(doc => String(doc.data().budgetRange ?? '') === budgetRange)
     }
@@ -103,6 +107,7 @@ export async function GET(request: Request) {
         id:               doc.id,
         slotId:           d.slotId,
         slotDatetime:     (d.slotDatetime as Timestamp)?.toDate().toISOString(),
+        appointmentType:  normalizeAppointmentType(d.appointmentType),
         name:             d.name,
         email:            d.email,
         phone:            d.phone,
@@ -110,6 +115,7 @@ export async function GET(request: Request) {
         productType:      d.productType ?? '',
         budgetRange:      d.budgetRange ?? '',
         lookingFor:       d.lookingFor ?? '',
+        engagementBrief:  d.engagementBrief ?? {},
         commercialPriority: getCommercialPriority({
           productType: d.productType,
           budgetRange: d.budgetRange,
@@ -118,6 +124,9 @@ export async function GET(request: Request) {
         commercialStatus: d.commercialStatus ?? 'pending',
         internalNote:     d.internalNote ?? '',
         followUpAt:       d.followUpAt ? (d.followUpAt as Timestamp)?.toDate().toISOString() : null,
+        meetingUrl:       d.meetingUrl ?? null,
+        meetingProvider:  d.meetingProvider ?? null,
+        meetingInstructions: d.meetingInstructions ?? null,
         whatsapp:         d.whatsapp ?? false,
         status:           d.status,
         confirmationCode: d.confirmationCode,

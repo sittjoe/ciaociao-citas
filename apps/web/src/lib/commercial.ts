@@ -1,4 +1,4 @@
-import type { CommercialPriority, CommercialStatus } from '@/types'
+import type { AppointmentType, CommercialPriority, CommercialStatus, EngagementBrief } from '@/types'
 
 export const commercialStatusLabels: Record<CommercialStatus, string> = {
   pending:       'Pendiente',
@@ -7,6 +7,32 @@ export const commercialStatusLabels: Record<CommercialStatus, string> = {
   purchased:     'Compró',
   not_purchased: 'No compró',
   follow_up:     'Follow-up',
+}
+
+export const appointmentTypeLabels: Record<AppointmentType, string> = {
+  showroom: 'Showroom privado',
+  video_engagement_rings: 'Video anillo',
+}
+
+export function normalizeAppointmentType(value: unknown): AppointmentType {
+  return value === 'video_engagement_rings' ? 'video_engagement_rings' : 'showroom'
+}
+
+export function isVideoEngagement(value: unknown): boolean {
+  return normalizeAppointmentType(value) === 'video_engagement_rings'
+}
+
+export function engagementBriefRows(brief?: EngagementBrief | null): [string, string][] {
+  if (!brief) return []
+  return [
+    ['Timeline propuesta', brief.proposalTimeline ?? ''],
+    ['Etapa', brief.ringStage ?? ''],
+    ['Metal', brief.metalPreference ?? ''],
+    ['Piedra', brief.stonePreference ?? ''],
+    ['Talla', brief.ringSizeKnown ?? ''],
+    ['Estilo pareja', brief.partnerStyle ?? ''],
+    ['Referencias', brief.referenceLinks ?? ''],
+  ].filter(([, value]) => Boolean(value?.trim())) as [string, string][]
 }
 
 export function getCommercialPriority(input: {

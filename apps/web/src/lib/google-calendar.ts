@@ -1,6 +1,7 @@
 import { google, calendar_v3 } from 'googleapis'
 import { adminDb } from './firebase-admin'
 import { formatDate, formatTime } from './utils'
+import { engagementBriefRows, isVideoEngagement } from './commercial'
 import type { Appointment } from '@/types'
 
 const DEFAULT_LOCATION = process.env.GOOGLE_CALENDAR_LOCATION || 'Showroom Ciao Ciao Joyería'
@@ -65,19 +66,32 @@ function getCalendar(): calendar_v3.Calendar {
 function buildEventBody(appt: Appointment): calendar_v3.Schema$Event {
   const start = appt.slotDatetime
   const end   = new Date(start.getTime() + APPOINTMENT_DURATION_MS)
+  const isVideo = isVideoEngagement(appt.appointmentType)
+  const briefRows = engagementBriefRows(appt.engagementBrief).map(([label, value]) => `${label}: ${value}`)
+  const videoRows = isVideo
+    ? [
+        `Modalidad: Videollamada`,
+        appt.meetingProvider ? `Plataforma: ${appt.meetingProvider}` : '',
+        appt.meetingUrl ? `Link: ${appt.meetingUrl}` : 'Link: pendiente por enviar',
+        appt.meetingInstructions ? `Indicaciones: ${appt.meetingInstructions}` : '',
+      ]
+    : []
+
   return {
-    summary:  `Ciao Ciao - ${appt.name}`,
-    location: DEFAULT_LOCATION,
+    summary:  `Ciao Ciao - ${isVideo ? 'Video anillo' : 'Showroom'} - ${appt.name}`,
+    location: isVideo ? (appt.meetingUrl || 'Videollamada') : DEFAULT_LOCATION,
     description: [
-      'Cita confirmada en Ciao Ciao Joyería.',
+      isVideo ? 'Video consulta para anillo de compromiso en Ciao Ciao Joyería.' : 'Cita confirmada en Ciao Ciao Joyería.',
       `Cliente: ${appt.name}`,
       `Email: ${appt.email}`,
       `Teléfono: ${appt.phone}`,
       `Fecha: ${formatDate(start)} ${formatTime(start)}`,
+      ...videoRows,
       appt.notes ? `Notas: ${appt.notes}` : '',
       appt.productType ? `Producto: ${appt.productType}` : '',
       appt.budgetRange ? `Presupuesto: ${appt.budgetRange}` : '',
       appt.lookingFor ? `Busca: ${appt.lookingFor}` : '',
+      ...briefRows,
     ].filter(Boolean).join('\n'),
     start: { dateTime: start.toISOString(), timeZone: 'America/Mexico_City' },
     end:   { dateTime: end.toISOString(),   timeZone: 'America/Mexico_City' },

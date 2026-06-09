@@ -11,12 +11,15 @@ import { Modal } from '@/components/ui/Modal'
 import { AlertDialog } from '@/components/ui/AlertDialog'
 import { TableSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { appointmentTypeLabels } from '@/lib/commercial'
 import { cn, formatShortDate } from '@/lib/utils'
+import type { AppointmentType } from '@/types'
 
 interface SlotRow {
   id:        string
   datetime:  string
   available: boolean
+  slotType?: AppointmentType
   bookedBy:  string | null
 }
 
@@ -30,9 +33,11 @@ export function SlotManager() {
   const [deleting,      setDeleting]      = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [futureOnly,    setFutureOnly]    = useState(true)
+  const [typeFilter,    setTypeFilter]    = useState<AppointmentType | ''>('')
 
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
   const [selectedTimes, setSelectedTimes] = useState<Set<string>>(new Set(DEFAULT_TIMES))
+  const [slotType,      setSlotType]      = useState<AppointmentType>('showroom')
   const [customTime,    setCustomTime]    = useState('')
 
   const fetchSlots = useCallback(async () => {
@@ -91,7 +96,7 @@ export function SlotManager() {
       const res  = await fetch('/api/admin/slots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dates: [...selectedDates], times: [...selectedTimes] }),
+        body: JSON.stringify({ dates: [...selectedDates], times: [...selectedTimes], slotType }),
       })
       const data = await res.json() as { created: number; skipped: string[] }
       const skipped = data.skipped?.length ?? 0
@@ -106,7 +111,7 @@ export function SlotManager() {
     } finally {
       setCreating(false)
     }
-  }, [selectedDates, selectedTimes, fetchSlots])
+  }, [selectedDates, selectedTimes, slotType, fetchSlots])
 
   const deleteSlot = useCallback(async (id: string) => {
     setDeleting(id)
@@ -125,9 +130,10 @@ export function SlotManager() {
     }
   }, [])
 
-  const visibleSlots = futureOnly
+  const visibleSlots = (futureOnly
     ? slots.filter(s => new Date(s.datetime) >= new Date())
-    : slots
+    : slots)
+    .filter(s => !typeFilter || (s.slotType ?? 'showroom') === typeFilter)
 
   return (
     <div className="space-y-4">
@@ -148,6 +154,15 @@ export function SlotManager() {
           >
             {futureOnly ? 'Solo futuros' : 'Todos'}
           </button>
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value as AppointmentType | '')}
+            className="input-clean h-9 min-h-0 py-1.5 text-xs sm:w-48"
+          >
+            <option value="">Todos los tipos</option>
+            <option value="showroom">{appointmentTypeLabels.showroom}</option>
+            <option value="video_engagement_rings">{appointmentTypeLabels.video_engagement_rings}</option>
+          </select>
           <Button size="sm" onClick={() => setShowAdd(true)}>
             <Plus size={14} strokeWidth={1.5} /> Agregar slots
           </Button>
@@ -157,7 +172,7 @@ export function SlotManager() {
       {/* Slots list */}
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
-          <TableSkeleton rows={5} cols={3} />
+          <TableSkeleton rows={5} cols={4} />
         ) : visibleSlots.length === 0 ? (
           <EmptyState
             title={futureOnly ? 'Sin slots futuros' : 'Sin slots'}
@@ -173,7 +188,7 @@ export function SlotManager() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-admin-line bg-admin-surface/70">
-                  {['Fecha y hora', 'Estado', 'Acciones'].map(h => (
+                  {['Fecha y hora', 'Tipo', 'Estado', 'Acciones'].map(h => (
                     <th key={h} className="px-4 py-3 text-left h-eyebrow text-ink-muted">{h}</th>
                   ))}
                 </tr>
@@ -191,6 +206,11 @@ export function SlotManager() {
                       className="border-b border-admin-line last:border-0 hover:bg-champagne-tint/60"
                     >
                       <td className="px-4 py-3 text-ink">{formatShortDate(slot.datetime)}</td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full border border-admin-line bg-admin-surface px-2.5 py-0.5 text-xs text-ink-muted">
+                          {appointmentTypeLabels[slot.slotType ?? 'showroom']}
+                        </span>
+                      </td>
                       <td className="px-4 py-3">
                         <motion.span
                           layoutId={`status-${slot.id}`}
@@ -244,6 +264,30 @@ export function SlotManager() {
       {/* Add slots modal */}
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Crear disponibilidad" size="lg">
         <div className="space-y-5">
+          <div className="rounded-2xl border border-admin-line bg-admin-surface p-4">
+            <p className="label-clean mb-3">Tipo de cita</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(['showroom', 'video_engagement_rings'] as AppointmentType[]).map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setSlotType(type)}
+                  className={cn(
+                    'rounded-xl border px-4 py-3 text-left transition-colors',
+                    slotType === type
+                      ? 'border-champagne bg-champagne-tint text-champagne-deep'
+                      : 'border-admin-line bg-admin-panel text-ink-muted hover:border-champagne-soft',
+                  )}
+                >
+                  <span className="block text-sm font-semibold">{appointmentTypeLabels[type]}</span>
+                  <span className="mt-1 block text-xs">
+                    {type === 'showroom' ? 'Visitas presenciales con ID.' : 'Llamadas guiadas para anillos.'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-admin-line bg-admin-surface p-4">
             <p className="label-clean mb-3">Selecciona fechas</p>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
@@ -314,6 +358,7 @@ export function SlotManager() {
               {selectedDates.size} fecha{selectedDates.size !== 1 ? 's' : ''} ×{' '}
               {selectedTimes.size} horario{selectedTimes.size !== 1 ? 's' : ''} ={' '}
               <strong className="text-champagne">{selectedDates.size * selectedTimes.size} slots</strong>
+              {' '}· {appointmentTypeLabels[slotType]}
             </p>
             <Button loading={creating} onClick={createSlots}>
               <Calendar size={14} strokeWidth={1.5} /> Crear slots

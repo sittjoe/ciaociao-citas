@@ -6,6 +6,7 @@ import { sendStatusUpdate, sendCalendarError } from '@/lib/email'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { createAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { releaseSlotLock } from '@/lib/slot-locks'
+import { normalizeAppointmentType } from '@/lib/commercial'
 import type { Appointment, AppointmentStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,7 @@ function mapAppointment(id: string, data: FirebaseFirestore.DocumentData, status
     id,
     slotId: data.slotId,
     slotDatetime: (data.slotDatetime as Timestamp).toDate(),
+    appointmentType: normalizeAppointmentType(data.appointmentType),
     name: data.name,
     email: data.email,
     phone: data.phone,
@@ -22,6 +24,7 @@ function mapAppointment(id: string, data: FirebaseFirestore.DocumentData, status
     productType: data.productType,
     budgetRange: data.budgetRange,
     lookingFor: data.lookingFor,
+    engagementBrief: data.engagementBrief ?? {},
     identificationUrl: data.identificationUrl,
     status: status ?? data.status,
     confirmationCode: data.confirmationCode,
@@ -29,6 +32,9 @@ function mapAppointment(id: string, data: FirebaseFirestore.DocumentData, status
     reminder24Sent: data.reminder24Sent ?? false,
     reminder2Sent: data.reminder2Sent ?? false,
     googleCalendarEventId: data.googleCalendarEventId ?? null,
+    meetingUrl: data.meetingUrl ?? null,
+    meetingProvider: data.meetingProvider ?? null,
+    meetingInstructions: data.meetingInstructions ?? null,
     createdAt: (data.createdAt as Timestamp).toDate(),
   }
 }

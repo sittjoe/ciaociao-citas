@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { z } from 'zod'
 import { bookingPayloadSchema, guestInputSchema } from '@/lib/schemas'
 import { generateCode, sanitize } from '@/lib/utils'
+import { isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
 import { releaseExpiredHolds } from '@/lib/holds'
 import { createSlotLock } from '@/lib/slot-locks'
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
 
     const raw = {
       slotId:   formData.get('slotId'),
+      appointmentType: formData.get('appointmentType') ?? 'showroom',
       name:     formData.get('name'),
       email:    formData.get('email'),
       phone:    formData.get('phone'),
@@ -70,6 +72,11 @@ export async function POST(request: Request) {
       productType: formData.get('productType') ?? '',
       budgetRange: formData.get('budgetRange') ?? '',
       lookingFor: formData.get('lookingFor') ?? '',
+      engagementBrief: (() => {
+        const rawBrief = formData.get('engagementBrief')
+        if (!rawBrief) return undefined
+        try { return JSON.parse(String(rawBrief)) } catch { return undefined }
+      })(),
       whatsapp: formData.get('whatsapp') === 'true',
     }
 
@@ -78,18 +85,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 422 })
     }
 
+    const { slotId, appointmentType, name, email, phone, notes, productType, budgetRange, lookingFor, engagementBrief, whatsapp } = parsed.data
+    const isVideo = isVideoEngagement(appointmentType)
+
     const idFile = formData.get('idFile') as File | null
-    if (!idFile || idFile.size === 0) {
+    if (!isVideo && (!idFile || idFile.size === 0)) {
       return NextResponse.json({ error: 'Identificación requerida' }, { status: 422 })
     }
-    if (idFile.size > MAX_FILE_BYTES) {
+    if (idFile && idFile.size > MAX_FILE_BYTES) {
       return NextResponse.json({ error: 'El archivo no puede superar 5 MB' }, { status: 422 })
     }
-    if (!ALLOWED_MIME.includes(idFile.type)) {
+    if (idFile && idFile.size > 0 && !ALLOWED_MIME.includes(idFile.type)) {
       return NextResponse.json({ error: 'Formato no permitido. Usa JPG, PNG, WebP o PDF.' }, { status: 422 })
     }
 
-    const { slotId, name, email, phone, notes, productType, budgetRange, lookingFor, whatsapp } = parsed.data
     const idempotencyKeyRaw = String(formData.get('idempotencyKey') ?? '').trim()
     const idempotencyKey = /^[a-zA-Z0-9_-]{16,80}$/.test(idempotencyKeyRaw) ? idempotencyKeyRaw : randomUUID()
     idempotencyRef = adminDb
@@ -143,6 +152,10 @@ export async function POST(request: Request) {
     }
     const guestList = guestsParsed.data
 
+    if (isVideo && guestList.length > 0) {
+      return NextResponse.json({ error: 'Las video consultas no admiten invitados en esta versión' }, { status: 422 })
+    }
+
     if (guestList.length > 0) {
       const guestEmails = guestList.map(g => g.email.toLowerCase().trim())
       if (new Set(guestEmails).size < guestEmails.length) {
@@ -161,19 +174,22 @@ export async function POST(request: Request) {
       )
     }
 
-    // Upload ID first (outside transaction — idempotent with UUID path)
-    const extByMime: Record<string, string> = {
-      'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf',
+    let identificationUrl: string | null = null
+    if (idFile && idFile.size > 0) {
+      // Upload ID first (outside transaction — idempotent with UUID path)
+      const extByMime: Record<string, string> = {
+        'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf',
+      }
+      const fileExt       = extByMime[idFile.type] ?? 'bin'
+      const storageKey    = `identifications/${randomUUID()}.${fileExt}`
+      const fileBuffer    = Buffer.from(await idFile.arrayBuffer())
+      const bucket        = adminStorage.bucket()
+      const fileRef       = bucket.file(storageKey)
+      await fileRef.save(fileBuffer, { contentType: idFile.type, resumable: false })
+      uploadedFileRef = fileRef
+      // identificationUrl is the storage path; signed URLs generated on-demand in admin panel
+      identificationUrl = storageKey
     }
-    const fileExt       = extByMime[idFile.type] ?? 'bin'
-    const storageKey    = `identifications/${randomUUID()}.${fileExt}`
-    const fileBuffer    = Buffer.from(await idFile.arrayBuffer())
-    const bucket        = adminStorage.bucket()
-    const fileRef       = bucket.file(storageKey)
-    await fileRef.save(fileBuffer, { contentType: idFile.type, resumable: false })
-    uploadedFileRef = fileRef
-    // identificationUrl is the storage path; signed URLs generated on-demand in admin panel
-    const identificationUrl = storageKey
 
     const confirmationCode = generateCode(8)
     const cancelToken      = generateCode(16)
@@ -199,8 +215,10 @@ export async function POST(request: Request) {
 
       const slotData = slotSnap.data()!
       slotDatetime   = (slotData.datetime as Timestamp).toDate()
+      const slotType = normalizeAppointmentType(slotData.slotType)
 
       if (!slotData.available) throw new Error('SLOT_UNAVAILABLE')
+      if (slotType !== appointmentType) throw new Error('SLOT_TYPE_MISMATCH')
       if (slotDatetime <= new Date()) throw new Error('SLOT_UNAVAILABLE')
 
       // Guests require at least 24h for verification before the appointment
@@ -235,6 +253,7 @@ export async function POST(request: Request) {
       tx.set(apptRef, {
         slotId,
         slotDatetime: Timestamp.fromDate(slotDatetime),
+        appointmentType,
         name:         sanitize(name),
         email:        email.toLowerCase().trim(),
         phone:        phone.trim(),
@@ -242,6 +261,15 @@ export async function POST(request: Request) {
         productType:  sanitize(productType ?? ''),
         budgetRange:  sanitize(budgetRange ?? ''),
         lookingFor:   sanitize(lookingFor ?? ''),
+        engagementBrief: {
+          proposalTimeline: sanitize(engagementBrief?.proposalTimeline ?? ''),
+          ringStage:        sanitize(engagementBrief?.ringStage ?? ''),
+          metalPreference:  sanitize(engagementBrief?.metalPreference ?? ''),
+          stonePreference:  sanitize(engagementBrief?.stonePreference ?? ''),
+          ringSizeKnown:    sanitize(engagementBrief?.ringSizeKnown ?? ''),
+          partnerStyle:     sanitize(engagementBrief?.partnerStyle ?? ''),
+          referenceLinks:   sanitize(engagementBrief?.referenceLinks ?? ''),
+        },
         whatsapp:     whatsapp ?? false,
         identificationUrl,
         status:              'pending',
@@ -312,6 +340,7 @@ export async function POST(request: Request) {
       id: appointmentId,
       slotId,
       slotDatetime,
+      appointmentType,
       name:   sanitize(name),
       email:  email.toLowerCase().trim(),
       phone:  phone.trim(),
@@ -319,6 +348,15 @@ export async function POST(request: Request) {
       productType: sanitize(productType ?? ''),
       budgetRange: sanitize(budgetRange ?? ''),
       lookingFor:  sanitize(lookingFor ?? ''),
+      engagementBrief: {
+        proposalTimeline: sanitize(engagementBrief?.proposalTimeline ?? ''),
+        ringStage:        sanitize(engagementBrief?.ringStage ?? ''),
+        metalPreference:  sanitize(engagementBrief?.metalPreference ?? ''),
+        stonePreference:  sanitize(engagementBrief?.stonePreference ?? ''),
+        ringSizeKnown:    sanitize(engagementBrief?.ringSizeKnown ?? ''),
+        partnerStyle:     sanitize(engagementBrief?.partnerStyle ?? ''),
+        referenceLinks:   sanitize(engagementBrief?.referenceLinks ?? ''),
+      },
       identificationUrl,
       status:            'pending',
       confirmationCode,
@@ -363,6 +401,9 @@ export async function POST(request: Request) {
     const msg = err instanceof Error ? err.message : 'Error desconocido'
     if (msg === 'SLOT_UNAVAILABLE' || msg === 'SLOT_NOT_FOUND') {
       return NextResponse.json({ error: 'Este horario ya no está disponible. Por favor selecciona otro.' }, { status: 409 })
+    }
+    if (msg === 'SLOT_TYPE_MISMATCH') {
+      return NextResponse.json({ error: 'Este horario no corresponde al tipo de cita seleccionado.' }, { status: 409 })
     }
     if (typeof (err as { code?: unknown })?.code === 'number' && (err as { code?: number }).code === 6) {
       return NextResponse.json({ error: 'Este horario ya no está disponible. Por favor selecciona otro.' }, { status: 409 })
