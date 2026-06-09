@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Timestamp } from 'firebase-admin/firestore'
-import { AlertTriangle, CalendarX, MailWarning, ShieldAlert, Wrench } from 'lucide-react'
+import { AlertTriangle, Bell, CalendarX, MailWarning, ShieldAlert, Wrench } from 'lucide-react'
 import { adminDb } from '@/lib/firebase-admin'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
@@ -17,11 +17,12 @@ function ts(value: unknown): string | null {
 }
 
 async function getProblems() {
-  const [failedEmails, calendarAppts, guestIssues, lastRuns] = await Promise.all([
+  const [failedEmails, calendarAppts, guestIssues, lastRuns, waitlist] = await Promise.all([
     adminDb.collection('emailOutbox').where('status', '==', 'failed').limit(12).get(),
     adminDb.collection('appointments').where('calendarSyncFailed', '==', true).limit(12).get(),
     adminDb.collectionGroup('guests').where('status', 'in', ['pending', 'expired']).limit(30).get(),
     adminDb.collection('maintenanceRuns').orderBy('createdAt', 'desc').limit(6).get(),
+    adminDb.collection('availabilityWaitlist').where('status', '==', 'new').limit(12).get(),
   ])
 
   const apptIds = Array.from(new Set(guestIssues.docs.map(doc => String(doc.data().appointmentId ?? '')).filter(Boolean)))
@@ -51,6 +52,7 @@ async function getProblems() {
       }
     }),
     runs: lastRuns.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: ts(doc.data().createdAt) })) as ProblemDoc[],
+    waitlist: waitlist.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: ts(doc.data().createdAt) })) as ProblemDoc[],
   }
 }
 
@@ -84,10 +86,38 @@ export default async function ProblemasPage() {
         <Metric label="Emails fallidos" value={data.failedEmails.length} tone="text-red-600" />
         <Metric label="Calendar con error" value={data.calendarAppts.length} tone="text-amber-700" />
         <Metric label="Invitados pendientes/expirados" value={data.guestIssues.length} tone="text-champagne-deep" />
-        <Metric label="Runs recientes" value={data.runs.length} tone="text-ink" />
+        <Metric label="Lista de espera" value={data.waitlist.length} tone="text-ink" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <Card variant="admin">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Bell size={18} className="text-champagne" />
+            <h2 className="font-serif text-lg text-ink">Avisos de disponibilidad</h2>
+          </CardHeader>
+          <CardBody className="space-y-3 pt-0">
+            {data.waitlist.length === 0 ? (
+              <p className="text-sm text-ink-muted">No hay personas esperando horarios.</p>
+            ) : data.waitlist.map(lead => (
+              <div key={lead.id} className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-ink">{String(lead.name ?? '')}</p>
+                    <p className="text-xs text-ink-muted">{String(lead.email ?? '')} · {String(lead.phone ?? '')}</p>
+                  </div>
+                  {lead.createdAt && <span className="text-[10px] text-ink-subtle">{formatShortDate(String(lead.createdAt))}</span>}
+                </div>
+                {[lead.productType, lead.budgetRange].filter(Boolean).length > 0 && (
+                  <p className="mt-1 text-xs text-champagne-deep">
+                    {[lead.productType, lead.budgetRange].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                {lead.message && <p className="mt-1 text-xs text-ink-muted">{String(lead.message).slice(0, 180)}</p>}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+
         <Card variant="admin">
           <CardHeader className="flex flex-row items-center gap-2">
             <MailWarning size={18} className="text-red-500" />

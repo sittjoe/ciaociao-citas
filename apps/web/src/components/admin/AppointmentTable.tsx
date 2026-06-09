@@ -10,7 +10,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText, MailCheck, MailQuestion } from 'lucide-react'
+import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText, MailCheck, MailQuestion, MessageCircle, Save } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -19,14 +19,29 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Textarea } from '@/components/ui/Input'
 import { GuestsList } from './GuestsList'
 import { formatShortDate, csvRow, cn } from '@/lib/utils'
-import type { Appointment, AppointmentStatus } from '@/types'
+import { commercialStatusLabels, formatWhatsAppUrl } from '@/lib/commercial'
+import { budgetRangeOptions, commercialStatusOptions, productTypeOptions } from '@/lib/schemas'
+import type { Appointment, AppointmentStatus, CommercialPriority, CommercialStatus } from '@/types'
 
-type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt' | 'clientConfirmedAt'> & {
+type CustomerHistoryItem = {
+  id: string
+  name: string
+  status: AppointmentStatus
+  slotDatetime: string | null
+  productType?: string
+  budgetRange?: string
+  commercialStatus?: CommercialStatus
+}
+
+type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt' | 'clientConfirmedAt' | 'followUpAt'> & {
   slotDatetime: string
   createdAt: string
   updatedAt?: string
   decidedAt?: string | null
   clientConfirmedAt?: string | null
+  followUpAt?: string | null
+  commercialPriority?: CommercialPriority
+  customerHistory?: CustomerHistoryItem[]
 }
 
 const col = createColumnHelper<SerialAppt>()
@@ -44,6 +59,24 @@ const columns = [
         {info.getValue() || '—'}
       </span>
     ),
+  }),
+  col.accessor('commercialPriority', {
+    header: 'Prioridad',
+    enableSorting: false,
+    cell: info => {
+      const value = info.getValue() ?? 'normal'
+      const label = value === 'high' ? 'Alta' : value === 'medium' ? 'Media' : 'Normal'
+      return (
+        <span className={cn(
+          'inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+          value === 'high' && 'border-red-200 bg-red-50 text-red-600',
+          value === 'medium' && 'border-amber-200 bg-amber-50 text-amber-700',
+          value === 'normal' && 'border-admin-line bg-admin-surface text-ink-muted',
+        )}>
+          {label}
+        </span>
+      )
+    },
   }),
   col.accessor('slotDatetime', {
     header: 'Fecha',
@@ -105,16 +138,29 @@ export function AppointmentTable() {
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
   const [search,      setSearch]        = useState('')
   const [statusFilter,setStatusFilter]  = useState<AppointmentStatus | ''>('')
+  const [productFilter, setProductFilter] = useState('')
+  const [budgetFilter, setBudgetFilter] = useState('')
+  const [priorityFilter, setPriorityFilter] = useState<CommercialPriority | ''>('')
+  const [commercialFilter, setCommercialFilter] = useState<CommercialStatus | ''>('')
   const [sorting,     setSorting]       = useState<SortingState>([])
   const [selected,    setSelected]      = useState<SerialAppt | null>(null)
   const [deciding,    setDeciding]      = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [savingCommercial, setSavingCommercial] = useState(false)
   const [rejectReason,setRejectReason]  = useState('')
+  const [commercialStatus, setCommercialStatus] = useState<CommercialStatus>('pending')
+  const [internalNote, setInternalNote] = useState('')
+  const [followUpAt, setFollowUpAt] = useState('')
 
   const fetchAppointments = useCallback(async (reset = true) => {
     if (reset) setLoading(true)
     const params = new URLSearchParams()
     if (search)       params.set('search', search)
     if (statusFilter) params.set('status', statusFilter)
+    if (productFilter) params.set('productType', productFilter)
+    if (budgetFilter) params.set('budgetRange', budgetFilter)
+    if (priorityFilter) params.set('priority', priorityFilter)
+    if (commercialFilter) params.set('commercialStatus', commercialFilter)
     if (!reset && nextCursor) params.set('cursor', nextCursor)
 
     try {
@@ -132,9 +178,35 @@ export function AppointmentTable() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, nextCursor])
+  }, [search, statusFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, nextCursor])
 
-  useEffect(() => { fetchAppointments(true) }, [search, statusFilter]) // eslint-disable-line
+  useEffect(() => { fetchAppointments(true) }, [search, statusFilter, productFilter, budgetFilter, priorityFilter, commercialFilter]) // eslint-disable-line
+
+  useEffect(() => {
+    if (!selected) return
+    setCommercialStatus(selected.commercialStatus ?? 'pending')
+    setInternalNote(selected.internalNote ?? '')
+    setFollowUpAt(selected.followUpAt ? selected.followUpAt.slice(0, 16) : '')
+  }, [selected])
+
+  const openAppointment = useCallback(async (appt: SerialAppt) => {
+    setSelected(appt)
+    setDetailLoading(true)
+    try {
+      const res = await fetch(`/api/admin/appointments/${appt.id}`)
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/citas'
+        return
+      }
+      if (!res.ok) throw new Error()
+      const detail = await res.json() as SerialAppt
+      setSelected(prev => prev && prev.id === appt.id ? { ...prev, ...detail } : prev)
+    } catch {
+      toast.error('No se pudo cargar el historial del cliente')
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [])
 
   const decide = useCallback(async (action: 'accept' | 'reject') => {
     if (!selected) return
@@ -160,9 +232,42 @@ export function AppointmentTable() {
     }
   }, [selected, rejectReason, fetchAppointments])
 
+  const saveCommercial = useCallback(async () => {
+    if (!selected) return
+    setSavingCommercial(true)
+    try {
+      const followUpIso = followUpAt ? new Date(followUpAt).toISOString() : ''
+      const res = await fetch(`/api/admin/appointments/${selected.id}/commercial`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commercialStatus,
+          internalNote,
+          followUpAt: followUpIso,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json() as { error?: string }
+        throw new Error(err.error ?? 'Error')
+      }
+      toast.success('Seguimiento actualizado')
+      setSelected(prev => prev ? {
+        ...prev,
+        commercialStatus,
+        internalNote,
+        followUpAt: followUpIso || null,
+      } : prev)
+      fetchAppointments(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar seguimiento')
+    } finally {
+      setSavingCommercial(false)
+    }
+  }, [selected, commercialStatus, internalNote, followUpAt, fetchAppointments])
+
   const exportCSV = useCallback(() => {
     const BOM  = '﻿'
-    const head = csvRow(['Código', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Producto', 'Presupuesto', 'Busca', 'Notas', 'Aprobado por'])
+    const head = csvRow(['Código', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Prioridad', 'Seguimiento', 'Producto', 'Presupuesto', 'Busca', 'Notas cliente', 'Nota interna', 'Follow-up', 'Aprobado por'])
     const rows = appointments.map(a => csvRow([
       a.confirmationCode,
       a.name,
@@ -170,10 +275,14 @@ export function AppointmentTable() {
       a.phone,
       new Date(a.slotDatetime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }),
       a.status,
+      a.commercialPriority ?? '',
+      a.commercialStatus ? commercialStatusLabels[a.commercialStatus] : '',
       a.productType ?? '',
       a.budgetRange ?? '',
       a.lookingFor ?? '',
       a.notes ?? '',
+      a.internalNote ?? '',
+      a.followUpAt ? new Date(a.followUpAt).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }) : '',
       a.decidedBy ?? '',
     ]))
     const csv  = BOM + [head, ...rows].join('\r\n')
@@ -198,8 +307,8 @@ export function AppointmentTable() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:flex-row">
-        <div className="relative flex-1">
+      <div className="grid gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_170px_190px_130px_150px_auto]">
+        <div className="relative sm:col-span-2 xl:col-span-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
           <input
             value={search}
@@ -211,13 +320,49 @@ export function AppointmentTable() {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as AppointmentStatus | '')}
-          className="input-clean sm:w-44"
+          className="input-clean"
         >
           <option value="">Todos los estados</option>
           <option value="pending">Pendientes</option>
           <option value="accepted">Confirmadas</option>
           <option value="rejected">Rechazadas</option>
           <option value="cancelled">Canceladas</option>
+        </select>
+        <select
+          value={productFilter}
+          onChange={e => setProductFilter(e.target.value)}
+          className="input-clean"
+        >
+          <option value="">Todo producto</option>
+          {productTypeOptions.map(option => <option key={option} value={option}>{option}</option>)}
+        </select>
+        <select
+          value={budgetFilter}
+          onChange={e => setBudgetFilter(e.target.value)}
+          className="input-clean"
+        >
+          <option value="">Todo presupuesto</option>
+          {budgetRangeOptions.map(option => <option key={option} value={option}>{option}</option>)}
+        </select>
+        <select
+          value={priorityFilter}
+          onChange={e => setPriorityFilter(e.target.value as CommercialPriority | '')}
+          className="input-clean"
+        >
+          <option value="">Prioridad</option>
+          <option value="high">Alta</option>
+          <option value="medium">Media</option>
+          <option value="normal">Normal</option>
+        </select>
+        <select
+          value={commercialFilter}
+          onChange={e => setCommercialFilter(e.target.value as CommercialStatus | '')}
+          className="input-clean"
+        >
+          <option value="">Seguimiento</option>
+          {commercialStatusOptions.map(option => (
+            <option key={option} value={option}>{commercialStatusLabels[option]}</option>
+          ))}
         </select>
         <Button variant="outline" size="sm" onClick={exportCSV} className="shrink-0">
           <Download size={14} strokeWidth={1.5} /> CSV
@@ -227,7 +372,7 @@ export function AppointmentTable() {
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
-          <TableSkeleton rows={6} cols={6} />
+          <TableSkeleton rows={6} cols={7} />
         ) : appointments.length === 0 ? (
           <EmptyState
             title="Sin citas"
@@ -242,7 +387,7 @@ export function AppointmentTable() {
                     key={header.id}
                     className={cn(
                       'px-4 py-3 text-left',
-                      (header.id === 'email' || header.id === 'productType') && 'hidden sm:table-cell',
+                      (header.id === 'email' || header.id === 'productType' || header.id === 'commercialPriority') && 'hidden sm:table-cell',
                     )}
                   >
                     {header.column.getCanSort() ? (
@@ -273,7 +418,7 @@ export function AppointmentTable() {
                         key={cell.id}
                         className={cn(
                           'px-4 py-3',
-                          (cell.column.id === 'email' || cell.column.id === 'productType') && 'hidden sm:table-cell',
+                          (cell.column.id === 'email' || cell.column.id === 'productType' || cell.column.id === 'commercialPriority') && 'hidden sm:table-cell',
                         )}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -292,8 +437,19 @@ export function AppointmentTable() {
                             <FileText size={14} strokeWidth={1.5} />
                           </a>
                         )}
+                        {appt.phone && (
+                          <a
+                            href={formatWhatsAppUrl(appt.phone, appt.name)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg p-1.5 text-ink-subtle transition-colors hover:bg-emerald-50 hover:text-emerald-600"
+                            aria-label={`Escribir por WhatsApp a ${appt.name}`}
+                          >
+                            <MessageCircle size={14} strokeWidth={1.5} />
+                          </a>
+                        )}
                         <button
-                          onClick={() => setSelected(appt)}
+                          onClick={() => void openAppointment(appt)}
                           className={cn(
                             'rounded-lg px-2.5 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:shadow-focus-ring',
                             appt.status === 'pending'
@@ -336,8 +492,19 @@ export function AppointmentTable() {
               <div>
                 <p className="h-eyebrow mb-1">Solicitud</p>
                 <h3 className="font-serif text-2xl font-light text-ink">{selected.name}</h3>
+                {detailLoading && <p className="mt-1 text-xs text-ink-muted">Cargando historial...</p>}
               </div>
-              <StatusBadge status={selected.status} />
+              <div className="flex flex-col items-end gap-2">
+                <StatusBadge status={selected.status} />
+                <span className={cn(
+                  'inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                  selected.commercialPriority === 'high' && 'border-red-200 bg-red-50 text-red-600',
+                  selected.commercialPriority === 'medium' && 'border-amber-200 bg-amber-50 text-amber-700',
+                  (!selected.commercialPriority || selected.commercialPriority === 'normal') && 'border-admin-line bg-admin-surface text-ink-muted',
+                )}>
+                  {selected.commercialPriority === 'high' ? 'Prioridad alta' : selected.commercialPriority === 'medium' ? 'Prioridad media' : 'Prioridad normal'}
+                </span>
+              </div>
             </div>
 
             <dl className="divide-y divide-admin-line rounded-2xl border border-admin-line bg-admin-surface/60 px-4 text-sm">
@@ -350,6 +517,8 @@ export function AppointmentTable() {
                 ...(selected.productType ? [['Producto', selected.productType]] : []),
                 ...(selected.budgetRange ? [['Presupuesto', selected.budgetRange]] : []),
                 ...(selected.lookingFor ? [['Busca', selected.lookingFor]] : []),
+                ['Seguimiento', selected.commercialStatus ? commercialStatusLabels[selected.commercialStatus] : 'Pendiente'],
+                ...(selected.followUpAt ? [['Follow-up', formatShortDate(selected.followUpAt)]] : []),
                 ['Calendar',  selected.googleCalendarEventId
                   ? 'Sincronizado'
                   : (selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed
@@ -364,6 +533,7 @@ export function AppointmentTable() {
                   : []),
                 ...(selected.adminNote ? [['Nota admin', selected.adminNote]] : []),
                 ...(selected.notes ? [['Notas cliente', selected.notes]] : []),
+                ...(selected.internalNote ? [['Notas internas', selected.internalNote]] : []),
               ].map(([label, value]) => (
                 <div key={label as string} className="flex justify-between py-2.5 gap-4">
                   <dt className="text-ink-muted shrink-0">{label}</dt>
@@ -375,6 +545,85 @@ export function AppointmentTable() {
                 <dd><StatusBadge status={selected.status} /></dd>
               </div>
             </dl>
+
+            <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="h-eyebrow mb-1">Seguimiento comercial</p>
+                  <p className="text-xs text-ink-muted">Uso interno del equipo. No se muestra al cliente.</p>
+                </div>
+                {selected.phone && (
+                  <a
+                    href={formatWhatsAppUrl(selected.phone, selected.name)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                  >
+                    <MessageCircle size={13} strokeWidth={1.5} />
+                    WhatsApp
+                  </a>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label-clean">Estado</label>
+                  <select
+                    value={commercialStatus}
+                    onChange={e => setCommercialStatus(e.target.value as CommercialStatus)}
+                    className="input-clean mt-1"
+                  >
+                    {commercialStatusOptions.map(option => (
+                      <option key={option} value={option}>{commercialStatusLabels[option]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-clean">Fecha de follow-up</label>
+                  <input
+                    type="datetime-local"
+                    value={followUpAt}
+                    onChange={e => setFollowUpAt(e.target.value)}
+                    className="input-clean mt-1"
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="label-clean">Notas internas</label>
+                <Textarea
+                  value={internalNote}
+                  onChange={e => setInternalNote(e.target.value)}
+                  placeholder="Preparación, resultado, siguiente paso o contexto comercial."
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+              <Button size="sm" className="mt-3" loading={savingCommercial} onClick={() => void saveCommercial()}>
+                <Save size={14} strokeWidth={1.5} />
+                Guardar seguimiento
+              </Button>
+            </div>
+
+            {selected.customerHistory && selected.customerHistory.length > 0 && (
+              <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
+                <p className="h-eyebrow mb-3">Historial cliente</p>
+                <div className="space-y-2">
+                  {selected.customerHistory.map(item => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-panel px-3 py-2 text-xs">
+                      <div>
+                        <p className="font-medium text-ink">{item.slotDatetime ? formatShortDate(item.slotDatetime) : 'Sin fecha'}</p>
+                        <p className="text-ink-muted">{[item.productType, item.budgetRange].filter(Boolean).join(' · ') || item.name}</p>
+                      </div>
+                      <div className="text-right">
+                        <StatusBadge status={item.status} />
+                        {item.commercialStatus && (
+                          <p className="mt-1 text-[10px] text-ink-muted">{commercialStatusLabels[item.commercialStatus]}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {(selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">

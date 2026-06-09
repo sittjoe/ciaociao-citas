@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format, parseISO } from 'date-fns'
@@ -41,6 +41,7 @@ const STEPS: Step[] = ['calendar', 'slots', 'form', 'upload', 'review', 'done']
 const STEP_LABELS   = ['Fecha', 'Horario', 'Datos', 'Identificación', 'Confirmar', '']
 const DRAFT_KEY = 'ciaociao-booking-draft-v1'
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
+const SUPPORT_EMAIL = 'hola@ciaociao.mx'
 
 const stepVariants = {
   initial: (dir: number) => ({ opacity: 0, x: dir * 36 }),
@@ -61,6 +62,7 @@ export function BookingWizard() {
   const [confirmCode,  setConfirmCode] = useState('')
   const [submitNotice, setSubmitNotice]= useState<string | null>(null)
   const [needsIdAgain, setNeedsIdAgain]= useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)
   const direction = useRef<1 | -1>(1)
   const submitInFlight = useRef(false)
   const restoredSlotId = useRef<string | null>(null)
@@ -127,6 +129,7 @@ export function BookingWizard() {
         lookingFor: draft.values.lookingFor ?? '',
         whatsapp: draft.values.whatsapp ?? false,
       })
+      setDraftRestored(true)
       setGuests(draft.guests ?? [])
       setSelectedDate(draft.selectedDate)
       restoredSlotId.current = draft.selectedSlotId
@@ -238,6 +241,12 @@ export function BookingWizard() {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
+      {draftRestored && step !== 'done' && (
+        <div className="mb-4 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-3 text-sm text-champagne-deep">
+          Recuperamos tu avance guardado en este dispositivo. Puedes continuar donde te quedaste.
+        </div>
+      )}
+
       {/* Progress bar */}
       {step !== 'done' && (
         <div className="mb-6">
@@ -319,12 +328,7 @@ export function BookingWizard() {
                   </Button>
                 </div>
               ) : slots.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
-                    En este momento no tenemos horarios disponibles. Te invitamos a regresar pronto o escribirnos a{' '}
-                    <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
-                  </p>
-                </div>
+                <WaitlistForm />
               ) : (
                 <CalendarView
                   slots={slots}
@@ -688,5 +692,167 @@ export function BookingWizard() {
           )}
       </motion.div>
     </div>
+  )
+}
+
+function WaitlistForm() {
+  const [values, setValues] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    productType: '',
+    budgetRange: '',
+    message: '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as { error?: unknown }
+        throw new Error(typeof json.error === 'string' ? json.error : 'No pudimos guardar tus datos')
+      }
+      setSent(true)
+      toast.success('Te avisaremos cuando haya horarios disponibles')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar tus datos')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (sent) {
+    return (
+      <div className="px-4 py-12 text-center">
+        <CheckCircle2 size={30} strokeWidth={1.5} className="mx-auto text-champagne" />
+        <h3 className="mt-4 font-serif text-2xl font-light text-ink">Quedaste en lista</h3>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
+          Guardamos tus datos. En cuanto abramos nuevos horarios, el equipo podrá contactarte.
+        </p>
+        <a href={`mailto:${SUPPORT_EMAIL}`} className="mt-5 inline-flex text-sm font-medium text-champagne hover:underline">
+          Tengo problema para reservar
+        </a>
+      </div>
+    )
+  }
+
+  return (
+    <form className="space-y-4 px-1 py-2" onSubmit={submit}>
+      <div className="text-center">
+        <h3 className="font-serif text-2xl font-light text-ink">Sin horarios disponibles</h3>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
+          Déjanos tus datos y te avisamos cuando haya nuevos espacios para el showroom.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Nombre completo" required>
+          {(id, ariaProps) => (
+            <input
+              id={id}
+              {...ariaProps}
+              value={values.name}
+              onChange={e => setValues(prev => ({ ...prev, name: e.target.value }))}
+              className="input-clean"
+              autoComplete="name"
+              required
+            />
+          )}
+        </Field>
+        <Field label="Teléfono" required>
+          {(id, ariaProps) => (
+            <input
+              id={id}
+              {...ariaProps}
+              value={values.phone}
+              onChange={e => setValues(prev => ({ ...prev, phone: e.target.value }))}
+              className="input-clean"
+              autoComplete="tel"
+              required
+            />
+          )}
+        </Field>
+      </div>
+
+      <Field label="Email" required>
+        {(id, ariaProps) => (
+          <input
+            id={id}
+            {...ariaProps}
+            value={values.email}
+            onChange={e => setValues(prev => ({ ...prev, email: e.target.value }))}
+            type="email"
+            className="input-clean"
+            autoComplete="email"
+            required
+          />
+        )}
+      </Field>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Producto de interés">
+          {(id, ariaProps) => (
+            <select
+              id={id}
+              {...ariaProps}
+              value={values.productType}
+              onChange={e => setValues(prev => ({ ...prev, productType: e.target.value }))}
+              className="input-clean"
+            >
+              <option value="">Seleccionar</option>
+              {productTypeOptions.map(option => <option key={option} value={option}>{option}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Presupuesto aproximado">
+          {(id, ariaProps) => (
+            <select
+              id={id}
+              {...ariaProps}
+              value={values.budgetRange}
+              onChange={e => setValues(prev => ({ ...prev, budgetRange: e.target.value }))}
+              className="input-clean"
+            >
+              <option value="">Seleccionar</option>
+              {budgetRangeOptions.map(option => <option key={option} value={option}>{option}</option>)}
+            </select>
+          )}
+        </Field>
+      </div>
+
+      <Field label="Mensaje">
+        {(id, ariaProps) => (
+          <textarea
+            id={id}
+            {...ariaProps}
+            value={values.message}
+            onChange={e => setValues(prev => ({ ...prev, message: e.target.value }))}
+            className="input-clean resize-none"
+            rows={3}
+            placeholder="Horario ideal, tipo de pieza o cualquier detalle útil."
+          />
+        )}
+      </Field>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="submit" className="flex-1" loading={submitting}>
+          Avisarme
+        </Button>
+        <a
+          href={`mailto:${SUPPORT_EMAIL}?subject=Ayuda%20para%20reservar`}
+          className="inline-flex items-center justify-center rounded-xl border border-ink-line px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:border-champagne hover:text-champagne"
+        >
+          Tengo problema para reservar
+        </a>
+      </div>
+    </form>
   )
 }

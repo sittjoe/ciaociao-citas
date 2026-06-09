@@ -20,6 +20,15 @@ export const budgetRangeOptions = [
   'Aún no lo sé',
 ] as const
 
+export const commercialStatusOptions = [
+  'pending',
+  'prepared',
+  'completed',
+  'purchased',
+  'not_purchased',
+  'follow_up',
+] as const
+
 export const bookingFormSchema = z.object({
   name: z
     .string()
@@ -105,3 +114,30 @@ export const rescheduleSchema = z.object({
 })
 
 export type RescheduleInput = z.infer<typeof rescheduleSchema>
+
+export const waitlistSchema = z.object({
+  name: z
+    .string()
+    .min(3, 'Mínimo 3 caracteres')
+    .max(100, 'Máximo 100 caracteres')
+    .regex(/^[\p{L}\s'.,-]+$/u, 'Solo letras, espacios y caracteres comunes'),
+  email: z.string().email('Email inválido').max(200),
+  phone: z
+    .string()
+    .min(8, 'Mínimo 8 dígitos')
+    .max(20, 'Máximo 20 caracteres')
+    .regex(/^[+\d\s\-().]+$/, 'Teléfono inválido'),
+  productType: z.enum(productTypeOptions).optional().or(z.literal('')),
+  budgetRange: z.enum(budgetRangeOptions).optional().or(z.literal('')),
+  message: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
+})
+
+export type WaitlistInput = z.infer<typeof waitlistSchema>
+
+export const commercialUpdateSchema = z.object({
+  commercialStatus: z.enum(commercialStatusOptions).default('pending'),
+  internalNote: z.string().max(1000, 'Máximo 1000 caracteres').optional().or(z.literal('')),
+  followUpAt: z.string().datetime('Fecha inválida').optional().or(z.literal('')),
+})
+
+export type CommercialUpdateInput = z.infer<typeof commercialUpdateSchema>

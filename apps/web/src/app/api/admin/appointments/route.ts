@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { requireAdminSession } from '@/lib/admin-auth'
+import { getCommercialPriority } from '@/lib/commercial'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const status   = searchParams.get('status')     // pending|accepted|rejected|cancelled
   const search   = searchParams.get('search')     // name/email/phone
+  const productType = searchParams.get('productType')
+  const budgetRange = searchParams.get('budgetRange')
+  const priority = searchParams.get('priority')
+  const commercialStatus = searchParams.get('commercialStatus')
   const dateFrom = searchParams.get('dateFrom')   // ISO
   const dateTo   = searchParams.get('dateTo')     // ISO
   const cursor   = searchParams.get('cursor')     // doc ID
@@ -41,7 +46,8 @@ export async function GET(request: Request) {
       if (cursorDoc.exists) query = query.startAfter(cursorDoc)
     }
 
-    query = query.limit(limit + 1)
+    const hasClientFilters = Boolean(search || productType || budgetRange || priority || commercialStatus)
+    query = query.limit(hasClientFilters ? 500 : limit + 1)
 
     const snap  = await query.get()
     let   docs  = snap.docs
@@ -62,8 +68,32 @@ export async function GET(request: Request) {
         )
       })
     }
+    if (priority) {
+      docs = docs.filter(doc => {
+        const d = doc.data()
+        return getCommercialPriority({
+          productType: d.productType,
+          budgetRange: d.budgetRange,
+          lookingFor: d.lookingFor,
+        }) === priority
+      })
+    }
+    if (productType) {
+      docs = docs.filter(doc => String(doc.data().productType ?? '') === productType)
+    }
+    if (budgetRange) {
+      docs = docs.filter(doc => String(doc.data().budgetRange ?? '') === budgetRange)
+    }
+    if (commercialStatus === 'pending') {
+      docs = docs.filter(doc => {
+        const d = doc.data()
+        return !d.commercialStatus || d.commercialStatus === 'pending'
+      })
+    } else if (commercialStatus) {
+      docs = docs.filter(doc => String(doc.data().commercialStatus ?? '') === commercialStatus)
+    }
 
-    const hasMore    = docs.length > limit
+    const hasMore    = !hasClientFilters && docs.length > limit
     const resultDocs = hasMore ? docs.slice(0, limit) : docs
     const nextCursor = hasMore ? resultDocs[resultDocs.length - 1].id : null
 
@@ -80,6 +110,14 @@ export async function GET(request: Request) {
         productType:      d.productType ?? '',
         budgetRange:      d.budgetRange ?? '',
         lookingFor:       d.lookingFor ?? '',
+        commercialPriority: getCommercialPriority({
+          productType: d.productType,
+          budgetRange: d.budgetRange,
+          lookingFor: d.lookingFor,
+        }),
+        commercialStatus: d.commercialStatus ?? 'pending',
+        internalNote:     d.internalNote ?? '',
+        followUpAt:       d.followUpAt ? (d.followUpAt as Timestamp)?.toDate().toISOString() : null,
         whatsapp:         d.whatsapp ?? false,
         status:           d.status,
         confirmationCode: d.confirmationCode,
