@@ -17,6 +17,9 @@ interface ApptDetail {
   email: string
   phone: string
   notes?: string
+  productType?: string
+  budgetRange?: string
+  lookingFor?: string
   status: AppointmentStatus
   confirmationCode: string
   identificationUrl?: string
@@ -185,6 +188,9 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
               ['Email',    appt.email],
               ['Teléfono', appt.phone],
               ['Fecha',    formatShortDate(appt.slotDatetime)],
+              ...(appt.productType ? [['Producto', appt.productType]] : []),
+              ...(appt.budgetRange ? [['Presupuesto', appt.budgetRange]] : []),
+              ...(appt.lookingFor ? [['Busca', appt.lookingFor]] : []),
               ['Calendar', appt.googleCalendarEventId
                 ? 'Sincronizado'
                 : appt.calendarSyncFailed

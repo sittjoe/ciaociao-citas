@@ -15,7 +15,13 @@ import { SlotPicker } from './SlotPicker'
 import { IDUploader } from './IDUploader'
 import { GuestsField } from './GuestsField'
 import { Button } from '@/components/ui/Button'
-import { bookingFormSchema, type BookingFormInput, type GuestInput } from '@/lib/schemas'
+import {
+  bookingFormSchema,
+  budgetRangeOptions,
+  productTypeOptions,
+  type BookingFormInput,
+  type GuestInput,
+} from '@/lib/schemas'
 import { cn, formatDate, formatTime } from '@/lib/utils'
 
 interface Slot { id: string; datetime: string }
@@ -116,6 +122,9 @@ export function BookingWizard() {
         email: draft.values.email ?? '',
         phone: draft.values.phone ?? '',
         notes: draft.values.notes ?? '',
+        productType: draft.values.productType ?? '',
+        budgetRange: draft.values.budgetRange ?? '',
+        lookingFor: draft.values.lookingFor ?? '',
         whatsapp: draft.values.whatsapp ?? false,
       })
       setGuests(draft.guests ?? [])
@@ -181,6 +190,9 @@ export function BookingWizard() {
     fd.append('email',    data.email)
     fd.append('phone',    data.phone)
     fd.append('notes',    data.notes ?? '')
+    fd.append('productType', data.productType ?? '')
+    fd.append('budgetRange', data.budgetRange ?? '')
+    fd.append('lookingFor', data.lookingFor ?? '')
     fd.append('whatsapp', String(data.whatsapp))
     fd.append('idFile',   idFile)
     fd.append('idempotencyKey', idempotencyKey.current)
@@ -354,7 +366,7 @@ export function BookingWizard() {
               className="space-y-4"
               onSubmit={async e => {
                 e.preventDefault()
-                const formOk = await trigger(['name', 'email', 'phone', 'notes', 'whatsapp'])
+                const formOk = await trigger(['name', 'email', 'phone', 'notes', 'productType', 'budgetRange', 'lookingFor', 'whatsapp'])
                 if (!formOk) {
                   toast.error('Completa tus datos antes de continuar')
                   if (errors.name) setFocus('name')
@@ -441,6 +453,53 @@ export function BookingWizard() {
                   )}
                 </Field>
 
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Tipo de producto que buscas" error={errors.productType?.message}>
+                    {(id, ariaProps) => (
+                      <select
+                        id={id}
+                        {...ariaProps}
+                        {...register('productType')}
+                        className="input-clean"
+                      >
+                        <option value="">Seleccionar</option>
+                        {productTypeOptions.map(option => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+
+                  <Field label="Presupuesto aproximado" error={errors.budgetRange?.message}>
+                    {(id, ariaProps) => (
+                      <select
+                        id={id}
+                        {...ariaProps}
+                        {...register('budgetRange')}
+                        className="input-clean"
+                      >
+                        <option value="">Seleccionar</option>
+                        {budgetRangeOptions.map(option => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                </div>
+
+                <Field label="Cuéntanos qué estás buscando" error={errors.lookingFor?.message}>
+                  {(id, ariaProps) => (
+                    <textarea
+                      id={id}
+                      {...ariaProps}
+                      {...register('lookingFor')}
+                      className="input-clean resize-none"
+                      rows={4}
+                      placeholder="Ej. un anillo para aniversario, oro amarillo, algo discreto..."
+                    />
+                  )}
+                </Field>
+
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">
                   <input
                     {...register('whatsapp')}
@@ -493,9 +552,15 @@ export function BookingWizard() {
               onSubmit={handleSubmit(onSubmit, errs => {
                 const first = Object.values(errs)[0]?.message
                 toast.error(first ?? 'Revisa los datos del formulario')
-                if (errs.name || errs.email || errs.phone || errs.notes) {
+                if (errs.name || errs.email || errs.phone || errs.notes || errs.productType || errs.budgetRange || errs.lookingFor) {
                   goTo('form')
-                  const field = errs.name ? 'name' : errs.email ? 'email' : errs.phone ? 'phone' : 'notes'
+                  const field = errs.name ? 'name'
+                    : errs.email ? 'email'
+                    : errs.phone ? 'phone'
+                    : errs.notes ? 'notes'
+                    : errs.productType ? 'productType'
+                    : errs.budgetRange ? 'budgetRange'
+                    : 'lookingFor'
                   window.setTimeout(() => setFocus(field), 0)
                 }
               })}
@@ -514,6 +579,9 @@ export function BookingWizard() {
                     ['Email',         getValues('email')],
                     ['Teléfono',      getValues('phone')],
                     ...(getValues('notes') ? [['Notas', getValues('notes')!]] : []),
+                    ...(getValues('productType') ? [['Producto', getValues('productType')!]] : []),
+                    ...(getValues('budgetRange') ? [['Presupuesto', getValues('budgetRange')!]] : []),
+                    ...(getValues('lookingFor') ? [['Busca', getValues('lookingFor')!]] : []),
                     ['Identificación', idFile?.name ?? ''],
                   ] as [string, string][]).map(([label, value]) => (
                     <div key={label} className="flex justify-between py-2.5 text-sm">

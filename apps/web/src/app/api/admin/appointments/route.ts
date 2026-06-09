@@ -55,7 +55,10 @@ export async function GET(request: Request) {
           String(d.name  ?? '').toLowerCase().includes(q) ||
           String(d.email ?? '').toLowerCase().includes(q) ||
           String(d.phone ?? '').toLowerCase().includes(q) ||
-          String(d.confirmationCode ?? '').toLowerCase().includes(q)
+          String(d.confirmationCode ?? '').toLowerCase().includes(q) ||
+          String(d.productType ?? '').toLowerCase().includes(q) ||
+          String(d.budgetRange ?? '').toLowerCase().includes(q) ||
+          String(d.lookingFor ?? '').toLowerCase().includes(q)
         )
       })
     }
@@ -74,6 +77,9 @@ export async function GET(request: Request) {
         email:            d.email,
         phone:            d.phone,
         notes:            d.notes ?? '',
+        productType:      d.productType ?? '',
+        budgetRange:      d.budgetRange ?? '',
+        lookingFor:       d.lookingFor ?? '',
         whatsapp:         d.whatsapp ?? false,
         status:           d.status,
         confirmationCode: d.confirmationCode,

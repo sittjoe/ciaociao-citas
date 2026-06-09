@@ -67,6 +67,9 @@ export async function POST(request: Request) {
       email:    formData.get('email'),
       phone:    formData.get('phone'),
       notes:    formData.get('notes') ?? '',
+      productType: formData.get('productType') ?? '',
+      budgetRange: formData.get('budgetRange') ?? '',
+      lookingFor: formData.get('lookingFor') ?? '',
       whatsapp: formData.get('whatsapp') === 'true',
     }
 
@@ -86,7 +89,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Formato no permitido. Usa JPG, PNG, WebP o PDF.' }, { status: 422 })
     }
 
-    const { slotId, name, email, phone, notes, whatsapp } = parsed.data
+    const { slotId, name, email, phone, notes, productType, budgetRange, lookingFor, whatsapp } = parsed.data
     const idempotencyKeyRaw = String(formData.get('idempotencyKey') ?? '').trim()
     const idempotencyKey = /^[a-zA-Z0-9_-]{16,80}$/.test(idempotencyKeyRaw) ? idempotencyKeyRaw : randomUUID()
     idempotencyRef = adminDb
@@ -236,6 +239,9 @@ export async function POST(request: Request) {
         email:        email.toLowerCase().trim(),
         phone:        phone.trim(),
         notes:        sanitize(notes ?? ''),
+        productType:  sanitize(productType ?? ''),
+        budgetRange:  sanitize(budgetRange ?? ''),
+        lookingFor:   sanitize(lookingFor ?? ''),
         whatsapp:     whatsapp ?? false,
         identificationUrl,
         status:              'pending',
@@ -310,6 +316,9 @@ export async function POST(request: Request) {
       email:  email.toLowerCase().trim(),
       phone:  phone.trim(),
       notes:  sanitize(notes ?? ''),
+      productType: sanitize(productType ?? ''),
+      budgetRange: sanitize(budgetRange ?? ''),
+      lookingFor:  sanitize(lookingFor ?? ''),
       identificationUrl,
       status:            'pending',
       confirmationCode,

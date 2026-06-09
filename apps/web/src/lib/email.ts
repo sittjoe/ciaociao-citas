@@ -312,6 +312,9 @@ export async function sendBookingConfirmation(
             ['Teléfono', appt.phone],
             ['Fecha', `${dateStr} ${timeStr}`],
             ['Notas', appt.notes || 'Sin notas'],
+            ...(appt.productType ? [['Producto', appt.productType] as [string, string]] : []),
+            ...(appt.budgetRange ? [['Presupuesto', appt.budgetRange] as [string, string]] : []),
+            ...(appt.lookingFor ? [['Busca', appt.lookingFor] as [string, string]] : []),
           ])}
         </div>
         <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Gestionar cita</a></p>

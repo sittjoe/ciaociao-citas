@@ -38,6 +38,9 @@ export interface Appointment {
   email: string
   phone: string
   notes?: string
+  productType?: string
+  budgetRange?: string
+  lookingFor?: string
   identificationUrl: string
   status: AppointmentStatus
   confirmationCode: string
@@ -63,6 +66,9 @@ export interface BookingFormData {
   email: string
   phone: string
   notes?: string
+  productType?: string
+  budgetRange?: string
+  lookingFor?: string
   idFile: File
 }
 

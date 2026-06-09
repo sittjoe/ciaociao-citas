@@ -1,5 +1,25 @@
 import { z } from 'zod'
 
+export const productTypeOptions = [
+  'Anillo',
+  'Aretes',
+  'Collar',
+  'Pulsera',
+  'Dije',
+  'Regalo',
+  'Diseño personalizado',
+  'No estoy seguro/a',
+] as const
+
+export const budgetRangeOptions = [
+  'Menos de $5,000 MXN',
+  '$5,000 - $15,000 MXN',
+  '$15,000 - $30,000 MXN',
+  '$30,000 - $60,000 MXN',
+  'Más de $60,000 MXN',
+  'Aún no lo sé',
+] as const
+
 export const bookingFormSchema = z.object({
   name: z
     .string()
@@ -18,6 +38,13 @@ export const bookingFormSchema = z.object({
   notes: z
     .string()
     .max(500, 'Máximo 500 caracteres')
+    .optional()
+    .or(z.literal('')),
+  productType: z.enum(productTypeOptions).optional().or(z.literal('')),
+  budgetRange: z.enum(budgetRangeOptions).optional().or(z.literal('')),
+  lookingFor: z
+    .string()
+    .max(700, 'Máximo 700 caracteres')
     .optional()
     .or(z.literal('')),
   whatsapp: z.boolean().default(false),

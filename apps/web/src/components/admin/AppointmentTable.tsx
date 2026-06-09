@@ -36,6 +36,15 @@ const columns = [
     header: 'Nombre',
     cell: info => <span className="font-medium text-ink">{info.getValue()}</span>,
   }),
+  col.accessor('productType', {
+    header: 'Producto',
+    enableSorting: false,
+    cell: info => (
+      <span className="text-xs text-ink-muted whitespace-nowrap">
+        {info.getValue() || '—'}
+      </span>
+    ),
+  }),
   col.accessor('slotDatetime', {
     header: 'Fecha',
     cell: info => <span className="text-ink-muted whitespace-nowrap">{formatShortDate(info.getValue())}</span>,
@@ -153,7 +162,7 @@ export function AppointmentTable() {
 
   const exportCSV = useCallback(() => {
     const BOM  = '﻿'
-    const head = csvRow(['Código', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Notas', 'Aprobado por'])
+    const head = csvRow(['Código', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Producto', 'Presupuesto', 'Busca', 'Notas', 'Aprobado por'])
     const rows = appointments.map(a => csvRow([
       a.confirmationCode,
       a.name,
@@ -161,6 +170,9 @@ export function AppointmentTable() {
       a.phone,
       new Date(a.slotDatetime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }),
       a.status,
+      a.productType ?? '',
+      a.budgetRange ?? '',
+      a.lookingFor ?? '',
       a.notes ?? '',
       a.decidedBy ?? '',
     ]))
@@ -215,7 +227,7 @@ export function AppointmentTable() {
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
-          <TableSkeleton rows={6} cols={5} />
+          <TableSkeleton rows={6} cols={6} />
         ) : appointments.length === 0 ? (
           <EmptyState
             title="Sin citas"
@@ -230,7 +242,7 @@ export function AppointmentTable() {
                     key={header.id}
                     className={cn(
                       'px-4 py-3 text-left',
-                      header.id === 'email' && 'hidden sm:table-cell',
+                      (header.id === 'email' || header.id === 'productType') && 'hidden sm:table-cell',
                     )}
                   >
                     {header.column.getCanSort() ? (
@@ -261,7 +273,7 @@ export function AppointmentTable() {
                         key={cell.id}
                         className={cn(
                           'px-4 py-3',
-                          cell.column.id === 'email' && 'hidden sm:table-cell',
+                          (cell.column.id === 'email' || cell.column.id === 'productType') && 'hidden sm:table-cell',
                         )}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -335,6 +347,9 @@ export function AppointmentTable() {
                 ['Email',     selected.email],
                 ['Teléfono',  selected.phone],
                 ['Fecha',     formatShortDate(selected.slotDatetime)],
+                ...(selected.productType ? [['Producto', selected.productType]] : []),
+                ...(selected.budgetRange ? [['Presupuesto', selected.budgetRange]] : []),
+                ...(selected.lookingFor ? [['Busca', selected.lookingFor]] : []),
                 ['Calendar',  selected.googleCalendarEventId
                   ? 'Sincronizado'
                   : (selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed
