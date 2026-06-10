@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Timestamp } from 'firebase-admin/firestore'
-import { AlertTriangle, Bell, CalendarX, MailWarning, ShieldAlert, Wrench } from 'lucide-react'
+import { AlertTriangle, Bell, CalendarX, MailWarning, Monitor, ShieldAlert, Wrench } from 'lucide-react'
 import { adminDb } from '@/lib/firebase-admin'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { formatShortDate } from '@/lib/utils'
+import { normalizeAppointmentType } from '@/lib/commercial'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Problemas' }
@@ -17,12 +18,27 @@ function ts(value: unknown): string | null {
 }
 
 async function getProblems() {
-  const [failedEmails, calendarAppts, guestIssues, lastRuns, waitlist] = await Promise.all([
+  const now = new Date()
+  const weekEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const [failedEmails, calendarAppts, guestIssues, lastRuns, waitlist, upcomingSlots, upcomingVideoAppts] = await Promise.all([
     adminDb.collection('emailOutbox').where('status', '==', 'failed').limit(12).get(),
     adminDb.collection('appointments').where('calendarSyncFailed', '==', true).limit(12).get(),
     adminDb.collectionGroup('guests').where('status', 'in', ['pending', 'expired']).limit(30).get(),
     adminDb.collection('maintenanceRuns').orderBy('createdAt', 'desc').limit(6).get(),
     adminDb.collection('availabilityWaitlist').where('status', '==', 'new').limit(12).get(),
+    adminDb.collection('slots')
+      .where('available', '==', true)
+      .where('datetime', '>=', Timestamp.fromDate(now))
+      .where('datetime', '<', Timestamp.fromDate(weekEnd))
+      .limit(200)
+      .get(),
+    adminDb.collection('appointments')
+      .where('status', '==', 'accepted')
+      .where('appointmentType', '==', 'video_engagement_rings')
+      .where('slotDatetime', '>=', Timestamp.fromDate(now))
+      .orderBy('slotDatetime')
+      .limit(30)
+      .get(),
   ])
 
   const apptIds = Array.from(new Set(guestIssues.docs.map(doc => String(doc.data().appointmentId ?? '')).filter(Boolean)))
@@ -31,6 +47,11 @@ async function getProblems() {
     const snap = await adminDb.collection('appointments').doc(id).get()
     if (snap.exists) apptMap.set(id, snap.data()!)
   }))
+
+  const slotsByType = upcomingSlots.docs.reduce<Record<'showroom' | 'video_engagement_rings', number>>((acc, doc) => {
+    acc[normalizeAppointmentType(doc.data().slotType)]++
+    return acc
+  }, { showroom: 0, video_engagement_rings: 0 })
 
   return {
     failedEmails: failedEmails.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: ts(doc.data().createdAt) })) as ProblemDoc[],
@@ -53,6 +74,10 @@ async function getProblems() {
     }),
     runs: lastRuns.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: ts(doc.data().createdAt) })) as ProblemDoc[],
     waitlist: waitlist.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: ts(doc.data().createdAt) })) as ProblemDoc[],
+    slotsByType,
+    videoMissingLink: upcomingVideoAppts.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }) as ProblemDoc)
+      .filter(appt => !String(appt.meetingUrl ?? '').trim()),
   }
 }
 
@@ -67,7 +92,10 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
 
 export default async function ProblemasPage() {
   const data = await getProblems()
-  const totalIssues = data.failedEmails.length + data.calendarAppts.length + data.guestIssues.filter(g => g.status === 'expired').length
+  const totalIssues = data.failedEmails.length
+    + data.calendarAppts.length
+    + data.videoMissingLink.length
+    + data.guestIssues.filter(g => g.status === 'expired').length
 
   return (
     <div className="space-y-6">
@@ -87,6 +115,21 @@ export default async function ProblemasPage() {
         <Metric label="Calendar con error" value={data.calendarAppts.length} tone="text-amber-700" />
         <Metric label="Invitados pendientes/expirados" value={data.guestIssues.length} tone="text-champagne-deep" />
         <Metric label="Lista de espera" value={data.waitlist.length} tone="text-ink" />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card variant="admin" className="p-4">
+          <p className="text-xs text-ink-muted">Slots showroom próximos</p>
+          <p className="mt-1 text-2xl font-semibold text-ink">{data.slotsByType.showroom}</p>
+        </Card>
+        <Card variant="admin" className="p-4">
+          <p className="text-xs text-ink-muted">Slots video próximos</p>
+          <p className="mt-1 text-2xl font-semibold text-ink">{data.slotsByType.video_engagement_rings}</p>
+        </Card>
+        <Card variant="admin" className="p-4">
+          <p className="text-xs text-ink-muted">Video aceptadas sin link</p>
+          <p className={`mt-1 text-2xl font-semibold ${data.videoMissingLink.length > 0 ? 'text-red-600' : 'text-emerald-700'}`}>{data.videoMissingLink.length}</p>
+        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -113,6 +156,31 @@ export default async function ProblemasPage() {
                   </p>
                 )}
                 {lead.message && <p className="mt-1 text-xs text-ink-muted">{String(lead.message).slice(0, 180)}</p>}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+
+        <Card variant="admin">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Monitor size={18} className="text-red-500" />
+            <h2 className="font-serif text-lg text-ink">Video consultas sin link</h2>
+          </CardHeader>
+          <CardBody className="space-y-3 pt-0">
+            {data.videoMissingLink.length === 0 ? (
+              <p className="text-sm text-ink-muted">No hay video consultas aceptadas pendientes de enlace.</p>
+            ) : data.videoMissingLink.map(appt => (
+              <div key={appt.id} className="rounded-xl border border-red-100 bg-red-50/60 px-3 py-2 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-ink">{String(appt.name ?? '')}</p>
+                    <p className="text-xs text-ink-muted">{String(appt.email ?? '')}</p>
+                  </div>
+                  <Link className="text-xs font-medium text-red-600 hover:underline" href="/admin/citas">Agregar link</Link>
+                </div>
+                <p className="mt-1 text-xs text-red-700">
+                  {appt.slotDatetime instanceof Timestamp ? formatShortDate(appt.slotDatetime.toDate()) : 'Sin fecha'}
+                </p>
               </div>
             ))}
           </CardBody>

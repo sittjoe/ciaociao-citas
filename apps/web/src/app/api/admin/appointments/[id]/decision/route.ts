@@ -7,6 +7,7 @@ import { requireAdminSession } from '@/lib/admin-auth'
 import { createAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
+import { logAppointmentEvent } from '@/lib/appointment-events'
 import type { Appointment, AppointmentStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -104,6 +105,13 @@ export async function POST(
     after(sendStatusUpdate(appointment!, action, reason).catch(err =>
       console.error('Status email failed (non-fatal):', err)
     ))
+    after(logAppointmentEvent({
+      appointmentId: id,
+      action: 'decision',
+      actor: admin.email,
+      summary: action === 'accept' ? 'Cita aceptada' : 'Cita rechazada',
+      metadata: { action, reason: reason ?? '' },
+    }).catch(err => console.error('Appointment event log failed:', err)))
 
     if (action === 'accept') {
       try {

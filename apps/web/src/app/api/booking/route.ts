@@ -3,11 +3,12 @@ import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { z } from 'zod'
 import { bookingPayloadSchema, guestInputSchema } from '@/lib/schemas'
-import { generateCode, sanitize } from '@/lib/utils'
+import { generateCode, phoneDigits, sanitize } from '@/lib/utils'
 import { isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
 import { releaseExpiredHolds } from '@/lib/holds'
 import { createSlotLock } from '@/lib/slot-locks'
+import { logAppointmentEvent } from '@/lib/appointment-events'
 import type { Appointment, Guest } from '@/types'
 import { randomUUID, randomBytes } from 'crypto'
 
@@ -193,6 +194,8 @@ export async function POST(request: Request) {
 
     const confirmationCode = generateCode(8)
     const cancelToken      = generateCode(16)
+    const normalizedPhone  = phone.trim()
+    const normalizedPhoneDigits = phoneDigits(normalizedPhone)
 
     // Pre-generate refs and tokens before the transaction so all writes are atomic
     const apptRef      = adminDb.collection('appointments').doc()
@@ -256,7 +259,8 @@ export async function POST(request: Request) {
         appointmentType,
         name:         sanitize(name),
         email:        email.toLowerCase().trim(),
-        phone:        phone.trim(),
+        phone:        normalizedPhone,
+        phoneDigits:  normalizedPhoneDigits,
         notes:        sanitize(notes ?? ''),
         productType:  sanitize(productType ?? ''),
         budgetRange:  sanitize(budgetRange ?? ''),
@@ -315,6 +319,13 @@ export async function POST(request: Request) {
       confirmationCode,
       updatedAt: FieldValue.serverTimestamp(),
     }).catch(() => {})
+    await logAppointmentEvent({
+      appointmentId,
+      action: 'booking_created',
+      actor: 'client',
+      summary: appointmentType === 'video_engagement_rings' ? 'Solicitud de video consulta creada' : 'Solicitud de showroom creada',
+      metadata: { appointmentType },
+    }).catch(err => console.error('Appointment event log failed:', err))
 
     // Build Guest objects from pre-generated entries (transaction committed)
     const createdGuests: Guest[] = guestEntries.map(g => ({
@@ -343,7 +354,7 @@ export async function POST(request: Request) {
       appointmentType,
       name:   sanitize(name),
       email:  email.toLowerCase().trim(),
-      phone:  phone.trim(),
+      phone:  normalizedPhone,
       notes:  sanitize(notes ?? ''),
       productType: sanitize(productType ?? ''),
       budgetRange: sanitize(budgetRange ?? ''),

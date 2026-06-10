@@ -7,6 +7,7 @@ import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendRescheduleNotice, sendCalendarError } from '@/lib/email'
 import { createSlotLock, releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
+import { logAppointmentEvent } from '@/lib/appointment-events'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -110,6 +111,13 @@ export async function POST(
     after(sendRescheduleNotice(updatedAppt!).catch(err =>
       console.error('Reschedule email failed (non-fatal):', err)
     ))
+    after(logAppointmentEvent({
+      appointmentId: id,
+      action: 'rescheduled',
+      actor: admin.email,
+      summary: 'Cita reagendada',
+      metadata: { newSlotId },
+    }).catch(err => console.error('Appointment event log failed:', err)))
 
     try {
       await updateAppointmentCalendarEvent(updatedAppt!)

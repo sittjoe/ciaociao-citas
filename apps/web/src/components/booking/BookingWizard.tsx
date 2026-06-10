@@ -579,17 +579,20 @@ export function BookingWizard() {
 
                   <Field label="Presupuesto aproximado" error={errors.budgetRange?.message}>
                     {(id, ariaProps) => (
-                      <select
-                        id={id}
-                        {...ariaProps}
-                        {...register('budgetRange')}
-                        className="input-clean"
-                      >
-                        <option value="">Seleccionar</option>
-                        {budgetRangeOptions.map(option => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
+                      <div className="space-y-1.5">
+                        <select
+                          id={id}
+                          {...ariaProps}
+                          {...register('budgetRange')}
+                          className="input-clean"
+                        >
+                          <option value="">Seleccionar</option>
+                          {budgetRangeOptions.map(option => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] leading-4 text-ink-subtle">Nuestras piezas empiezan desde $20,000 MXN.</p>
+                      </div>
                     )}
                   </Field>
                 </div>
@@ -947,7 +950,7 @@ function WaitlistForm() {
       <div className="text-center">
         <h3 className="font-serif text-2xl font-light text-ink">Sin horarios disponibles</h3>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
-          Déjanos tus datos y te avisamos cuando haya nuevos espacios para el showroom.
+          Déjanos tus datos y te avisamos cuando haya nuevos espacios. Nuestras piezas empiezan desde $20,000 MXN.
         </p>
       </div>
 

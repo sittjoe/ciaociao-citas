@@ -55,6 +55,10 @@ export function sanitize(text: string): string {
   return text.replace(/<[^>]*>/g, '').trim()
 }
 
+export function phoneDigits(value: string | null | undefined): string {
+  return (value ?? '').replace(/\D/g, '')
+}
+
 export function csvRow(values: (string | number | undefined | null)[]): string {
   return values.map(v => {
     const raw = String(v ?? '')

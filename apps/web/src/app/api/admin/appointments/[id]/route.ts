@@ -23,7 +23,7 @@ export async function GET(
     }
 
     const d = snap.data()!
-    const [historyByEmail, historyByPhone] = await Promise.all([
+    const [historyByEmail, historyByPhone, eventsSnap] = await Promise.all([
       adminDb
         .collection('appointments')
         .where('email', '==', String(d.email ?? '').toLowerCase().trim())
@@ -34,6 +34,7 @@ export async function GET(
         .where('phone', '==', String(d.phone ?? '').trim())
         .limit(12)
         .get(),
+      snap.ref.collection('events').orderBy('createdAt', 'desc').limit(12).get(),
     ])
     const historyDocs = Array.from(
       new Map([...historyByEmail.docs, ...historyByPhone.docs].map(doc => [doc.id, doc])).values(),
@@ -60,6 +61,17 @@ export async function GET(
           commercialStatus: item.commercialStatus ?? 'pending',
         }
       })
+
+    const eventHistory = eventsSnap.docs.map(doc => {
+      const item = doc.data()
+      return {
+        id: doc.id,
+        action: String(item.action ?? ''),
+        actor: String(item.actor ?? ''),
+        summary: String(item.summary ?? ''),
+        createdAt: item.createdAt instanceof Timestamp ? item.createdAt.toDate().toISOString() : null,
+      }
+    })
 
     return NextResponse.json({
       id: snap.id,
@@ -101,6 +113,7 @@ export async function GET(
       guestCount:       d.guestCount ?? 0,
       guestsAllVerified: d.guestsAllVerified ?? false,
       customerHistory,
+      eventHistory,
     })
   } catch (err) {
     console.error(`GET /api/admin/appointments/${id}`, err)

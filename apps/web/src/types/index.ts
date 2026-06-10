@@ -52,6 +52,7 @@ export interface Appointment {
   name: string
   email: string
   phone: string
+  phoneDigits?: string
   notes?: string
   productType?: string
   budgetRange?: string

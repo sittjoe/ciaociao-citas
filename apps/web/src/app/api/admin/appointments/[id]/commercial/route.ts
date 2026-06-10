@@ -7,6 +7,7 @@ import { sanitize } from '@/lib/utils'
 import { sendStatusUpdate } from '@/lib/email'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
+import { logAppointmentEvent } from '@/lib/appointment-events'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -88,6 +89,16 @@ export async function PATCH(
         return ref.update({ calendarSyncFailed: true }).catch(() => {})
       }))
     }
+    after(logAppointmentEvent({
+      appointmentId: id,
+      action: meetingChanged ? 'meeting_updated' : 'commercial_updated',
+      actor: admin.email,
+      summary: meetingChanged ? 'Datos de videollamada actualizados' : 'Seguimiento comercial actualizado',
+      metadata: {
+        commercialStatus,
+        hasMeetingUrl: Boolean(cleanMeetingUrl),
+      },
+    }).catch(err => console.error('Appointment event log failed:', err)))
 
     return NextResponse.json({ ok: true })
   } catch (err) {

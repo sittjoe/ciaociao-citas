@@ -34,6 +34,14 @@ type CustomerHistoryItem = {
   commercialStatus?: CommercialStatus
 }
 
+type AppointmentEventItem = {
+  id: string
+  action: string
+  actor: string
+  summary: string
+  createdAt: string | null
+}
+
 type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt' | 'clientConfirmedAt' | 'followUpAt'> & {
   slotDatetime: string
   createdAt: string
@@ -43,6 +51,7 @@ type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' |
   followUpAt?: string | null
   commercialPriority?: CommercialPriority
   customerHistory?: CustomerHistoryItem[]
+  eventHistory?: AppointmentEventItem[]
 }
 
 const col = createColumnHelper<SerialAppt>()
@@ -228,6 +237,14 @@ export function AppointmentTable() {
 
   const decide = useCallback(async (action: 'accept' | 'reject') => {
     if (!selected) return
+    if (
+      action === 'accept' &&
+      selected.appointmentType === 'video_engagement_rings' &&
+      !meetingUrl.trim()
+    ) {
+      const ok = window.confirm('Esta video consulta no tiene link guardado. Puedes aceptarla, pero el cliente recibirá que el enlace está pendiente. ¿Aceptar de todos modos?')
+      if (!ok) return
+    }
     setDeciding(true)
     try {
       const res = await fetch(`/api/admin/appointments/${selected.id}/decision`, {
@@ -700,6 +717,23 @@ export function AppointmentTable() {
                           <p className="mt-1 text-[10px] text-ink-muted">{commercialStatusLabels[item.commercialStatus]}</p>
                         )}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selected.eventHistory && selected.eventHistory.length > 0 && (
+              <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
+                <p className="h-eyebrow mb-3">Historial operativo</p>
+                <div className="space-y-2">
+                  {selected.eventHistory.map(event => (
+                    <div key={event.id} className="rounded-xl border border-admin-line bg-admin-panel px-3 py-2 text-xs">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-medium text-ink">{event.summary || event.action}</p>
+                        {event.createdAt && <span className="shrink-0 text-ink-subtle">{formatShortDate(event.createdAt)}</span>}
+                      </div>
+                      <p className="mt-1 text-ink-muted">{event.actor || 'Sistema'}</p>
                     </div>
                   ))}
                 </div>

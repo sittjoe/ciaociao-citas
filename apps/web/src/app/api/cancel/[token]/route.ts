@@ -5,6 +5,7 @@ import { deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendCancellationEmail } from '@/lib/email'
 import { releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
+import { logAppointmentEvent } from '@/lib/appointment-events'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -92,6 +93,12 @@ export async function POST(
     after(sendCancellationEmail(appointment).catch(err =>
       console.error('Cancellation email failed (non-fatal):', err)
     ))
+    after(logAppointmentEvent({
+      appointmentId: doc.id,
+      action: 'cancelled',
+      actor: 'client',
+      summary: 'Cita cancelada por el cliente',
+    }).catch(err => console.error('Appointment event log failed:', err)))
 
     return NextResponse.json({ ok: true })
   } catch (err) {
