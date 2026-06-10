@@ -24,6 +24,8 @@ export async function GET(request: Request) {
 
     if (dateFrom) {
       query = query.where('datetime', '>=', Timestamp.fromDate(fromZonedTime(`${dateFrom}T00:00:00`, BUSINESS_TZ)))
+    } else {
+      query = query.where('datetime', '>=', Timestamp.fromDate(new Date()))
     }
     if (dateTo) {
       query = query.where('datetime', '<=', Timestamp.fromDate(fromZonedTime(`${dateTo}T23:59:59`, BUSINESS_TZ)))
@@ -32,6 +34,8 @@ export async function GET(request: Request) {
       const end = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
       query = query.where('datetime', '<=', Timestamp.fromDate(end))
     }
+
+    query = query.limit(500)
 
     const snap  = await query.get()
     const slots = snap.docs.map(doc => {
@@ -68,7 +72,6 @@ export async function POST(request: Request) {
   const { dates, times, slotType } = parsed.data
 
   try {
-    const batch    = adminDb.batch()
     let   created  = 0
     const skipped: string[] = []
     const seenDatetimes = new Set<number>()
@@ -84,27 +87,32 @@ export async function POST(request: Request) {
         if (seenDatetimes.has(seenKey)) { skipped.push(`${date}T${time}`); continue }
         seenDatetimes.add(seenKey)
 
-        const duplicateSnap = await adminDb
-          .collection('slots')
-          .where('datetime', '==', Timestamp.fromDate(dt))
-          .limit(1)
-          .get()
-        if (!duplicateSnap.empty) { skipped.push(`${date}T${time}`); continue }
-
-        const ref = adminDb.collection('slots').doc()
-        batch.set(ref, {
-          datetime:  Timestamp.fromDate(dt),
-          available: true,
-          slotType,
-          heldUntil: null,
-          bookedBy:  null,
-          createdAt: FieldValue.serverTimestamp(),
+        const key = String(dt.getTime())
+        const didCreate = await adminDb.runTransaction(async tx => {
+          const duplicateQuery = adminDb
+            .collection('slots')
+            .where('datetime', '==', Timestamp.fromDate(dt))
+            .limit(1)
+          const duplicateSnap = await tx.get(duplicateQuery)
+          if (!duplicateSnap.empty) return false
+          const ref = adminDb.collection('slots').doc(key)
+          const existing = await tx.get(ref)
+          if (existing.exists) return false
+          tx.create(ref, {
+            datetime:  Timestamp.fromDate(dt),
+            available: true,
+            slotType,
+            heldUntil: null,
+            bookedBy:  null,
+            createdAt: FieldValue.serverTimestamp(),
+          })
+          return true
         })
+        if (!didCreate) { skipped.push(`${date}T${time}`); continue }
         created++
       }
     }
 
-    await batch.commit()
     return NextResponse.json({ created, skipped })
   } catch (err) {
     console.error('POST /api/admin/slots', err)

@@ -3,11 +3,16 @@ import { adminDb } from '@/lib/firebase-admin'
 import { sendReservationRecovery } from '@/lib/email'
 import { mapAppointmentForEmail } from '@/lib/appointment-email'
 import { phoneDigits } from '@/lib/utils'
+import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
+    const ip = requestIp(request)
+    if (await checkPublicRateLimit({ key: `recovery:ip:${ip}`, windowMs: 60 * 60 * 1000, max: 8 })) {
+      return NextResponse.json({ error: 'Demasiados intentos. Intenta más tarde.' }, { status: 429 })
+    }
     const body = await request.json() as { email?: string; phone?: string; code?: string }
     const email = body.email?.trim().toLowerCase()
     const phone = body.phone?.trim()
@@ -19,6 +24,10 @@ export async function POST(request: Request) {
 
     if (!hasValidEmail && !hasValidPhone) {
       return NextResponse.json({ error: 'Escribe un correo válido o teléfono con al menos 8 dígitos' }, { status: 422 })
+    }
+    const identityKey = hasValidEmail ? email! : digits
+    if (await checkPublicRateLimit({ key: `recovery:id:${identityKey}`, windowMs: 60 * 60 * 1000, max: 3 })) {
+      return NextResponse.json({ error: 'Demasiados intentos. Intenta más tarde.' }, { status: 429 })
     }
 
     let docs: FirebaseFirestore.QueryDocumentSnapshot[] = []

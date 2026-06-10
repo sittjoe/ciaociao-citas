@@ -8,6 +8,7 @@ export type AppointmentEventAction =
   | 'meeting_updated'
   | 'rescheduled'
   | 'cancelled'
+  | 'email_resent'
 
 export async function logAppointmentEvent(params: {
   appointmentId: string

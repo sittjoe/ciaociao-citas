@@ -59,24 +59,25 @@ export async function POST(
       cancelToken: data.cancelToken,
       reminder24Sent: data.reminder24Sent ?? false,
       reminder2Sent: data.reminder2Sent ?? false,
-      googleCalendarEventId: null,
+      googleCalendarEventId: data.googleCalendarEventId ?? null,
       meetingUrl: data.meetingUrl ?? null,
       meetingProvider: data.meetingProvider ?? null,
       meetingInstructions: data.meetingInstructions ?? null,
       createdAt: (data.createdAt as Timestamp).toDate(),
     }
 
-    if (data.status === 'accepted' && data.googleCalendarEventId) {
-      try {
-        await deleteAppointmentCalendarEvent({ ...appointment, googleCalendarEventId: data.googleCalendarEventId })
-      } catch (err) {
-        console.error('Google Calendar delete failed:', err)
-        return NextResponse.json({ error: 'No se pudo cancelar el evento en Google Calendar' }, { status: 502 })
-      }
-    }
+    let calendarEventIdToDelete: string | null = null
+    let cancelledWasAccepted = false
 
-    const slotRef = adminDb.collection('slots').doc(data.slotId)
     await adminDb.runTransaction(async tx => {
+      const fresh = await tx.get(doc.ref)
+      if (!fresh.exists) throw new Error('NOT_FOUND')
+      const freshData = fresh.data()!
+      if (freshData.status === 'cancelled') throw new Error('ALREADY_CANCELLED')
+      if (freshData.status === 'rejected') throw new Error('ALREADY_REJECTED')
+      cancelledWasAccepted = freshData.status === 'accepted'
+      calendarEventIdToDelete = freshData.googleCalendarEventId ?? null
+      const slotRef = adminDb.collection('slots').doc(freshData.slotId)
       tx.update(doc.ref, {
         status:    'cancelled',
         googleCalendarEventId: null,
@@ -87,8 +88,17 @@ export async function POST(
         heldUntil: null,
         bookedBy:  null,
       })
-      releaseSlotLock(tx, data.slotDatetime as Timestamp)
+      releaseSlotLock(tx, freshData.slotDatetime as Timestamp)
     })
+
+    if (cancelledWasAccepted && calendarEventIdToDelete) {
+      try {
+        await deleteAppointmentCalendarEvent({ ...appointment, googleCalendarEventId: calendarEventIdToDelete })
+      } catch (err) {
+        console.error('Google Calendar delete failed:', err)
+        await doc.ref.update({ calendarSyncFailed: true }).catch(() => {})
+      }
+    }
 
     after(sendCancellationEmail(appointment).catch(err =>
       console.error('Cancellation email failed (non-fatal):', err)
@@ -102,6 +112,9 @@ export async function POST(
 
     return NextResponse.json({ ok: true })
   } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (msg === 'ALREADY_CANCELLED') return NextResponse.json({ error: 'Esta cita ya fue cancelada' }, { status: 409 })
+    if (msg === 'ALREADY_REJECTED') return NextResponse.json({ error: 'Esta cita ya fue rechazada' }, { status: 409 })
     console.error(`POST /api/cancel/${token}`, err)
     return NextResponse.json({ error: 'Error al cancelar la cita' }, { status: 500 })
   }

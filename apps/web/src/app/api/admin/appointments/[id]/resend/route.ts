@@ -7,6 +7,7 @@ import {
   sendCancellationEmail,
   sendStatusUpdate,
 } from '@/lib/email'
+import { logAppointmentEvent } from '@/lib/appointment-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,13 @@ export async function POST(
       status: appt.status,
       actorEmail: admin.email,
       ts: new Date(),
+    }).catch(() => {})
+    await logAppointmentEvent({
+      appointmentId: id,
+      action: 'email_resent',
+      actor: admin.email,
+      summary: 'Email de cita reenviado',
+      metadata: { status: appt.status },
     }).catch(() => {})
 
     return NextResponse.json({ ok: true })

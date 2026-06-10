@@ -9,6 +9,7 @@ import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
 import { releaseExpiredHolds } from '@/lib/holds'
 import { createSlotLock } from '@/lib/slot-locks'
 import { logAppointmentEvent } from '@/lib/appointment-events'
+import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
 import type { Appointment, Guest } from '@/types'
 import { randomUUID, randomBytes } from 'crypto'
 
@@ -17,30 +18,6 @@ export const dynamic = 'force-dynamic'
 const MAX_FILE_BYTES = 5 * 1024 * 1024 // 5 MB
 type UploadedFileRef = { delete: () => Promise<unknown> }
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
-
-async function checkBookingRateLimit(ip: string): Promise<boolean> {
-  const key       = ip.replace(/[^\w.-]/g, '_').slice(0, 128)
-  const ref       = adminDb.collection('bookingAttempts').doc(key)
-  const WINDOW_MS = 60 * 60 * 1000 // 1 hour
-  const MAX       = 3
-  const now       = Date.now()
-
-  return adminDb.runTransaction(async tx => {
-    const snap = await tx.get(ref)
-    if (!snap.exists) {
-      tx.set(ref, { count: 1, windowStart: now })
-      return false
-    }
-    const { count, windowStart } = snap.data() as { count: number; windowStart: number }
-    if (now - windowStart > WINDOW_MS) {
-      tx.update(ref, { count: 1, windowStart: now })
-      return false
-    }
-    if (count >= MAX) return true
-    tx.update(ref, { count: count + 1 })
-    return false
-  })
-}
 const ALLOWED_MIME   = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 // Slot hold duration: pending appointments hold the slot for 30 minutes
 const HOLD_MS = 30 * 60 * 1000
@@ -52,6 +29,17 @@ export async function POST(request: Request) {
     const contentType = request.headers.get('content-type') ?? ''
     if (!contentType.toLowerCase().includes('multipart/form-data')) {
       return NextResponse.json({ error: 'Solicitud inválida' }, { status: 415 })
+    }
+    const contentLength = Number(request.headers.get('content-length') ?? 0)
+    if (contentLength > MAX_FILE_BYTES + 1_000_000) {
+      return NextResponse.json({ error: 'La solicitud es demasiado grande' }, { status: 413 })
+    }
+    const ip = requestIp(request)
+    if (await checkPublicRateLimit({ key: `booking:ip:${ip}`, windowMs: 60 * 60 * 1000, max: 10 })) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes. Intenta de nuevo en una hora.' },
+        { status: 429, headers: { 'Retry-After': '3600' } },
+      )
     }
 
     await releaseExpiredHolds()
@@ -100,6 +88,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Formato no permitido. Usa JPG, PNG, WebP o PDF.' }, { status: 422 })
     }
 
+    // Parse optional guests array (JSON-encoded in FormData)
+    const guestsRaw    = formData.get('guests')
+    const guestsParsed = (() => {
+      if (!guestsRaw) return { success: true as const, data: [] }
+      try {
+        return z.array(guestInputSchema).max(3).safeParse(JSON.parse(String(guestsRaw)))
+      } catch {
+        return { success: false as const }
+      }
+    })()
+    if (!guestsParsed.success) {
+      return NextResponse.json({ error: 'Datos de invitados inválidos' }, { status: 422 })
+    }
+    const guestList = guestsParsed.data
+
+    if (isVideo && guestList.length > 0) {
+      return NextResponse.json({ error: 'Las video consultas no admiten invitados en esta versión' }, { status: 422 })
+    }
+
+    if (guestList.length > 0) {
+      const guestEmails = guestList.map(g => g.email.toLowerCase().trim())
+      if (new Set(guestEmails).size < guestEmails.length) {
+        return NextResponse.json({ error: 'Los invitados no pueden tener emails duplicados' }, { status: 422 })
+      }
+      if (guestEmails.includes(email.toLowerCase().trim())) {
+        return NextResponse.json({ error: 'Un invitado no puede tener el mismo email que el titular' }, { status: 422 })
+      }
+    }
+
     const idempotencyKeyRaw = String(formData.get('idempotencyKey') ?? '').trim()
     const idempotencyKey = /^[a-zA-Z0-9_-]{16,80}$/.test(idempotencyKeyRaw) ? idempotencyKeyRaw : randomUUID()
     idempotencyRef = adminDb
@@ -136,43 +153,6 @@ export async function POST(request: Request) {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true })
-    }
-
-    // Parse optional guests array (JSON-encoded in FormData)
-    const guestsRaw    = formData.get('guests')
-    const guestsParsed = (() => {
-      if (!guestsRaw) return { success: true as const, data: [] }
-      try {
-        return z.array(guestInputSchema).max(3).safeParse(JSON.parse(String(guestsRaw)))
-      } catch {
-        return { success: false as const }
-      }
-    })()
-    if (!guestsParsed.success) {
-      return NextResponse.json({ error: 'Datos de invitados inválidos' }, { status: 422 })
-    }
-    const guestList = guestsParsed.data
-
-    if (isVideo && guestList.length > 0) {
-      return NextResponse.json({ error: 'Las video consultas no admiten invitados en esta versión' }, { status: 422 })
-    }
-
-    if (guestList.length > 0) {
-      const guestEmails = guestList.map(g => g.email.toLowerCase().trim())
-      if (new Set(guestEmails).size < guestEmails.length) {
-        return NextResponse.json({ error: 'Los invitados no pueden tener emails duplicados' }, { status: 422 })
-      }
-      if (guestEmails.includes(email.toLowerCase().trim())) {
-        return NextResponse.json({ error: 'Un invitado no puede tener el mismo email que el titular' }, { status: 422 })
-      }
-    }
-
-    const ip = (request.headers.get('x-real-ip') ?? request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0].trim()
-    if (await checkBookingRateLimit(ip)) {
-      return NextResponse.json(
-        { error: 'Demasiadas solicitudes. Intenta de nuevo en una hora.' },
-        { status: 429, headers: { 'Retry-After': '3600' } },
-      )
     }
 
     let identificationUrl: string | null = null

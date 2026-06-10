@@ -25,3 +25,15 @@ export function releaseSlotLock(
 ) {
   txOrBatch.delete(slotLockRef(slotDatetime))
 }
+
+export async function releaseSlotLockForAppointment(
+  tx: FirebaseFirestore.Transaction,
+  slotDatetime: Date | Timestamp,
+  appointmentId: string,
+) {
+  const ref = slotLockRef(slotDatetime)
+  const snap = await tx.get(ref)
+  if (!snap.exists || snap.data()?.appointmentId === appointmentId) {
+    tx.delete(ref)
+  }
+}

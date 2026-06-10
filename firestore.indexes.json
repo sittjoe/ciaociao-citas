@@ -20,6 +20,15 @@
       "collectionGroup": "appointments",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "status",          "order": "ASCENDING" },
+        { "fieldPath": "appointmentType", "order": "ASCENDING" },
+        { "fieldPath": "slotDatetime",    "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "appointments",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "status",         "order": "ASCENDING" },
         { "fieldPath": "reminder24Sent", "order": "ASCENDING" },
         { "fieldPath": "slotDatetime",   "order": "ASCENDING" }

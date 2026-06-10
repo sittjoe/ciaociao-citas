@@ -84,6 +84,7 @@ export function BookingWizard() {
   const submitInFlight = useRef(false)
   const restoredSlotId = useRef<string | null>(null)
   const didRestoreDraft = useRef(false)
+  const previousAppointmentType = useRef<AppointmentType | null>(null)
   const idempotencyKey = useRef<string>(
     typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
   )
@@ -180,6 +181,12 @@ export function BookingWizard() {
   }, [slots])
 
   useEffect(() => {
+    if (previousAppointmentType.current === null) {
+      previousAppointmentType.current = appointmentType
+      return
+    }
+    if (previousAppointmentType.current === appointmentType) return
+    previousAppointmentType.current = appointmentType
     setSelectedDate(null)
     setSelectedSlot(null)
     if (isVideo) {
@@ -356,7 +363,7 @@ export function BookingWizard() {
                 <h2 className="font-serif font-light text-2xl text-ink">Elige tu experiencia</h2>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de cita">
                 {([
                   {
                     type: 'showroom' as const,
@@ -374,6 +381,8 @@ export function BookingWizard() {
                   <button
                     key={option.type}
                     type="button"
+                    role="radio"
+                    aria-checked={appointmentType === option.type}
                     onClick={() => setValue('appointmentType', option.type)}
                     className={cn(
                       'rounded-2xl border p-4 text-left transition-all',
@@ -431,7 +440,7 @@ export function BookingWizard() {
                   </Button>
                 </div>
               ) : slots.length === 0 ? (
-                <WaitlistForm />
+                  <WaitlistForm appointmentType={appointmentType} />
               ) : (
                 <CalendarView
                   slots={slots}
@@ -896,8 +905,9 @@ export function BookingWizard() {
   )
 }
 
-function WaitlistForm() {
+function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType }) {
   const [values, setValues] = useState({
+    appointmentType,
     name: '',
     email: '',
     phone: '',
@@ -915,7 +925,7 @@ function WaitlistForm() {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, appointmentType }),
       })
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: unknown }
@@ -950,7 +960,7 @@ function WaitlistForm() {
       <div className="text-center">
         <h3 className="font-serif text-2xl font-light text-ink">Sin horarios disponibles</h3>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
-          Déjanos tus datos y te avisamos cuando haya nuevos espacios. Nuestras piezas empiezan desde $20,000 MXN.
+          Déjanos tus datos y te avisamos cuando haya nuevos espacios para {appointmentTypeLabels[appointmentType].toLowerCase()}. Nuestras piezas empiezan desde $20,000 MXN.
         </p>
       </div>
 

@@ -250,7 +250,13 @@ export function AppointmentTable() {
       const res = await fetch(`/api/admin/appointments/${selected.id}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, reason: rejectReason || undefined }),
+        body: JSON.stringify({
+          action,
+          reason: rejectReason || undefined,
+          meetingUrl,
+          meetingProvider,
+          meetingInstructions,
+        }),
       })
       if (!res.ok) {
         const err = await res.json() as { error?: string }
@@ -265,7 +271,7 @@ export function AppointmentTable() {
     } finally {
       setDeciding(false)
     }
-  }, [selected, rejectReason, fetchAppointments])
+  }, [selected, rejectReason, meetingUrl, meetingProvider, meetingInstructions, fetchAppointments])
 
   const saveCommercial = useCallback(async () => {
     if (!selected) return

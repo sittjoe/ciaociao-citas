@@ -8,6 +8,7 @@ import { createAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
+import { sanitize } from '@/lib/utils'
 import type { Appointment, AppointmentStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -53,7 +54,10 @@ export async function POST(
     return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 })
   }
 
-  const { action, reason } = parsed.data
+  const { action, reason, meetingUrl, meetingProvider, meetingInstructions } = parsed.data
+  const cleanMeetingUrl = sanitize(meetingUrl ?? '')
+  const cleanMeetingProvider = sanitize(meetingProvider ?? '')
+  const cleanMeetingInstructions = sanitize(meetingInstructions ?? '')
 
   let appointment: Appointment | null = null
   let googleCalendarEventId: string | null = null
@@ -77,6 +81,10 @@ export async function POST(
       if (freshData.status !== 'pending') throw new Error('ALREADY_PROCESSED')
 
       const newStatus = action === 'accept' ? 'accepted' : 'rejected'
+      const appointmentType = normalizeAppointmentType(freshData.appointmentType)
+      if (action === 'accept' && appointmentType === 'showroom' && !freshData.identificationUrl) {
+        throw new Error('MISSING_IDENTIFICATION')
+      }
       tx.update(apptRef, {
         status: newStatus,
         updatedAt: FieldValue.serverTimestamp(),
@@ -84,6 +92,11 @@ export async function POST(
         decidedBy: admin.email,
         ...(reason ? { adminNote: reason } : {}),
         ...(action === 'accept' ? { clientConfirmed: false } : {}),
+        ...(action === 'accept' && appointmentType === 'video_engagement_rings' ? {
+          meetingUrl: cleanMeetingUrl,
+          meetingProvider: cleanMeetingProvider,
+          meetingInstructions: cleanMeetingInstructions,
+        } : {}),
       })
 
       if (action === 'accept') {
@@ -100,6 +113,11 @@ export async function POST(
       }
 
       appointment = mapAppointment(id, freshData, newStatus)
+      if (action === 'accept' && appointmentType === 'video_engagement_rings') {
+        appointment.meetingUrl = cleanMeetingUrl
+        appointment.meetingProvider = cleanMeetingProvider
+        appointment.meetingInstructions = cleanMeetingInstructions
+      }
     })
 
     after(sendStatusUpdate(appointment!, action, reason).catch(err =>
@@ -130,6 +148,9 @@ export async function POST(
     const msg = err instanceof Error ? err.message : ''
     if (msg === 'NOT_FOUND') return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
     if (msg === 'ALREADY_PROCESSED') return NextResponse.json({ error: 'Esta cita ya fue procesada' }, { status: 409 })
+    if (msg === 'MISSING_IDENTIFICATION') {
+      return NextResponse.json({ error: 'La cita de showroom necesita identificación antes de aceptarse.' }, { status: 422 })
+    }
     console.error(`POST /api/admin/appointments/${id}/decision`, err)
     return NextResponse.json({ error: 'Error al procesar la decisión' }, { status: 500 })
   }

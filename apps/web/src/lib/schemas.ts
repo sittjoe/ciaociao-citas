@@ -132,6 +132,9 @@ export type AdminLoginInput = z.infer<typeof adminLoginSchema>
 export const appointmentDecisionSchema = z.object({
   action: z.enum(['accept', 'reject']),
   reason: z.string().max(500).optional(),
+  meetingUrl: z.string().url('URL inválida').max(500).optional().or(z.literal('')),
+  meetingProvider: z.string().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
+  meetingInstructions: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
 })
 
 export type AppointmentDecisionInput = z.infer<typeof appointmentDecisionSchema>
@@ -172,6 +175,7 @@ export const rescheduleSchema = z.object({
 export type RescheduleInput = z.infer<typeof rescheduleSchema>
 
 export const waitlistSchema = z.object({
+  appointmentType: z.enum(appointmentTypeOptions).default('showroom'),
   name: z
     .string()
     .min(3, 'Mínimo 3 caracteres')

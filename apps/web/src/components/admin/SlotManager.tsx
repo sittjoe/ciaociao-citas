@@ -48,10 +48,14 @@ export function SlotManager() {
         window.location.href = '/admin/login?from=/admin/slots'
         return
       }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(err.error ?? 'Error al cargar slots')
+      }
       const data = await res.json() as { slots: SlotRow[] }
       setSlots(data.slots ?? [])
-    } catch {
-      toast.error('Error al cargar slots')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cargar slots')
     } finally {
       setLoading(false)
     }
@@ -98,11 +102,17 @@ export function SlotManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dates: [...selectedDates], times: [...selectedTimes], slotType }),
       })
-      const data = await res.json() as { created: number; skipped: string[] }
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/slots'
+        return
+      }
+      const data = await res.json().catch(() => ({})) as { created?: number; skipped?: string[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Error al crear slots')
+      const created = data.created ?? 0
       const skipped = data.skipped?.length ?? 0
       toast.success(skipped > 0
-        ? `${data.created} slots creados, ${skipped} ya existían`
-        : `${data.created} slot${data.created !== 1 ? 's' : ''} creado${data.created !== 1 ? 's' : ''}`)
+        ? `${created} slots creados, ${skipped} ya existían`
+        : `${created} slot${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''}`)
       setShowAdd(false)
       setSelectedDates(new Set())
       fetchSlots()

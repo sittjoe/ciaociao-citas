@@ -144,7 +144,7 @@ export default async function ReservaPage({ params }: PageProps) {
                   </a>
                 )}
                 <a
-                  href={`/api/calendar/${appt.id}`}
+                  href={`/api/calendar/${appt.id}?code=${encodeURIComponent(appt.confirmationCode)}`}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
                 >
                   <CalendarPlus size={15} strokeWidth={1.5} />
