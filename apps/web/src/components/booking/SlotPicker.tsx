@@ -50,7 +50,7 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot }
             {selected && (
               <motion.span
                 layoutId="slot-pill"
-                className="absolute inset-0 bg-champagne"
+                className="absolute inset-0 bg-champagne-solid"
                 transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
               />
             )}

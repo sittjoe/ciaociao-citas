@@ -137,7 +137,7 @@ export default async function ReservaPage({ params }: PageProps) {
                 {isVideo && appt.meetingUrl && (
                   <a
                     href={appt.meetingUrl}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-champagne px-5 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-champagne-deep"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-champagne-solid px-5 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-champagne-deep"
                   >
                     <Monitor size={15} strokeWidth={1.5} />
                     Entrar a la videollamada

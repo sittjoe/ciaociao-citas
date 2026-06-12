@@ -14,7 +14,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<Variant, string> = {
   gold: [
-    'bg-champagne text-white font-semibold',
+    'bg-champagne-solid text-white font-semibold',
     'hover:bg-champagne-deep hover:-translate-y-px hover:shadow-pop',
     'active:scale-[0.98]',
     'disabled:opacity-40',

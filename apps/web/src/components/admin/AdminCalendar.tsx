@@ -291,8 +291,8 @@ export function AdminCalendar() {
         .fc-admin-wrap .fc-button-active,
         .fc-admin-wrap .fc-button-active:hover,
         .fc-admin-wrap .fc-button:disabled {
-          background: var(--champagne) !important;
-          border-color: var(--champagne) !important;
+          background: var(--champagne-solid) !important;
+          border-color: var(--champagne-solid) !important;
           color: var(--porcelain) !important;
           opacity: 1 !important;
         }

@@ -151,7 +151,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
               {isSel && (
                 <motion.span
                   layoutId="cal-selected"
-                  className="absolute inset-0 rounded-xl bg-champagne shadow-pop"
+                  className="absolute inset-0 rounded-xl bg-champagne-solid shadow-pop"
                   transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
                 />
               )}

@@ -20,7 +20,9 @@
   --ink-subtle:     oklch(0.68 0.011 73);
   --ink-line:       oklch(0.88 0.026 80);
   --champagne:      oklch(0.66 0.083 80);
-  --champagne-deep: oklch(0.53 0.069 78);
+  /* solid: lightest champagne that passes WCAG 4.5:1 under white text */
+  --champagne-solid: oklch(0.49 0.068 78);
+  --champagne-deep: oklch(0.45 0.062 77);
   --champagne-soft: oklch(0.90 0.041 82);
   --champagne-tint: oklch(0.97 0.018 82);
   --ease:           cubic-bezier(0.16, 1, 0.3, 1);
@@ -74,7 +76,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
 
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2
-           bg-champagne text-white font-semibold
+           bg-champagne-solid text-white font-semibold
            py-3 px-6 rounded-xl
            hover:bg-champagne-deep hover:-translate-y-px hover:shadow-pop
            active:scale-[0.98]
@@ -84,7 +86,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-subtle); }
 
   .btn-atelier {
     @apply inline-flex items-center justify-center gap-2
-           bg-champagne text-porcelain font-semibold
+           bg-champagne-solid text-porcelain font-semibold
            py-3 px-6 rounded-xl
            hover:bg-champagne-deep hover:-translate-y-px hover:shadow-pop
            active:scale-[0.98]

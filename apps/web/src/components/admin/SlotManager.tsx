@@ -313,7 +313,7 @@ export function SlotManager() {
                       className={cn(
                         'flex flex-col items-center py-2 px-1 rounded-xl text-xs border transition-colors',
                         isSel
-                          ? 'bg-champagne text-white border-champagne shadow-pop'
+                          ? 'bg-champagne-solid text-white border-champagne-solid shadow-pop'
                           : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-tint',
                       )}
                     >
@@ -341,7 +341,7 @@ export function SlotManager() {
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ duration: 0.15 }}
                       onClick={() => toggleTime(t)}
-                      className="px-3 py-1.5 rounded-lg text-sm border bg-champagne text-white border-champagne hover:bg-champagne-deep transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-sm border bg-champagne-solid text-white border-champagne-solid hover:bg-champagne-deep transition-colors"
                     >
                       {t} ✕
                     </motion.button>
