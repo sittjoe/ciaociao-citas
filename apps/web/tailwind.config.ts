@@ -7,7 +7,8 @@ const config: Config = {
       colors: {
         champagne: {
           DEFAULT: 'oklch(0.66 0.083 80)',
-          deep:    'oklch(0.53 0.069 78)',
+          solid:   'oklch(0.49 0.068 78)',
+          deep:    'oklch(0.45 0.062 77)',
           soft:    'oklch(0.90 0.041 82)',
           tint:    'oklch(0.97 0.018 82)',
         },

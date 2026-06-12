@@ -100,7 +100,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
             </div>
             <a
               href={`/reserva/${result.code}`}
-              className="flex w-full items-center justify-center rounded-xl bg-champagne px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-champagne-deep"
+              className="flex w-full items-center justify-center rounded-xl bg-champagne-solid px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-champagne-deep"
             >
               Ver detalles de mi cita
             </a>
