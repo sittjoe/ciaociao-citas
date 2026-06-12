@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { formatDate, formatTime } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Gem } from 'lucide-react'
+import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Confirmar cita — Ciao Ciao' }
@@ -69,12 +70,14 @@ export default async function ConfirmarPage({ params }: PageProps) {
     <main className="min-h-screen bg-cream flex items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="font-serif text-3xl tracking-widest text-ink">CIAO CIAO</h1>
+          <h1 className="font-serif text-3xl tracking-widest text-ink"><TitleReveal text="CIAO CIAO" /></h1>
           <p className="mt-1.5 text-[11px] tracking-[3px] uppercase text-champagne">Joyería fina · Showroom privado</p>
         </div>
 
         {(result.state === 'confirmed' || result.state === 'already') && (
-          <Card variant="soft" className="p-6">
+          <DepthReveal delay={0.3}>
+          <Card variant="soft" className="relative overflow-hidden p-6">
+            <LightSweep delay={1.0} />
             <div className="mb-4 flex items-center justify-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-green-50 text-green-600 text-2xl">✓</span>
             </div>
@@ -105,6 +108,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
               Ver detalles de mi cita
             </a>
           </Card>
+          </DepthReveal>
         )}
 
         {result.state === 'not_accepted' && (

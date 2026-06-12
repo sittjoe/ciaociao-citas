@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     serverActions: { allowedOrigins: ['citas.ciaociao.mx', 'localhost:3000'] },
   },
   images: {
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
       { protocol: 'https', hostname: 'storage.googleapis.com' },

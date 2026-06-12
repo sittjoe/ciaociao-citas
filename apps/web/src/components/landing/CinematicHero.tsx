@@ -21,7 +21,7 @@ export function CinematicHero() {
         <ParallaxLayer depth={-14} className="absolute -inset-10" style={{ zIndex: 0 }}>
           <ScrollParallax speed={0.72} scaleFrom={1.06} className="absolute inset-0">
             <Image
-              src="/atelier-vivo-hero.png"
+              src="/atelier-vivo-hero.webp"
               alt="Mesa de atelier con joyería fina preparada para una cita privada"
               fill
               priority

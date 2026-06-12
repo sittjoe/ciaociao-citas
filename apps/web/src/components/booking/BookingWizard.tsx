@@ -401,7 +401,7 @@ export function BookingWizard() {
               {isVideo && (
                 <div className="overflow-hidden rounded-2xl border border-ink-line">
                   <Image
-                    src="/video-engagement-consultation.png"
+                    src="/video-engagement-consultation.webp"
                     alt="Consulta por video para elegir un anillo de compromiso"
                     width={900}
                     height={520}

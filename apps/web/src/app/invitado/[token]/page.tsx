@@ -91,7 +91,7 @@ export default function InvitadoPage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-cream px-4 py-10">
       <Image
-        src="/atelier-vivo-hero.png"
+        src="/atelier-vivo-hero.webp"
         alt="Mesa de atelier con joyería fina"
         fill
         sizes="100vw"
