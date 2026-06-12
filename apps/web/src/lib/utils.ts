@@ -34,6 +34,17 @@ export function formatRelative(date: Date | string): string {
   return formatDistanceToNow(toDate(date), { addSuffix: true, locale: es })
 }
 
+/**
+ * CDMX wall-clock string (no offset) for calendar UIs that run FullCalendar
+ * in UTC-coercion mode (named timeZone, no timezone plugin). Those calendars
+ * render the UTC fields of what they receive, so handing them the business
+ * wall time keeps events on the correct hour and day.
+ */
+export function toBusinessWallTime(iso: string, offsetMs = 0): string {
+  const instant = new Date(parseISO(iso).getTime() + offsetMs)
+  return formatInTimeZone(instant, BUSINESS_TZ, "yyyy-MM-dd'T'HH:mm:ss")
+}
+
 export function generateCode(length = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let result = ''

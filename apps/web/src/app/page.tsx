@@ -151,7 +151,7 @@ export default function HomePage() {
                 Agenda tu cita
               </h2>
               <p className="text-sm leading-6 text-ink-muted lg:block">
-                Tres pasos breves para preparar tu visita. El equipo revisa cada solicitud personalmente.
+                Unos pasos breves para preparar tu visita. El equipo revisa cada solicitud personalmente.
               </p>
               <div className="mt-8 hidden border-t border-ink-line pt-8 text-xs text-ink-subtle lg:block">
                 <div className="grid gap-3">

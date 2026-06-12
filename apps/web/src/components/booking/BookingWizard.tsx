@@ -460,8 +460,12 @@ export function BookingWizard() {
             <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
               <div>
                 <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
-                <h2 className="font-serif font-light text-2xl text-ink capitalize">
-                  {format(parseISO(selectedDate), "EEEE d 'de' MMMM", { locale: es })}
+                <h2 className="font-serif font-light text-2xl text-ink">
+                  {(() => {
+                    // Only the first letter: Tailwind `capitalize` produced "Viernes 12 De Junio"
+                    const label = format(parseISO(selectedDate), "EEEE d 'de' MMMM", { locale: es })
+                    return label.charAt(0).toUpperCase() + label.slice(1)
+                  })()}
                 </h2>
               </div>
               <SlotPicker

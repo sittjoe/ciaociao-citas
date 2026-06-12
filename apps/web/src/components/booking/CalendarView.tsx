@@ -1,8 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval,
-         isToday, addMonths, subMonths, isBefore, startOfDay } from 'date-fns'
+import { parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -16,9 +15,47 @@ interface CalendarViewProps {
   onSelectDate:   (dateKey: string) => void
 }
 
+// The whole grid is built from BUSINESS_TZ calendar keys, never from
+// viewer-local Dates: a client browsing from another timezone must see the
+// same days, dots and "today" as someone in CDMX, because the slot keys the
+// API hands us are CDMX dates.
+type YearMonth = { year: number; month: number } // month 1–12
+
+function businessTodayKey(): string {
+  return formatInTimeZone(new Date(), BUSINESS_TZ, 'yyyy-MM-dd')
+}
+
+function dateKey(ym: YearMonth, day: number): string {
+  return `${ym.year}-${String(ym.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function daysInMonth(ym: YearMonth): number {
+  return new Date(Date.UTC(ym.year, ym.month, 0)).getUTCDate()
+}
+
+/** 0 = Monday … 6 = Sunday, computed calendar-stable via UTC */
+function mondayIndexOfFirst(ym: YearMonth): number {
+  return (new Date(Date.UTC(ym.year, ym.month - 1, 1)).getUTCDay() + 6) % 7
+}
+
+function addMonth(ym: YearMonth, delta: 1 | -1): YearMonth {
+  const m = ym.month + delta
+  if (m === 0)  return { year: ym.year - 1, month: 12 }
+  if (m === 13) return { year: ym.year + 1, month: 1 }
+  return { year: ym.year, month: m }
+}
+
+/** Format a CDMX calendar key for display, without viewer-TZ drift */
+function formatKey(key: string, pattern: string): string {
+  return formatInTimeZone(parseISO(`${key}T12:00:00Z`), 'UTC', pattern, { locale: es })
+}
+
 export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarViewProps) {
-  const [viewDate, setViewDate] = useState(() => new Date())
-  const today = startOfDay(new Date())
+  const todayKey = businessTodayKey()
+  const [viewMonth, setViewMonth] = useState<YearMonth>(() => {
+    const [y, m] = businessTodayKey().split('-').map(Number)
+    return { year: y, month: m }
+  })
 
   const slotDates = useMemo(() => {
     const set = new Map<string, number>()
@@ -31,16 +68,15 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
     return set
   }, [slots])
 
-  const days = useMemo(() => {
-    const start = startOfMonth(viewDate)
-    const end   = endOfMonth(viewDate)
-    return eachDayOfInterval({ start, end })
-  }, [viewDate])
+  const dayKeys = useMemo(
+    () => Array.from({ length: daysInMonth(viewMonth) }, (_, i) => dateKey(viewMonth, i + 1)),
+    [viewMonth]
+  )
 
-  const startPad = useMemo(() => {
-    const dow = (startOfMonth(viewDate).getDay() + 6) % 7
-    return Array.from({ length: dow }, (_, i) => i)
-  }, [viewDate])
+  const startPad = useMemo(
+    () => Array.from({ length: mondayIndexOfFirst(viewMonth) }, (_, i) => i),
+    [viewMonth]
+  )
 
   const weekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
@@ -49,17 +85,17 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-4">
         <button
-          onClick={() => setViewDate(d => subMonths(d, 1))}
+          onClick={() => setViewMonth(m => addMonth(m, -1))}
           className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-cream-soft transition-all duration-150"
           aria-label="Mes anterior"
         >
           <ChevronLeft size={18} />
         </button>
         <span className="font-serif text-ink capitalize text-base">
-          {format(viewDate, 'MMMM yyyy', { locale: es })}
+          {formatKey(dateKey(viewMonth, 1), 'MMMM yyyy')}
         </span>
         <button
-          onClick={() => setViewDate(d => addMonths(d, 1))}
+          onClick={() => setViewMonth(m => addMonth(m, 1))}
           className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-cream-soft transition-all duration-150"
           aria-label="Mes siguiente"
         >
@@ -78,23 +114,22 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
 
       {/* Day grid */}
       <LayoutGroup>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-1.5" style={{ perspective: '900px' }}>
         {startPad.map(i => <div key={`pad-${i}`} />)}
 
-        {days.map(day => {
-          const key      = format(day, 'yyyy-MM-dd')
+        {dayKeys.map(key => {
           const slotCount = slotDates.get(key) ?? 0
           const hasSlots = slotCount > 0
-          const isPast   = isBefore(startOfDay(day), today)
-          const isSel    = selectedDate === format(day, 'yyyy-MM-dd')
-          const isNow    = isToday(day)
-          const dateLabel = format(day, "EEEE d 'de' MMMM", { locale: es })
+          const isPast   = key < todayKey
+          const isSel    = selectedDate === key
+          const isNow    = key === todayKey
+          const dateLabel = formatKey(key, "EEEE d 'de' MMMM")
 
           return (
             <button
               key={key}
               disabled={!hasSlots || isPast}
-              onClick={() => onSelectDate(format(day, 'yyyy-MM-dd'))}
+              onClick={() => onSelectDate(key)}
               aria-current={isNow ? 'date' : undefined}
               aria-label={
                 hasSlots && !isPast
@@ -102,14 +137,14 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
                   : `${dateLabel}, sin horarios disponibles`
               }
               className={cn(
-                'relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-colors duration-150',
+                'cal-day-3d relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-colors duration-150',
                 isPast && 'opacity-30 cursor-not-allowed',
                 !isPast && !hasSlots && 'text-ink-subtle cursor-not-allowed',
                 !isPast && hasSlots && !isSel && [
                   'text-ink cursor-pointer',
                   'hover:bg-champagne-tint',
                 ],
-                isSel && 'text-white font-semibold',
+                isSel && 'text-white font-semibold is-selected',
                 isNow && !isSel && 'ring-1 ring-champagne',
               )}
             >
@@ -120,7 +155,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
                   transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
                 />
               )}
-              <span className="relative z-10">{format(day, 'd')}</span>
+              <span className="relative z-10">{formatKey(key, 'd')}</span>
               {hasSlots && !isPast && (
                 <span className={cn(
                   'relative z-10 w-1 h-1 rounded-full mt-0.5',

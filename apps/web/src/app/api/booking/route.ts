@@ -173,7 +173,10 @@ export async function POST(request: Request) {
     }
 
     const confirmationCode = generateCode(8)
-    const cancelToken      = generateCode(16)
+    // 32 chars over a 32-symbol alphabet = 160 bits — out of brute-force range
+    // even without rate limiting. Cancel/confirm routes accept 16–64 chars so
+    // older 16-char tokens keep working.
+    const cancelToken      = generateCode(32)
     const normalizedPhone  = phone.trim()
     const normalizedPhoneDigits = phoneDigits(normalizedPhone)
 

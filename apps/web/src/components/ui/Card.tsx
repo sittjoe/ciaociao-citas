@@ -17,7 +17,7 @@ const variantMap: Record<CardVariant, string> = {
   whisper: 'bg-white shadow-whisper',
   soft:    'bg-white border border-ink-line shadow-soft',
   lift:    'bg-white border border-ink-line shadow-lift',
-  atelier: 'bg-porcelain border border-ink-line/80 shadow-warm',
+  atelier: 'bg-porcelain border border-ink-line/80 card-relief',
   admin:   'bg-admin-panel border border-admin-line',
 }
 
