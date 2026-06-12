@@ -115,6 +115,9 @@ async function recordCalendarEvent(data: {
   try {
     await adminDb.collection('calendarEvents').add({
       ...data,
+      // Google API errors can embed request payloads/credentials context —
+      // keep only the first line, capped, for diagnostics.
+      ...(data.error ? { error: data.error.split('\n')[0].slice(0, 200) } : {}),
       createdAt: new Date(),
     })
   } catch (err) {

@@ -41,7 +41,7 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot }
             key={slot.id}
             onClick={() => onSelectSlot(slot.id)}
             className={cn(
-              'relative overflow-hidden py-2.5 rounded-xl text-sm font-medium border transition-colors duration-150',
+              'slot-3d relative overflow-hidden py-2.5 rounded-xl text-sm font-medium border',
               selected
                 ? 'text-white border-champagne shadow-pop'
                 : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-tint',

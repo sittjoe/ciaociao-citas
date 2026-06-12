@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
-  if (!token || token.length < 8) {
+  if (!token || token.length < 16 || token.length > 64) {
     return NextResponse.json({ error: 'Token inválido' }, { status: 400 })
+  }
+  const ip = requestIp(request)
+  if (await checkPublicRateLimit({ key: `confirm:ip:${ip}`, windowMs: 60 * 60 * 1000, max: 20 })) {
+    return NextResponse.json({ error: 'Demasiados intentos. Intenta más tarde.' }, { status: 429 })
   }
 
   try {

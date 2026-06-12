@@ -1,15 +1,22 @@
 'use client'
 
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import esLocale from '@fullcalendar/core/locales/es'
 import type { EventInput, EventSourceFuncArg } from '@fullcalendar/core'
+import { formatInTimeZone } from 'date-fns-tz'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+import { BUSINESS_TZ, cn, toBusinessWallTime } from '@/lib/utils'
 import { AppointmentDetailModal } from './AppointmentDetailModal'
+
+// FullCalendar has no timezone plugin loaded, so a named `timeZone` runs in
+// "UTC-coercion" mode: it renders the UTC fields of whatever it receives.
+// We therefore hand it CDMX *wall-clock* strings (no offset) — never Date
+// objects, whose UTC fields are shifted and land events on the wrong hour/day.
+const HOUR_MS = 60 * 60 * 1000
 
 type FilterKey = 'accepted' | 'pending' | 'rejected' | 'slots'
 type ApptStatus  = 'accepted' | 'pending' | 'rejected' | 'cancelled'
@@ -39,9 +46,12 @@ const STATUS_LABELS_ES: Record<string, string> = {
 }
 
 async function fetchAppointmentEvents(info: EventSourceFuncArg): Promise<EventInput[]> {
+  // info.start/end carry CDMX wall time in their UTC fields (UTC-coercion);
+  // pad by a day so the real UTC instants of the range are fully covered.
+  const PAD_MS = 24 * 60 * 60 * 1000
   const params = new URLSearchParams({
-    dateFrom: info.start.toISOString(),
-    dateTo:   info.end.toISOString(),
+    dateFrom: new Date(info.start.getTime() - PAD_MS).toISOString(),
+    dateTo:   new Date(info.end.getTime() + PAD_MS).toISOString(),
     limit:    '500',
   })
   const res = await fetch(`/api/admin/appointments?${params}`)
@@ -55,14 +65,12 @@ async function fetchAppointmentEvents(info: EventSourceFuncArg): Promise<EventIn
   }
 
   return data.appointments.map(a => {
-    const start = new Date(a.slotDatetime)
-    const end   = new Date(start.getTime() + 60 * 60 * 1000)
     const isDone = a.status === 'rejected' || a.status === 'cancelled'
     return {
       id:    a.id,
       title: a.name,
-      start,
-      end,
+      start: toBusinessWallTime(a.slotDatetime),
+      end:   toBusinessWallTime(a.slotDatetime, HOUR_MS),
       classNames: [`fc-event-status-${a.status}`, ...(isDone ? ['fc-event-done'] : [])],
       extendedProps: { appointmentId: a.id, status: a.status },
     }
@@ -70,11 +78,13 @@ async function fetchAppointmentEvents(info: EventSourceFuncArg): Promise<EventIn
 }
 
 async function fetchSlotBackgrounds(info: EventSourceFuncArg): Promise<EventInput[]> {
+  // Use UTC fields: under UTC-coercion they hold the CDMX wall date,
+  // which is exactly the month key the slots API expects.
   const months = new Set<string>()
-  const cur = new Date(info.start.getFullYear(), info.start.getMonth(), 1)
+  const cur = new Date(Date.UTC(info.start.getUTCFullYear(), info.start.getUTCMonth(), 1))
   while (cur < info.end) {
-    months.add(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`)
-    cur.setMonth(cur.getMonth() + 1)
+    months.add(`${cur.getUTCFullYear()}-${String(cur.getUTCMonth() + 1).padStart(2, '0')}`)
+    cur.setUTCMonth(cur.getUTCMonth() + 1)
   }
 
   const slotArrays = await Promise.all(
@@ -87,12 +97,10 @@ async function fetchSlotBackgrounds(info: EventSourceFuncArg): Promise<EventInpu
   )
 
   return slotArrays.flat().map(s => {
-    const dt  = new Date(s.datetime)
-    const end = new Date(dt.getTime() + 60 * 60 * 1000)
     return {
       id:      `slot-${s.id}`,
-      start:   dt,
-      end,
+      start:   toBusinessWallTime(s.datetime),
+      end:     toBusinessWallTime(s.datetime, HOUR_MS),
       display: 'background',
       color:   'var(--vellum)',
       extendedProps: { isSlot: true } satisfies SlotExtended,
@@ -148,9 +156,26 @@ export function AdminCalendar() {
     calRef.current?.getApi().refetchEvents()
   }, [])
 
+  // Stable array: a fresh array each render makes FullCalendar tear down and
+  // re-register both sources (visible flicker + refetch) on unrelated state
+  // changes like opening the detail modal.
+  const eventSources = useMemo(() => [apptSource, slotSource], [apptSource, slotSource])
+
+  // Under UTC-coercion "now" defaults to real UTC — 6h ahead of the CDMX wall
+  // times our events use. Feed it the CDMX wall clock so the today highlight
+  // and the now-indicator line sit where the operator expects.
+  const businessNow = useCallback(
+    () => formatInTimeZone(new Date(), BUSINESS_TZ, "yyyy-MM-dd'T'HH:mm:ss"),
+    []
+  )
+
   // Keyboard shortcuts for the operator: j/k prev/next, t today, m/w/d view switch
+  const modalOpenRef = useRef(false)
+  modalOpenRef.current = selectedId !== null
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (modalOpenRef.current) return
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -218,8 +243,9 @@ export function AdminCalendar() {
           slotMaxTime="21:00:00"
           height="auto"
           timeZone="America/Mexico_City"
+          now={businessNow}
           nowIndicator={true}
-          eventSources={[apptSource, slotSource]}
+          eventSources={eventSources}
           eventClick={info => {
             const apptId = (info.event.extendedProps as Partial<ApptExtended>).appointmentId
             if (apptId) setSelectedId(apptId)
@@ -227,10 +253,9 @@ export function AdminCalendar() {
           eventDidMount={info => {
             const { status } = info.event.extendedProps as Partial<ApptExtended>
             if (status) {
-              const start = info.event.start
-              const time = start?.toLocaleTimeString('es-MX', {
-                hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
-              }) ?? ''
+              // event.start holds CDMX wall time in its UTC fields — read them
+              // directly; converting again would shift the tooltip by 6h.
+              const time = info.event.start?.toISOString().slice(11, 16) ?? ''
               info.el.title = `${info.event.title} — ${time} (${STATUS_LABELS_ES[status] ?? status})`
             }
           }}

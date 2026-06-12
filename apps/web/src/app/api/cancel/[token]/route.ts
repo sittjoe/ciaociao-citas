@@ -6,17 +6,24 @@ import { sendCancellationEmail } from '@/lib/email'
 import { releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
+import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
-  if (!token || token.length < 8) {
+  // Tokens are generated with at least 16 chars (generateCode); anything
+  // shorter is noise — reject before touching Firestore.
+  if (!token || token.length < 16 || token.length > 64) {
     return NextResponse.json({ error: 'Token inválido' }, { status: 400 })
+  }
+  const ip = requestIp(request)
+  if (await checkPublicRateLimit({ key: `cancel:ip:${ip}`, windowMs: 60 * 60 * 1000, max: 10 })) {
+    return NextResponse.json({ error: 'Demasiados intentos. Intenta más tarde.' }, { status: 429 })
   }
 
   try {
