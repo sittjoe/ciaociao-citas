@@ -2,6 +2,7 @@ import { google, calendar_v3 } from 'googleapis'
 import { adminDb } from './firebase-admin'
 import { formatDate, formatTime } from './utils'
 import { engagementBriefRows, isVideoEngagement } from './commercial'
+import { mapAppointmentForEmail } from './appointment-email'
 import type { Appointment } from '@/types'
 
 const DEFAULT_LOCATION = process.env.GOOGLE_CALENDAR_LOCATION || 'Showroom Ciao Ciao Joyería'
@@ -184,6 +185,58 @@ export async function deleteAppointmentCalendarEvent(appt: Appointment): Promise
     })
     throw err
   }
+}
+
+/**
+ * Picks up appointments flagged calendarSyncFailed (set when a create or
+ * delete against Google Calendar fails) and retries them. Runs from the
+ * daily reminders cron — failures self-heal within a day instead of needing
+ * a human to notice the warning email.
+ */
+export async function retryFailedCalendarSyncs(): Promise<{ retried: number; recovered: number; errors: string[] }> {
+  const result = { retried: 0, recovered: 0, errors: [] as string[] }
+  if (!isGoogleCalendarConfigured()) return result
+
+  const snap = await adminDb
+    .collection('appointments')
+    .where('calendarSyncFailed', '==', true)
+    .limit(25)
+    .get()
+
+  for (const doc of snap.docs) {
+    const data = doc.data()
+    result.retried++
+    try {
+      if (data.status === 'accepted') {
+        const appt = mapAppointmentForEmail(doc.id, data)
+        await updateAppointmentCalendarEvent(appt) // creates when eventId is missing
+        await doc.ref.update({ calendarSyncFailed: false })
+        result.recovered++
+      } else if (data.calendarPendingDeleteEventId) {
+        // A cancellation whose Google delete failed; the event id was
+        // stashed because the appointment doc already cleared its own.
+        await getCalendar().events.delete({
+          calendarId: readCalendarCredentials().calendarId!,
+          eventId: data.calendarPendingDeleteEventId as string,
+          sendUpdates: 'none',
+        }).catch(err => {
+          // 404/410 means the event is already gone — that IS recovery.
+          const code = (err as { code?: number })?.code
+          if (code !== 404 && code !== 410) throw err
+        })
+        await doc.ref.update({ calendarSyncFailed: false, calendarPendingDeleteEventId: null })
+        result.recovered++
+      } else {
+        // Not accepted and nothing to delete: stale flag, clear it.
+        await doc.ref.update({ calendarSyncFailed: false })
+        result.recovered++
+      }
+    } catch (err) {
+      result.errors.push(`${doc.id}: ${err instanceof Error ? err.message.split('\n')[0].slice(0, 120) : 'unknown'}`)
+    }
+  }
+
+  return result
 }
 
 export async function updateAppointmentCalendarEvent(appt: Appointment): Promise<void> {

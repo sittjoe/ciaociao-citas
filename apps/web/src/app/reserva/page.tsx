@@ -8,7 +8,7 @@ export default function ReservaLookupPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-cream px-4 py-10 sm:px-8">
       <Image
-        src="/atelier-vivo-hero.png"
+        src="/atelier-vivo-hero.webp"
         alt="Detalle de joyería fina en mesa de atelier"
         fill
         sizes="100vw"

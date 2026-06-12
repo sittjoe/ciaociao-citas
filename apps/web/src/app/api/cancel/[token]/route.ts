@@ -103,7 +103,12 @@ export async function POST(
         await deleteAppointmentCalendarEvent({ ...appointment, googleCalendarEventId: calendarEventIdToDelete })
       } catch (err) {
         console.error('Google Calendar delete failed:', err)
-        await doc.ref.update({ calendarSyncFailed: true }).catch(() => {})
+        // Stash the event id: the appointment doc already cleared its own,
+        // and the retry cron needs it to delete the orphaned event.
+        await doc.ref.update({
+          calendarSyncFailed: true,
+          calendarPendingDeleteEventId: calendarEventIdToDelete,
+        }).catch(() => {})
       }
     }
 

@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { retryEmailOutbox, sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
 import { expirePendingGuests } from '@/lib/guests'
 import { cleanupOrphanedIdentifications } from '@/lib/storage-cleanup'
+import { retryFailedCalendarSyncs } from '@/lib/google-calendar'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import type { Appointment } from '@/types'
 
@@ -279,6 +280,14 @@ export async function GET(request: Request) {
       errors.push(`Email retry failed: ${err}`)
     }
 
+    let calendarRetry: Awaited<ReturnType<typeof retryFailedCalendarSyncs>> | null = null
+    try {
+      calendarRetry = await retryFailedCalendarSyncs()
+      errors.push(...calendarRetry.errors.map(e => `Calendar retry: ${e}`))
+    } catch (err) {
+      errors.push(`Calendar retry failed: ${err}`)
+    }
+
     await adminDb.collection('maintenanceRuns').add({
       type: 'daily_reminders',
       sent24,
@@ -288,6 +297,7 @@ export async function GET(request: Request) {
       expiredCount,
       idCleanup,
       emailRetry,
+      calendarRetry,
       errors,
       ok: errors.length === 0,
       createdAt: Timestamp.now(),
@@ -295,7 +305,7 @@ export async function GET(request: Request) {
       console.error('Unable to record reminders maintenance run:', err)
     })
 
-    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, idCleanup, emailRetry, errors })
+    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, idCleanup, emailRetry, calendarRetry, errors })
   } catch (err) {
     console.error('GET /api/reminders', err)
     return NextResponse.json({ error: 'Error en reminders' }, { status: 500 })

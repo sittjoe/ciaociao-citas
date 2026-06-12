@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/Card'
 import { CalendarPlus, Gem, Monitor } from 'lucide-react'
 import type { AppointmentStatus } from '@/types'
 import CancelButton from './CancelButton'
+import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
 
 export const dynamic  = 'force-dynamic'
 export const metadata: Metadata = { title: 'Estado de tu cita' }
@@ -72,7 +73,7 @@ export default async function ReservaPage({ params }: PageProps) {
     <main className="min-h-screen bg-cream">
       <section className="relative min-h-screen overflow-hidden px-4 py-10 sm:px-8 sm:py-16">
         <Image
-          src="/atelier-vivo-hero.png"
+          src="/atelier-vivo-hero.webp"
           alt="Detalle de joyería fina en mesa de atelier"
           fill
           sizes="100vw"
@@ -86,14 +87,16 @@ export default async function ReservaPage({ params }: PageProps) {
               Ciao Ciao · {isVideo ? 'Video consulta' : 'Showroom privado'}
             </p>
             <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">
-              Estado de tu cita
+              <TitleReveal text="Estado de tu cita" />
             </h1>
             <p className="mt-6 max-w-md text-sm leading-7 text-ink-muted">
               Conserva este código. El equipo lo usará para ubicar tu solicitud y preparar {isVideo ? 'tu llamada' : 'tu visita'}.
             </p>
           </header>
 
-          <Card variant="atelier" className="w-full space-y-5 p-6 sm:p-7">
+          <DepthReveal delay={0.35}>
+          <Card variant="atelier" className="relative w-full space-y-5 overflow-hidden p-6 sm:p-7">
+            <LightSweep delay={1.1} />
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="h-eyebrow mb-2">Tu cita</p>
@@ -165,6 +168,7 @@ export default async function ReservaPage({ params }: PageProps) {
               </a>
             </div>
           </Card>
+          </DepthReveal>
         </div>
       </section>
     </main>
