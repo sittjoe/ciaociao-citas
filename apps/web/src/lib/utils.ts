@@ -63,7 +63,24 @@ export function groupByDate<T extends { datetime: Date }>(items: T[]): Record<st
 }
 
 export function sanitize(text: string): string {
-  return text.replace(/<[^>]*>/g, '').trim()
+  // Strip HTML tags and control characters (null bytes, etc.) that could
+  // corrupt CSV/ICS exports or logs.
+  return text
+    .replace(/<[^>]*>/g, '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .trim()
+}
+
+/**
+ * Redacts emails and phone numbers from a string before it is persisted to a
+ * log/diagnostic field. Third-party API errors (Resend, Google) can echo the
+ * client's email/phone; keep the diagnostic value without storing the PII.
+ */
+export function redactPII(text: string): string {
+  return text
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '***@***')
+    .replace(/(\+?\d[\d\s().-]{7,}\d)/g, '***')
 }
 
 export function phoneDigits(value: string | null | undefined): string {

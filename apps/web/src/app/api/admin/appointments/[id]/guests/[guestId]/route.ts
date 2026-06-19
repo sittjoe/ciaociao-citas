@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { adminGuestActionSchema } from '@/lib/schemas'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { recomputeGuestsAllVerified } from '@/lib/guests'
+import { logAppointmentEvent } from '@/lib/appointment-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,7 @@ export async function PATCH(
     await guestRef.update({
       status: 'verified',
       verifiedAt: FieldValue.serverTimestamp(),
+      verifiedBy: admin.email,
     })
   } else {
     await guestRef.update({
@@ -57,6 +59,21 @@ export async function PATCH(
   } catch (err) {
     console.error('recomputeGuestsAllVerified failed after admin action:', err)
   }
+
+  // Audit trail: both transitions are recorded with the acting admin
+  await adminDb.collection('auditLog').add({
+    action: action === 'verify' ? 'guest_verified' : 'guest_excluded',
+    appointmentId: id,
+    guestId,
+    actorEmail: admin.email,
+    ts: new Date(),
+  }).catch(() => {})
+  await logAppointmentEvent({
+    appointmentId: id,
+    action: action === 'verify' ? 'guest_verified' : 'guest_excluded',
+    actor: admin.email,
+    summary: action === 'verify' ? 'Invitado verificado manualmente' : 'Invitado excluido',
+  }).catch(err => console.error('Appointment event log failed:', err))
 
   return NextResponse.json({ ok: true })
 }

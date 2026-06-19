@@ -25,10 +25,12 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
 export default function CuentaPage() {
   const router = useRouter()
 
+  const [currentPassword, setCurrentPassword] = useState('')
   const [password,        setPassword]        = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [savingPassword,  setSavingPassword]  = useState(false)
 
+  const [emailCurrentPassword, setEmailCurrentPassword] = useState('')
   const [newEmail,     setNewEmail]     = useState('')
   const [savingEmail,  setSavingEmail]  = useState(false)
 
@@ -46,11 +48,12 @@ export default function CuentaPage() {
       const res = await fetch('/api/admin/credentials/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ currentPassword, password }),
       })
       const data = await res.json() as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error')
       toast.success('Contraseña actualizada')
+      setCurrentPassword('')
       setPassword('')
       setConfirmPassword('')
     } catch (err) {
@@ -67,7 +70,7 @@ export default function CuentaPage() {
       const res = await fetch('/api/admin/credentials/email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newEmail }),
+        body: JSON.stringify({ currentPassword: emailCurrentPassword, email: newEmail }),
       })
       const data = await res.json() as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error')
@@ -92,6 +95,20 @@ export default function CuentaPage() {
       <form onSubmit={changePassword}>
         <Card variant="admin" className="p-6 space-y-5">
           <h2 className="h-eyebrow text-ink">Cambiar contraseña</h2>
+
+          <Field label="Contraseña actual" required>
+            {id => (
+              <Input
+                id={id}
+                type="password"
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                className="mt-1"
+              />
+            )}
+          </Field>
 
           <Field label="Nueva contraseña" required>
             {id => (
@@ -144,7 +161,7 @@ export default function CuentaPage() {
             )}
           </Field>
 
-          <Button type="submit" loading={savingPassword} disabled={password.length < 8 || password !== confirmPassword}>
+          <Button type="submit" loading={savingPassword} disabled={!currentPassword || password.length < 8 || password !== confirmPassword}>
             Guardar contraseña
           </Button>
         </Card>
@@ -172,7 +189,21 @@ export default function CuentaPage() {
             )}
           </Field>
 
-          <Button type="submit" loading={savingEmail} variant="outline">
+          <Field label="Contraseña actual" required>
+            {id => (
+              <Input
+                id={id}
+                type="password"
+                value={emailCurrentPassword}
+                onChange={e => setEmailCurrentPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                className="mt-1"
+              />
+            )}
+          </Field>
+
+          <Button type="submit" loading={savingEmail} variant="outline" disabled={!newEmail || !emailCurrentPassword}>
             Guardar email
           </Button>
         </Card>

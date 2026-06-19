@@ -83,6 +83,34 @@ export async function upsertAdminByEmail(email: string, actor?: AdminSession): P
   }
 }
 
+/**
+ * Verifies a password against Firebase Auth via the Identity Toolkit REST
+ * endpoint (the Admin SDK cannot check a password directly). Used to require
+ * the current password before sensitive credential changes, so a hijacked
+ * open session cannot silently change the password or email.
+ */
+export async function verifyAdminPassword(email: string, password: string): Promise<boolean> {
+  const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+  if (!key) {
+    console.error('verifyAdminPassword: NEXT_PUBLIC_FIREBASE_API_KEY not set')
+    return false
+  }
+  try {
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizeEmail(email), password, returnSecureToken: false }),
+      },
+    )
+    return res.ok
+  } catch (err) {
+    console.error('verifyAdminPassword failed:', err)
+    return false
+  }
+}
+
 export async function deactivateAdmin(uid: string, actor?: AdminSession): Promise<void> {
   await adminDb.collection('admins').doc(uid).set({
     active: false,

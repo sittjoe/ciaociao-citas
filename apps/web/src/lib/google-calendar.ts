@@ -1,6 +1,6 @@
 import { google, calendar_v3 } from 'googleapis'
 import { adminDb } from './firebase-admin'
-import { formatDate, formatTime } from './utils'
+import { formatDate, formatTime, redactPII } from './utils'
 import { engagementBriefRows, isVideoEngagement } from './commercial'
 import { mapAppointmentForEmail } from './appointment-email'
 import type { Appointment } from '@/types'
@@ -116,9 +116,9 @@ async function recordCalendarEvent(data: {
   try {
     await adminDb.collection('calendarEvents').add({
       ...data,
-      // Google API errors can embed request payloads/credentials context —
-      // keep only the first line, capped, for diagnostics.
-      ...(data.error ? { error: data.error.split('\n')[0].slice(0, 200) } : {}),
+      // Google API errors can embed request payloads/credentials context and
+      // client PII — keep only the first line, capped, and redact PII.
+      ...(data.error ? { error: redactPII(data.error.split('\n')[0]).slice(0, 200) } : {}),
       createdAt: new Date(),
     })
   } catch (err) {
