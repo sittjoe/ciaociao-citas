@@ -13,8 +13,10 @@ async function getStats(): Promise<AdminStats> {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const todayEnd   = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
   const weekEnd    = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const monthAgo   = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-  const [pendingSnap, acceptedTodaySnap, totalAcceptedSnap, totalRejectedSnap, upcomingSlotsSnap, nextApptSnap] =
+  const [pendingSnap, acceptedTodaySnap, totalAcceptedSnap, totalRejectedSnap, upcomingSlotsSnap,
+         accepted30Snap, rejected30Snap, nextApptSnap] =
     await Promise.all([
       adminDb.collection('appointments').where('status', '==', 'pending').count().get(),
       adminDb.collection('appointments')
@@ -28,6 +30,15 @@ async function getStats(): Promise<AdminStats> {
         .where('available', '==', true)
         .where('datetime', '>=', Timestamp.fromDate(now))
         .where('datetime', '<',  Timestamp.fromDate(weekEnd))
+        .count().get(),
+      // 30-day conversion uses the existing status+createdAt composite index
+      adminDb.collection('appointments')
+        .where('status', '==', 'accepted')
+        .where('createdAt', '>=', Timestamp.fromDate(monthAgo))
+        .count().get(),
+      adminDb.collection('appointments')
+        .where('status', '==', 'rejected')
+        .where('createdAt', '>=', Timestamp.fromDate(monthAgo))
         .count().get(),
       adminDb.collection('appointments')
         .where('status', 'in', ['pending', 'accepted'])
@@ -58,12 +69,18 @@ async function getStats(): Promise<AdminStats> {
     } satisfies Appointment
   })
 
+  const accepted30 = accepted30Snap.data().count
+  const rejected30 = rejected30Snap.data().count
+  const decided30  = accepted30 + rejected30
+
   return {
     totalPending:    pendingSnap.data().count,
     acceptedToday:   acceptedTodaySnap.data().count,
     totalAccepted:   totalAcceptedSnap.data().count,
     totalRejected:   totalRejectedSnap.data().count,
     upcomingSlots:   upcomingSlotsSnap.data().count,
+    conversion30d:   decided30 > 0 ? Math.round((accepted30 / decided30) * 100) : null,
+    decided30d:      decided30,
     nextAppointments,
   }
 }
@@ -108,9 +125,20 @@ export default async function AdminDashboard() {
             <span className="text-ink-muted">Hoy</span>
             <span className="font-medium text-emerald-700">{stats.acceptedToday}</span>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between border-b border-admin-line pb-3">
             <span className="text-ink-muted">Slots 7 días</span>
             <span className="font-medium text-champagne-deep">{stats.upcomingSlots}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-ink-muted">Conversión 30 días</span>
+            <span className="font-medium text-ink">
+              {stats.conversion30d === null
+                ? '—'
+                : `${stats.conversion30d}%`}
+              <span className="ml-1.5 text-[0.7rem] font-normal text-ink-subtle">
+                {stats.decided30d > 0 ? `(${stats.decided30d} decididas)` : 'sin decisiones'}
+              </span>
+            </span>
           </div>
         </div>
       </Card>

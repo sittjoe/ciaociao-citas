@@ -108,6 +108,8 @@ export async function GET(
       adminNote:        d.adminNote ?? null,
       clientConfirmed:  d.clientConfirmed ?? false,
       clientConfirmedAt: d.clientConfirmedAt ? (d.clientConfirmedAt as Timestamp)?.toDate().toISOString() : null,
+      attended:         d.attended ?? null,
+      attendedAt:       d.attendedAt ? (d.attendedAt as Timestamp)?.toDate().toISOString() : null,
       createdAt:        (d.createdAt as Timestamp)?.toDate().toISOString(),
       updatedAt:        d.updatedAt ? (d.updatedAt as Timestamp)?.toDate().toISOString() : null,
       guestCount:       d.guestCount ?? 0,

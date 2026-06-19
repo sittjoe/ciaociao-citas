@@ -150,6 +150,10 @@ export const batchDecisionSchema = z.object({
 
 export type BatchDecisionInput = z.infer<typeof batchDecisionSchema>
 
+export const attendanceSchema = z.object({
+  attended: z.boolean(),
+})
+
 export const slotSchema = z.object({
   datetime: z.string().datetime({ message: 'Fecha inválida' }),
 })

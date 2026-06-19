@@ -77,6 +77,9 @@ export interface Appointment {
   meetingInstructions?: string | null
   clientConfirmed?: boolean
   clientConfirmedAt?: Date | null
+  attended?: boolean | null
+  attendedAt?: Date | null
+  attendedBy?: string | null
   autoCancelledAt?: Date | null
   guestCount?: number
   guestsAllVerified?: boolean
@@ -107,5 +110,8 @@ export interface AdminStats {
   totalRejected: number
   acceptedToday: number
   upcomingSlots: number
+  /** Conversion over the last 30 days: accepted / (accepted + rejected). null if no decisions. */
+  conversion30d: number | null
+  decided30d: number
   nextAppointments: Appointment[]
 }
