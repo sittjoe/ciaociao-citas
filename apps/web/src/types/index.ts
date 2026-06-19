@@ -110,8 +110,8 @@ export interface AdminStats {
   totalRejected: number
   acceptedToday: number
   upcomingSlots: number
-  /** Conversion over the last 30 days: accepted / (accepted + rejected). null if no decisions. */
-  conversion30d: number | null
-  decided30d: number
+  /** Conversion: accepted / (accepted + rejected), as a percentage. null if no decisions yet. */
+  conversion: number | null
+  decided: number
   nextAppointments: Appointment[]
 }

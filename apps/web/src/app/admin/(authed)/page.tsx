@@ -8,80 +8,83 @@ import type { AdminStats, Appointment, AppointmentStatus } from '@/types'
 export const dynamic  = 'force-dynamic'
 export const metadata: Metadata = { title: 'Dashboard' }
 
+const EMPTY_STATS: AdminStats = {
+  totalPending: 0, acceptedToday: 0, totalAccepted: 0, totalRejected: 0,
+  upcomingSlots: 0, conversion: null, decided: 0, nextAppointments: [],
+}
+
 async function getStats(): Promise<AdminStats> {
   const now        = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const todayEnd   = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
   const weekEnd    = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  const monthAgo   = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-  const [pendingSnap, acceptedTodaySnap, totalAcceptedSnap, totalRejectedSnap, upcomingSlotsSnap,
-         accepted30Snap, rejected30Snap, nextApptSnap] =
-    await Promise.all([
-      adminDb.collection('appointments').where('status', '==', 'pending').count().get(),
-      adminDb.collection('appointments')
-        .where('status', '==', 'accepted')
-        .where('slotDatetime', '>=', Timestamp.fromDate(todayStart))
-        .where('slotDatetime', '<',  Timestamp.fromDate(todayEnd))
-        .count().get(),
-      adminDb.collection('appointments').where('status', '==', 'accepted').count().get(),
-      adminDb.collection('appointments').where('status', '==', 'rejected').count().get(),
-      adminDb.collection('slots')
-        .where('available', '==', true)
-        .where('datetime', '>=', Timestamp.fromDate(now))
-        .where('datetime', '<',  Timestamp.fromDate(weekEnd))
-        .count().get(),
-      // 30-day conversion uses the existing status+createdAt composite index
-      adminDb.collection('appointments')
-        .where('status', '==', 'accepted')
-        .where('createdAt', '>=', Timestamp.fromDate(monthAgo))
-        .count().get(),
-      adminDb.collection('appointments')
-        .where('status', '==', 'rejected')
-        .where('createdAt', '>=', Timestamp.fromDate(monthAgo))
-        .count().get(),
-      adminDb.collection('appointments')
-        .where('status', 'in', ['pending', 'accepted'])
-        .where('slotDatetime', '>=', Timestamp.fromDate(now))
-        .orderBy('slotDatetime')
-        .limit(5)
-        .get(),
-    ])
+  try {
+    // All of these use single-field equality or existing composite indexes.
+    // Conversion is derived from the accepted/rejected totals below — no extra
+    // query, so it can't depend on an index that isn't deployed.
+    const [pendingSnap, acceptedTodaySnap, totalAcceptedSnap, totalRejectedSnap, upcomingSlotsSnap, nextApptSnap] =
+      await Promise.all([
+        adminDb.collection('appointments').where('status', '==', 'pending').count().get(),
+        adminDb.collection('appointments')
+          .where('status', '==', 'accepted')
+          .where('slotDatetime', '>=', Timestamp.fromDate(todayStart))
+          .where('slotDatetime', '<',  Timestamp.fromDate(todayEnd))
+          .count().get(),
+        adminDb.collection('appointments').where('status', '==', 'accepted').count().get(),
+        adminDb.collection('appointments').where('status', '==', 'rejected').count().get(),
+        adminDb.collection('slots')
+          .where('available', '==', true)
+          .where('datetime', '>=', Timestamp.fromDate(now))
+          .where('datetime', '<',  Timestamp.fromDate(weekEnd))
+          .count().get(),
+        adminDb.collection('appointments')
+          .where('status', 'in', ['pending', 'accepted'])
+          .where('slotDatetime', '>=', Timestamp.fromDate(now))
+          .orderBy('slotDatetime')
+          .limit(5)
+          .get(),
+      ])
 
-  const nextAppointments = nextApptSnap.docs.map(doc => {
-    const d = doc.data()
+    const nextAppointments = nextApptSnap.docs.map(doc => {
+      const d = doc.data()
+      return {
+        id:               doc.id,
+        slotId:           d.slotId,
+        slotDatetime:     (d.slotDatetime as Timestamp).toDate(),
+        name:             d.name,
+        email:            d.email,
+        phone:            d.phone,
+        notes:            d.notes,
+        identificationUrl: d.identificationUrl,
+        status:           d.status as AppointmentStatus,
+        confirmationCode: d.confirmationCode,
+        cancelToken:      d.cancelToken,
+        reminder24Sent:   d.reminder24Sent,
+        reminder2Sent:    d.reminder2Sent,
+        googleCalendarEventId: d.googleCalendarEventId ?? null,
+        createdAt:        (d.createdAt as Timestamp).toDate(),
+      } satisfies Appointment
+    })
+
+    const totalAccepted = totalAcceptedSnap.data().count
+    const totalRejected = totalRejectedSnap.data().count
+    const decided       = totalAccepted + totalRejected
+
     return {
-      id:               doc.id,
-      slotId:           d.slotId,
-      slotDatetime:     (d.slotDatetime as Timestamp).toDate(),
-      name:             d.name,
-      email:            d.email,
-      phone:            d.phone,
-      notes:            d.notes,
-      identificationUrl: d.identificationUrl,
-      status:           d.status as AppointmentStatus,
-      confirmationCode: d.confirmationCode,
-      cancelToken:      d.cancelToken,
-      reminder24Sent:   d.reminder24Sent,
-      reminder2Sent:    d.reminder2Sent,
-      googleCalendarEventId: d.googleCalendarEventId ?? null,
-      createdAt:        (d.createdAt as Timestamp).toDate(),
-    } satisfies Appointment
-  })
-
-  const accepted30 = accepted30Snap.data().count
-  const rejected30 = rejected30Snap.data().count
-  const decided30  = accepted30 + rejected30
-
-  return {
-    totalPending:    pendingSnap.data().count,
-    acceptedToday:   acceptedTodaySnap.data().count,
-    totalAccepted:   totalAcceptedSnap.data().count,
-    totalRejected:   totalRejectedSnap.data().count,
-    upcomingSlots:   upcomingSlotsSnap.data().count,
-    conversion30d:   decided30 > 0 ? Math.round((accepted30 / decided30) * 100) : null,
-    decided30d:      decided30,
-    nextAppointments,
+      totalPending:    pendingSnap.data().count,
+      acceptedToday:   acceptedTodaySnap.data().count,
+      totalAccepted,
+      totalRejected,
+      upcomingSlots:   upcomingSlotsSnap.data().count,
+      conversion:      decided > 0 ? Math.round((totalAccepted / decided) * 100) : null,
+      decided,
+      nextAppointments,
+    }
+  } catch (err) {
+    // A metric query failing must never take down the whole dashboard.
+    console.error('getStats failed, rendering empty dashboard:', err)
+    return EMPTY_STATS
   }
 }
 
@@ -130,13 +133,11 @@ export default async function AdminDashboard() {
             <span className="font-medium text-champagne-deep">{stats.upcomingSlots}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-ink-muted">Conversión 30 días</span>
+            <span className="text-ink-muted">Conversión</span>
             <span className="font-medium text-ink">
-              {stats.conversion30d === null
-                ? '—'
-                : `${stats.conversion30d}%`}
+              {stats.conversion === null ? '—' : `${stats.conversion}%`}
               <span className="ml-1.5 text-[0.7rem] font-normal text-ink-subtle">
-                {stats.decided30d > 0 ? `(${stats.decided30d} decididas)` : 'sin decisiones'}
+                {stats.decided > 0 ? `(${stats.decided} decididas)` : 'sin decisiones'}
               </span>
             </span>
           </div>
