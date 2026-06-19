@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, CalendarDays, CalendarRange, Settings, LogOut, Menu, X, Users, KeyRound, AlertTriangle } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, CalendarRange, Settings, LogOut, Menu, X, Users, KeyRound, AlertTriangle, CalendarOff } from 'lucide-react'
 import { motion, AnimatePresence, LayoutGroup } from '@/components/motion'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -14,6 +14,7 @@ const navItems = [
   { href: '/admin/citas',       label: 'Citas',      Icon: CalendarDays    },
   { href: '/admin/calendario',  label: 'Calendario', Icon: CalendarRange   },
   { href: '/admin/slots',       label: 'Slots',      Icon: Settings        },
+  { href: '/admin/bloqueos',    label: 'Bloqueos',   Icon: CalendarOff     },
   { href: '/admin/admins',      label: 'Admins',     Icon: Users           },
   { href: '/admin/cuenta',      label: 'Mi cuenta',  Icon: KeyRound        },
 ]

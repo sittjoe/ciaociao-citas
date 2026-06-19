@@ -10,6 +10,7 @@ import { releaseExpiredHolds } from '@/lib/holds'
 import { createSlotLock } from '@/lib/slot-locks'
 import { logAppointmentEvent } from '@/lib/appointment-events'
 import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
+import { getBlockedDateSet, businessDateKey } from '@/lib/blocked-dates'
 import type { Appointment, Guest } from '@/types'
 import { randomUUID, randomBytes } from 'crypto'
 
@@ -192,6 +193,11 @@ export async function POST(request: Request) {
       email:       g.email.toLowerCase().trim(),
     }))
 
+    // Defense in depth: blocked-date slots are already hidden from the public
+    // calendar, but re-check here. Fails open (empty set) so a blocked-dates
+    // glitch never blocks a legitimate booking.
+    const blockedDates = await getBlockedDateSet()
+
     // Firestore transaction: all reads first, then all writes atomically
     await adminDb.runTransaction(async tx => {
       const slotRef  = adminDb.collection('slots').doc(slotId)
@@ -204,6 +210,7 @@ export async function POST(request: Request) {
       const slotType = normalizeAppointmentType(slotData.slotType)
 
       if (!slotData.available) throw new Error('SLOT_UNAVAILABLE')
+      if (blockedDates.has(businessDateKey(slotDatetime))) throw new Error('DATE_BLOCKED')
       if (slotType !== appointmentType) throw new Error('SLOT_TYPE_MISMATCH')
       if (slotDatetime <= new Date()) throw new Error('SLOT_UNAVAILABLE')
 
@@ -393,7 +400,7 @@ export async function POST(request: Request) {
       }).catch(() => {})
     }
     const msg = err instanceof Error ? err.message : 'Error desconocido'
-    if (msg === 'SLOT_UNAVAILABLE' || msg === 'SLOT_NOT_FOUND') {
+    if (msg === 'SLOT_UNAVAILABLE' || msg === 'SLOT_NOT_FOUND' || msg === 'DATE_BLOCKED') {
       return NextResponse.json({ error: 'Este horario ya no está disponible. Por favor selecciona otro.' }, { status: 409 })
     }
     if (msg === 'SLOT_TYPE_MISMATCH') {

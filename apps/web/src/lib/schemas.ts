@@ -154,6 +154,15 @@ export const attendanceSchema = z.object({
   attended: z.boolean(),
 })
 
+const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha YYYY-MM-DD inválida')
+export const blockDatesSchema = z.object({
+  from: dateKey,
+  to: dateKey,
+  reason: z.string().max(120).optional(),
+}).refine(v => v.from <= v.to, { message: 'El rango de fechas es inválido' })
+
+export type BlockDatesInput = z.infer<typeof blockDatesSchema>
+
 export const slotSchema = z.object({
   datetime: z.string().datetime({ message: 'Fecha inválida' }),
 })
