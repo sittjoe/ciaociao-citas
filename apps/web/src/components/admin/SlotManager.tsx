@@ -93,6 +93,21 @@ export function SlotManager() {
     setCustomTime('')
   }
 
+  // Reset the "create availability" form to a clean default state. Called on
+  // close and after a successful create so reopening never shows stale dates,
+  // accumulated custom times, or a previous slot type.
+  const resetAddForm = useCallback(() => {
+    setSelectedDates(new Set())
+    setSelectedTimes(new Set(DEFAULT_TIMES))
+    setCustomTime('')
+    setSlotType('showroom')
+  }, [])
+
+  const closeAddModal = useCallback(() => {
+    setShowAdd(false)
+    resetAddForm()
+  }, [resetAddForm])
+
   const createSlots = useCallback(async () => {
     if (!selectedDates.size || !selectedTimes.size) {
       toast.error('Selecciona al menos una fecha y un horario')
@@ -117,14 +132,14 @@ export function SlotManager() {
         ? `${created} slots creados, ${skipped} ya existían`
         : `${created} slot${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''}`)
       setShowAdd(false)
-      setSelectedDates(new Set())
+      resetAddForm()
       fetchSlots()
-    } catch {
-      toast.error('Error al crear slots')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear slots')
     } finally {
       setCreating(false)
     }
-  }, [selectedDates, selectedTimes, slotType, fetchSlots])
+  }, [selectedDates, selectedTimes, slotType, fetchSlots, resetAddForm])
 
   const deleteSlot = useCallback(async (id: string) => {
     setDeleting(id)
@@ -276,7 +291,7 @@ export function SlotManager() {
       />
 
       {/* Add slots modal */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Crear disponibilidad" size="lg">
+      <Modal open={showAdd} onClose={closeAddModal} title="Crear disponibilidad" size="lg">
         <div className="space-y-5">
           <div className="rounded-2xl border border-admin-line bg-admin-surface p-4">
             <p className="label-clean mb-3">Tipo de cita</p>

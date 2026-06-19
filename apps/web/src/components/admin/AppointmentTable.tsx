@@ -156,6 +156,9 @@ export function AppointmentTable() {
   const [loading,     setLoading]       = useState(true)
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
   const [search,      setSearch]        = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [dateFrom,    setDateFrom]      = useState('')
+  const [dateTo,      setDateTo]        = useState('')
   const [statusFilter,setStatusFilter]  = useState<AppointmentStatus | ''>('')
   const [appointmentTypeFilter, setAppointmentTypeFilter] = useState<AppointmentType | ''>('')
   const [productFilter, setProductFilter] = useState('')
@@ -175,16 +178,26 @@ export function AppointmentTable() {
   const [meetingProvider, setMeetingProvider] = useState('')
   const [meetingInstructions, setMeetingInstructions] = useState('')
 
+  // Debounce the search box so we don't fire one request per keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
   const fetchAppointments = useCallback(async (reset = true) => {
     if (reset) setLoading(true)
     const params = new URLSearchParams()
-    if (search)       params.set('search', search)
+    if (debouncedSearch) params.set('search', debouncedSearch)
     if (statusFilter) params.set('status', statusFilter)
     if (appointmentTypeFilter) params.set('appointmentType', appointmentTypeFilter)
     if (productFilter) params.set('productType', productFilter)
     if (budgetFilter) params.set('budgetRange', budgetFilter)
     if (priorityFilter) params.set('priority', priorityFilter)
     if (commercialFilter) params.set('commercialStatus', commercialFilter)
+    // Date inputs are CDMX calendar days; the backend filters slotDatetime,
+    // so 'hasta' is the start of the following day (exclusive upper bound).
+    if (dateFrom) params.set('dateFrom', `${dateFrom}T00:00:00`)
+    if (dateTo)   params.set('dateTo',   `${dateTo}T23:59:59`)
     if (!reset && nextCursor) params.set('cursor', nextCursor)
 
     try {
@@ -202,12 +215,13 @@ export function AppointmentTable() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, nextCursor])
+  }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, dateFrom, dateTo, nextCursor])
 
-  useEffect(() => { fetchAppointments(true) }, [search, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter]) // eslint-disable-line
+  useEffect(() => { fetchAppointments(true) }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, dateFrom, dateTo]) // eslint-disable-line
 
   useEffect(() => {
     if (!selected) return
+    setRejectReason('')   // never carry a rejection reason from a previous appointment
     setCommercialStatus(selected.commercialStatus ?? 'pending')
     setInternalNote(selected.internalNote ?? '')
     setFollowUpAt(selected.followUpAt ? selected.followUpAt.slice(0, 16) : '')
@@ -263,9 +277,13 @@ export function AppointmentTable() {
         throw new Error(err.error ?? 'Error')
       }
       toast.success(action === 'accept' ? 'Cita confirmada' : 'Cita rechazada')
+      // Optimistic in-place update: keep the operator's filters, sort and scroll
+      // position instead of reloading the whole table.
+      const newStatus: AppointmentStatus = action === 'accept' ? 'accepted' : 'rejected'
+      setAppointments(prev => prev.map(a =>
+        a.id === selected.id ? { ...a, status: newStatus, clientConfirmed: false } : a))
       setSelected(null)
       setRejectReason('')
-      await fetchAppointments(true)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al procesar')
     } finally {
@@ -295,16 +313,17 @@ export function AppointmentTable() {
         throw new Error(err.error ?? 'Error')
       }
       toast.success('Seguimiento actualizado')
-      setSelected(prev => prev ? {
-        ...prev,
+      const patch = {
         commercialStatus,
         internalNote,
         followUpAt: followUpIso || null,
         meetingUrl,
         meetingProvider,
         meetingInstructions,
-      } : prev)
-      await fetchAppointments(true)
+      }
+      setSelected(prev => prev ? { ...prev, ...patch } : prev)
+      // Optimistic in-place update — preserve filters and table position
+      setAppointments(prev => prev.map(a => a.id === selected.id ? { ...a, ...patch } : a))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar seguimiento')
     } finally {
@@ -429,6 +448,40 @@ export function AppointmentTable() {
         </Button>
       </div>
 
+      {/* Date range filter */}
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-admin-line bg-admin-panel px-3 py-2.5">
+        <div>
+          <label htmlFor="filter-date-from" className="label-clean">Desde</label>
+          <input
+            id="filter-date-from"
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={e => setDateFrom(e.target.value)}
+            className="input-clean mt-1 h-9 min-h-0 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label htmlFor="filter-date-to" className="label-clean">Hasta</label>
+          <input
+            id="filter-date-to"
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={e => setDateTo(e.target.value)}
+            className="input-clean mt-1 h-9 min-h-0 py-1.5 text-sm"
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <button
+            onClick={() => { setDateFrom(''); setDateTo('') }}
+            className="h-9 rounded-lg px-3 text-xs font-medium text-ink-muted hover:bg-admin-surface hover:text-ink transition-colors"
+          >
+            Limpiar fechas
+          </button>
+        )}
+      </div>
+
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
@@ -472,7 +525,19 @@ export function AppointmentTable() {
               {table.getRowModel().rows.map(row => {
                 const appt = row.original
                 return (
-                  <tr key={row.id} className="border-b border-admin-line last:border-0 hover:bg-champagne-tint/60 transition-colors">
+                  <tr
+                    key={row.id}
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      // Enter/Space on a focused row opens it, unless focus is on
+                      // an inner control (the ID/WhatsApp links or Gestionar button).
+                      if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                        e.preventDefault()
+                        void openAppointment(appt)
+                      }
+                    }}
+                    className="border-b border-admin-line last:border-0 hover:bg-champagne-tint/60 focus-visible:outline-none focus-visible:bg-champagne-tint/60 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-champagne transition-colors"
+                  >
                     {row.getVisibleCells().map(cell => (
                       <td
                         key={cell.id}
