@@ -147,8 +147,10 @@ export const slotSchema = z.object({
 })
 
 export const bulkSlotsSchema = z.object({
-  dates: z.array(z.string()).min(1),
-  times: z.array(z.string()).min(1),
+  // Hard caps bound the work: at most 120 dates × 24 times = 2880 slots per
+  // call, so a malformed request can't trigger tens of thousands of writes.
+  dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha YYYY-MM-DD inválida')).min(1).max(120, 'Máximo 120 fechas'),
+  times: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora HH:MM inválida')).min(1).max(24, 'Máximo 24 horarios'),
   slotType: z.enum(appointmentTypeOptions).default('showroom'),
 })
 

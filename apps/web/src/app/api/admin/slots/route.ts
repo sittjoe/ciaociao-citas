@@ -122,7 +122,8 @@ export async function POST(request: Request) {
 
 // DELETE — remove a single slot
 export async function DELETE(request: Request) {
-  if (!(await requireAdminSession())) {
+  const session = await requireAdminSession()
+  if (!session) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
@@ -152,6 +153,13 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'No se puede eliminar un slot con reserva activa' }, { status: 409 })
     }
     await slotRef.delete()
+    await adminDb.collection('auditLog').add({
+      action: 'slot_deleted',
+      slotId,
+      slotDatetime: data.datetime ? (data.datetime as Timestamp).toDate().toISOString() : null,
+      actorEmail: session.email,
+      ts: new Date(),
+    }).catch(() => {})
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('DELETE /api/admin/slots', err)
