@@ -28,7 +28,7 @@ export function Field({ label, error, hint, required, children, className }: Fie
     <div className={cn('block space-y-1.5', className)}>
       <label htmlFor={id} className="label-clean">
         {label}
-        {required && <span className="text-champagne ml-1" aria-hidden="true">*</span>}
+        {required && <span className="text-champagne-solid ml-1" aria-hidden="true">*</span>}
       </label>
 
       {content}

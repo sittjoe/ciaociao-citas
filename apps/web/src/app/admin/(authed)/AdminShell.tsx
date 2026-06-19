@@ -34,7 +34,7 @@ function Logomark() {
 function NavList({ pathname, onClose }: { pathname: string; onClose: () => void }) {
   return (
     <LayoutGroup>
-      <nav className="flex-1 p-2.5 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto p-2.5 space-y-0.5">
         {navItems.map(({ href, label, Icon }) => {
           const active = pathname === href
           return (
@@ -125,7 +125,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
         <p className="font-serif tracking-[0.2em] uppercase text-ink">Ciao Ciao</p>
         <button
           onClick={() => setOpen(!open)}
-          className="text-ink-muted hover:text-ink transition-colors p-1 rounded-lg focus-visible:shadow-focus-ring"
+          className="text-ink-muted hover:text-ink focus-visible:text-ink transition-colors p-1 rounded-lg focus-visible:outline-none focus-visible:shadow-focus-ring"
           aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
           aria-expanded={open}
         >
@@ -168,7 +168,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
                 </div>
                 <button
                   onClick={logout}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full focus-visible:outline-none focus-visible:shadow-focus-ring"
                 >
                   <LogOut size={15} strokeWidth={1.5} /> Cerrar sesión
                 </button>

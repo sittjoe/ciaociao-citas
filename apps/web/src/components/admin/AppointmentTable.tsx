@@ -146,9 +146,9 @@ const columns = [
 ]
 
 function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
-  if (sorted === 'asc')  return <ChevronUp size={13} className="text-champagne" />
-  if (sorted === 'desc') return <ChevronDown size={13} className="text-champagne" />
-  return <ChevronsUpDown size={13} className="text-ink-subtle opacity-50" />
+  if (sorted === 'asc')  return <ChevronUp size={13} className="text-champagne-solid" aria-label="Orden ascendente" />
+  if (sorted === 'desc') return <ChevronDown size={13} className="text-champagne-solid" aria-label="Orden descendente" />
+  return <ChevronsUpDown size={13} className="text-ink-subtle opacity-50" aria-label="Sin ordenar" />
 }
 
 export function AppointmentTable() {
@@ -357,7 +357,7 @@ export function AppointmentTable() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="grid gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_165px_170px_190px_130px_150px_auto]">
+      <div className="grid grid-cols-1 gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_165px_170px_190px_130px_150px_auto]">
         <div className="relative sm:col-span-2 xl:col-span-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
           <input
@@ -491,7 +491,7 @@ export function AppointmentTable() {
                             href={`/api/admin/id-url?path=${encodeURIComponent(appt.identificationUrl)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="rounded-lg p-1.5 text-ink-subtle transition-colors hover:bg-champagne-tint hover:text-champagne"
+                            className="rounded-lg p-1.5 text-ink-subtle transition-colors hover:bg-champagne-tint hover:text-champagne-solid"
                             aria-label={`Ver identificación de ${appt.name}`}
                           >
                             <FileText size={14} strokeWidth={1.5} />
@@ -621,6 +621,7 @@ export function AppointmentTable() {
                     href={formatWhatsAppUrl(selected.phone, selected.name)}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={`Escribir a ${selected.name} por WhatsApp`}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                   >
                     <MessageCircle size={13} strokeWidth={1.5} />
@@ -755,7 +756,7 @@ export function AppointmentTable() {
             {selected.appointmentType !== 'video_engagement_rings' ? (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
               <div className="flex items-center gap-2 min-w-0">
-                <FileText size={16} strokeWidth={1.5} className="text-champagne shrink-0" />
+                <FileText size={16} strokeWidth={1.5} className="text-champagne-solid shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink">Identificación titular</p>
                   <p className="text-xs text-ink-muted truncate">
@@ -768,7 +769,7 @@ export function AppointmentTable() {
                   href={`/api/admin/id-url?path=${encodeURIComponent(selected.identificationUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne hover:bg-champagne-soft transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne-solid hover:bg-champagne-soft transition-colors"
                 >
                   <ExternalLink size={13} strokeWidth={1.5} />
                   Ver

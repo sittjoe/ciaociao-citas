@@ -84,8 +84,11 @@ export function SlotManager() {
     })
   }
 
+  // Strict HH:MM (00-23:00-59); the old /\d{2}:\d{2}/ accepted 99:99 / 12:60
+  const isValidTime = (t: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)
+
   const addCustomTime = () => {
-    if (!customTime.match(/^\d{2}:\d{2}$/)) return
+    if (!isValidTime(customTime)) return
     setSelectedTimes(prev => new Set([...prev, customTime]))
     setCustomTime('')
   }
@@ -168,6 +171,7 @@ export function SlotManager() {
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value as AppointmentType | '')}
             className="input-clean h-9 min-h-0 py-1.5 text-xs sm:w-48"
+            aria-label="Filtrar slots por tipo de cita"
           >
             <option value="">Todos los tipos</option>
             <option value="showroom">{appointmentTypeLabels.showroom}</option>
@@ -239,7 +243,7 @@ export function SlotManager() {
                           <button
                             onClick={() => setPendingDelete(slot.id)}
                             disabled={deleting === slot.id}
-                            className="text-red-400/60 hover:text-red-500 transition-colors disabled:opacity-40 p-1 rounded-lg hover:bg-red-50"
+                            className="text-red-400/60 hover:text-red-500 transition-colors disabled:opacity-40 disabled:cursor-wait disabled:hover:text-red-400/60 p-1 rounded-lg hover:bg-red-50 focus-visible:outline-none focus-visible:shadow-focus-ring"
                             aria-label="Eliminar slot"
                           >
                             <Trash2 size={15} strokeWidth={1.5} />
@@ -349,17 +353,30 @@ export function SlotManager() {
                 </AnimatePresence>
               </div>
             </LayoutGroup>
-            <div className="flex gap-2 mt-3">
-              <input
-                value={customTime}
-                onChange={e => setCustomTime(e.target.value)}
-                placeholder="HH:MM"
-                className="input-clean w-24"
-                pattern="\d{2}:\d{2}"
-              />
-              <Button variant="outline" size="sm" onClick={addCustomTime}>
-                <Plus size={14} /> Agregar hora
-              </Button>
+            <div className="mt-3">
+              <div className="flex gap-2">
+                <input
+                  value={customTime}
+                  onChange={e => setCustomTime(e.target.value)}
+                  placeholder="HH:MM"
+                  className="input-clean w-24"
+                  inputMode="numeric"
+                  aria-label="Hora personalizada en formato HH:MM"
+                  aria-invalid={customTime.length > 0 && !isValidTime(customTime)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTime() } }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addCustomTime}
+                  disabled={!isValidTime(customTime)}
+                >
+                  <Plus size={14} /> Agregar hora
+                </Button>
+              </div>
+              {customTime.length > 0 && !isValidTime(customTime) && (
+                <p className="mt-1.5 text-xs text-red-600">Usa el formato HH:MM de 24 horas, por ejemplo 09:30 o 17:00.</p>
+              )}
             </div>
           </div>
 
@@ -367,7 +384,7 @@ export function SlotManager() {
             <p className="text-xs text-ink-muted">
               {selectedDates.size} fecha{selectedDates.size !== 1 ? 's' : ''} ×{' '}
               {selectedTimes.size} horario{selectedTimes.size !== 1 ? 's' : ''} ={' '}
-              <strong className="text-champagne">{selectedDates.size * selectedTimes.size} slots</strong>
+              <strong className="text-champagne-solid">{selectedDates.size * selectedTimes.size} slots</strong>
               {' '}· {appointmentTypeLabels[slotType]}
             </p>
             <Button loading={creating} onClick={createSlots}>

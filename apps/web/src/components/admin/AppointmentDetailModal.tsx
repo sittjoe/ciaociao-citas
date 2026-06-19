@@ -170,7 +170,7 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
     >
       {loading || !appt ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-champagne" />
+          <Loader2 size={24} className="animate-spin text-champagne-solid" />
         </div>
       ) : (
         <div className="space-y-4">
@@ -221,7 +221,7 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
 
           <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
             <div className="flex items-center gap-2 min-w-0">
-              <Mail size={16} strokeWidth={1.5} className="text-champagne shrink-0" />
+              <Mail size={16} strokeWidth={1.5} className="text-champagne-solid shrink-0" />
               <p className="text-sm font-medium text-ink">Email de estado</p>
             </div>
             <Button
@@ -238,14 +238,15 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
           {appt.identificationUrl && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
               <div className="flex items-center gap-2 min-w-0">
-                <FileText size={16} strokeWidth={1.5} className="text-champagne shrink-0" />
+                <FileText size={16} strokeWidth={1.5} className="text-champagne-solid shrink-0" />
                 <p className="text-sm font-medium text-ink">Identificación titular</p>
               </div>
               <a
                 href={`/api/admin/id-url?path=${encodeURIComponent(appt.identificationUrl)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne hover:bg-champagne-soft transition-colors"
+                aria-label="Ver identificación (abre en una pestaña nueva)"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne-solid hover:bg-champagne-soft transition-colors"
               >
                 <ExternalLink size={13} strokeWidth={1.5} /> Ver
               </a>
@@ -256,8 +257,9 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
           {appt.status === 'pending' && (
             <div className="space-y-3 pt-2 border-t border-admin-line">
               <div>
-                <label className="label-clean">Motivo de rechazo (opcional)</label>
+                <label htmlFor="reject-reason" className="label-clean">Motivo de rechazo (opcional)</label>
                 <textarea
+                  id="reject-reason"
                   value={rejectReason}
                   onChange={e => setRejectReason(e.target.value)}
                   placeholder="Ej: Sin disponibilidad en esa fecha"
@@ -265,7 +267,7 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
                   className="input-clean mt-1 w-full resize-none"
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button variant="gold" className="flex-1" loading={acting} onClick={() => decide('accept')}>
                   <CheckCircle size={15} strokeWidth={1.5} /> Confirmar
                 </Button>
@@ -292,15 +294,16 @@ export function AppointmentDetailModal({ appointmentId, onClose, onChanged }: Pr
 
           {appt.status === 'accepted' && showReschedule && (
             <div className="space-y-3 pt-2 border-t border-admin-line">
-              <p className="text-sm font-medium text-ink">Selecciona el nuevo horario</p>
+              <label htmlFor="reschedule-slot" className="block text-sm font-medium text-ink">Selecciona el nuevo horario</label>
               {slotsLoading ? (
                 <div className="flex justify-center py-4">
-                  <Loader2 size={18} className="animate-spin text-champagne" />
+                  <Loader2 size={18} className="animate-spin text-champagne-solid" />
                 </div>
               ) : slots.length === 0 ? (
                 <p className="text-sm text-ink-muted text-center py-3">No hay slots disponibles</p>
               ) : (
                 <select
+                  id="reschedule-slot"
                   value={selectedSlotId}
                   onChange={e => setSelectedSlotId(e.target.value)}
                   className="input-clean w-full"

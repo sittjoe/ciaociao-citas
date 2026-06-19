@@ -28,7 +28,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             className={cn(
-              'flex-1 min-w-0 bg-transparent py-3 text-ink placeholder:text-ink-subtle outline-none',
+              'flex-1 min-w-0 bg-transparent py-3 text-ink placeholder:text-ink-muted outline-none',
               className,
             )}
             {...props}
@@ -44,7 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         className={cn(
           'w-full bg-white rounded-xl px-4 py-3',
           'border transition-all duration-200 outline-none',
-          'text-ink placeholder:text-ink-subtle',
+          'text-ink placeholder:text-ink-muted',
           error
             ? 'border-red-400 shadow-[0_0_0_3px_rgba(239,68,68,0.12)]'
             : 'border-ink-line focus:border-champagne focus:shadow-focus-ring',
@@ -70,7 +70,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       className={cn(
         'w-full bg-white rounded-xl px-4 py-3 resize-none',
         'border transition-all duration-200 outline-none',
-        'text-ink placeholder:text-ink-subtle',
+        'text-ink placeholder:text-ink-muted',
         error
           ? 'border-red-400 shadow-[0_0_0_3px_rgba(239,68,68,0.12)]'
           : 'border-ink-line focus:border-champagne focus:shadow-focus-ring',
