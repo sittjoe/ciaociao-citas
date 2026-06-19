@@ -167,6 +167,8 @@ export function AppointmentTable() {
   const [commercialFilter, setCommercialFilter] = useState<CommercialStatus | ''>('')
   const [sorting,     setSorting]       = useState<SortingState>([])
   const [selected,    setSelected]      = useState<SerialAppt | null>(null)
+  const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set())
+  const [batchActing, setBatchActing]   = useState(false)
   const [deciding,    setDeciding]      = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [savingCommercial, setSavingCommercial] = useState(false)
@@ -217,7 +219,48 @@ export function AppointmentTable() {
     }
   }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, dateFrom, dateTo, nextCursor])
 
-  useEffect(() => { fetchAppointments(true) }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, dateFrom, dateTo]) // eslint-disable-line
+  useEffect(() => { fetchAppointments(true); setSelectedIds(new Set()) }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, dateFrom, dateTo]) // eslint-disable-line
+
+  const pendingIds = appointments.filter(a => a.status === 'pending').map(a => a.id)
+  const allPendingSelected = pendingIds.length > 0 && pendingIds.every(id => selectedIds.has(id))
+
+  const toggleSelect = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const toggleSelectAllPending = () => setSelectedIds(prev =>
+    allPendingSelected ? new Set() : new Set(pendingIds))
+
+  const batchDecide = useCallback(async (action: 'accept' | 'reject') => {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setBatchActing(true)
+    try {
+      const res = await fetch('/api/admin/appointments/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action }),
+      })
+      if (res.status === 401) { window.location.href = '/admin/login?from=/admin/citas'; return }
+      const data = await res.json() as { succeeded?: number; failed?: { id: string; error: string }[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      const failedIds = new Set((data.failed ?? []).map(f => f.id))
+      const newStatus: AppointmentStatus = action === 'accept' ? 'accepted' : 'rejected'
+      setAppointments(prev => prev.map(a =>
+        ids.includes(a.id) && !failedIds.has(a.id) ? { ...a, status: newStatus, clientConfirmed: false } : a))
+      setSelectedIds(new Set())
+      const ok = data.succeeded ?? 0
+      const failN = data.failed?.length ?? 0
+      toast.success(failN > 0
+        ? `${ok} ${action === 'accept' ? 'confirmadas' : 'rechazadas'}, ${failN} con error`
+        : `${ok} ${action === 'accept' ? 'confirmadas' : 'rechazadas'}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al procesar el lote')
+    } finally {
+      setBatchActing(false)
+    }
+  }, [selectedIds])
 
   useEffect(() => {
     if (!selected) return
@@ -482,10 +525,33 @@ export function AppointmentTable() {
         )}
       </div>
 
+      {/* Batch action bar — appears when pending appointments are selected */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-champagne-soft bg-champagne-tint/60 px-4 py-2.5">
+          <p className="text-sm font-medium text-ink">
+            {selectedIds.size} {selectedIds.size === 1 ? 'cita seleccionada' : 'citas seleccionadas'}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-white hover:text-ink transition-colors"
+            >
+              Limpiar
+            </button>
+            <Button variant="gold" size="sm" loading={batchActing} onClick={() => batchDecide('accept')}>
+              <CheckCircle size={14} strokeWidth={1.5} /> Confirmar {selectedIds.size}
+            </Button>
+            <Button variant="danger" size="sm" loading={batchActing} onClick={() => batchDecide('reject')}>
+              <XCircle size={14} strokeWidth={1.5} /> Rechazar {selectedIds.size}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
-          <TableSkeleton rows={6} cols={8} />
+          <TableSkeleton rows={6} cols={9} />
         ) : appointments.length === 0 ? (
           <EmptyState
             title="Sin citas"
@@ -495,6 +561,16 @@ export function AppointmentTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-admin-line bg-admin-surface/70">
+                <th className="w-10 px-3 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    aria-label="Seleccionar todas las pendientes"
+                    checked={allPendingSelected}
+                    disabled={pendingIds.length === 0}
+                    onChange={toggleSelectAllPending}
+                    className="h-4 w-4 cursor-pointer accent-champagne-solid disabled:opacity-30"
+                  />
+                </th>
                 {table.getFlatHeaders().map(header => (
                   <th
                     key={header.id}
@@ -536,8 +612,23 @@ export function AppointmentTable() {
                         void openAppointment(appt)
                       }
                     }}
-                    className="border-b border-admin-line last:border-0 hover:bg-champagne-tint/60 focus-visible:outline-none focus-visible:bg-champagne-tint/60 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-champagne transition-colors"
+                    className={cn(
+                      'border-b border-admin-line last:border-0 hover:bg-champagne-tint/60 focus-visible:outline-none focus-visible:bg-champagne-tint/60 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-champagne transition-colors',
+                      selectedIds.has(appt.id) && 'bg-champagne-tint/50',
+                    )}
                   >
+                    <td className="w-10 px-3 py-3">
+                      {appt.status === 'pending' ? (
+                        <input
+                          type="checkbox"
+                          aria-label={`Seleccionar cita de ${appt.name}`}
+                          checked={selectedIds.has(appt.id)}
+                          onChange={() => toggleSelect(appt.id)}
+                          onKeyDown={e => e.stopPropagation()}
+                          className="h-4 w-4 cursor-pointer accent-champagne-solid"
+                        />
+                      ) : null}
+                    </td>
                     {row.getVisibleCells().map(cell => (
                       <td
                         key={cell.id}

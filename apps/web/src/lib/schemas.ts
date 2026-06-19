@@ -142,6 +142,14 @@ export const appointmentDecisionSchema = z.object({
 
 export type AppointmentDecisionInput = z.infer<typeof appointmentDecisionSchema>
 
+export const batchDecisionSchema = z.object({
+  ids: z.array(z.string().min(1).max(128)).min(1, 'Selecciona al menos una cita').max(50, 'Máximo 50 citas por lote'),
+  action: z.enum(['accept', 'reject']),
+  reason: z.string().max(500).optional(),
+})
+
+export type BatchDecisionInput = z.infer<typeof batchDecisionSchema>
+
 export const slotSchema = z.object({
   datetime: z.string().datetime({ message: 'Fecha inválida' }),
 })

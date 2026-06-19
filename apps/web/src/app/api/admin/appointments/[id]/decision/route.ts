@@ -1,45 +1,9 @@
-import { NextResponse, after } from 'next/server'
-import { adminDb } from '@/lib/firebase-admin'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { NextResponse } from 'next/server'
 import { appointmentDecisionSchema } from '@/lib/schemas'
-import { sendStatusUpdate, sendCalendarError } from '@/lib/email'
 import { requireAdminSession } from '@/lib/admin-auth'
-import { createAppointmentCalendarEvent } from '@/lib/google-calendar'
-import { releaseSlotLock } from '@/lib/slot-locks'
-import { normalizeAppointmentType } from '@/lib/commercial'
-import { logAppointmentEvent } from '@/lib/appointment-events'
-import { sanitize } from '@/lib/utils'
-import type { Appointment, AppointmentStatus } from '@/types'
+import { applyAppointmentDecision } from '@/lib/appointment-decision'
 
 export const dynamic = 'force-dynamic'
-
-function mapAppointment(id: string, data: FirebaseFirestore.DocumentData, status?: AppointmentStatus): Appointment {
-  return {
-    id,
-    slotId: data.slotId,
-    slotDatetime: (data.slotDatetime as Timestamp).toDate(),
-    appointmentType: normalizeAppointmentType(data.appointmentType),
-    name: data.name,
-    email: data.email,
-    phone: data.phone,
-    notes: data.notes,
-    productType: data.productType,
-    budgetRange: data.budgetRange,
-    lookingFor: data.lookingFor,
-    engagementBrief: data.engagementBrief ?? {},
-    identificationUrl: data.identificationUrl,
-    status: status ?? data.status,
-    confirmationCode: data.confirmationCode,
-    cancelToken: data.cancelToken,
-    reminder24Sent: data.reminder24Sent ?? false,
-    reminder2Sent: data.reminder2Sent ?? false,
-    googleCalendarEventId: data.googleCalendarEventId ?? null,
-    meetingUrl: data.meetingUrl ?? null,
-    meetingProvider: data.meetingProvider ?? null,
-    meetingInstructions: data.meetingInstructions ?? null,
-    createdAt: (data.createdAt as Timestamp).toDate(),
-  }
-}
 
 export async function POST(
   request: Request,
@@ -55,103 +19,17 @@ export async function POST(
   }
 
   const { action, reason, meetingUrl, meetingProvider, meetingInstructions } = parsed.data
-  const cleanMeetingUrl = sanitize(meetingUrl ?? '')
-  const cleanMeetingProvider = sanitize(meetingProvider ?? '')
-  const cleanMeetingInstructions = sanitize(meetingInstructions ?? '')
+  const result = await applyAppointmentDecision({
+    id, action, adminEmail: admin.email,
+    reason, meetingUrl, meetingProvider, meetingInstructions,
+  })
 
-  let appointment: Appointment | null = null
-  let googleCalendarEventId: string | null = null
-
-  try {
-    const apptRef = adminDb.collection('appointments').doc(id)
-    const apptSnap = await apptRef.get()
-    if (!apptSnap.exists) return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
-
-    const apptData = apptSnap.data()!
-    if (apptData.status !== 'pending') {
-      return NextResponse.json({ error: 'Esta cita ya fue procesada' }, { status: 409 })
-    }
-
-    appointment = mapAppointment(id, apptData, action === 'accept' ? 'accepted' : 'rejected')
-
-    await adminDb.runTransaction(async tx => {
-      const freshSnap = await tx.get(apptRef)
-      if (!freshSnap.exists) throw new Error('NOT_FOUND')
-      const freshData = freshSnap.data()!
-      if (freshData.status !== 'pending') throw new Error('ALREADY_PROCESSED')
-
-      const newStatus = action === 'accept' ? 'accepted' : 'rejected'
-      const appointmentType = normalizeAppointmentType(freshData.appointmentType)
-      if (action === 'accept' && appointmentType === 'showroom' && !freshData.identificationUrl) {
-        throw new Error('MISSING_IDENTIFICATION')
-      }
-      tx.update(apptRef, {
-        status: newStatus,
-        updatedAt: FieldValue.serverTimestamp(),
-        decidedAt: FieldValue.serverTimestamp(),
-        decidedBy: admin.email,
-        ...(reason ? { adminNote: reason } : {}),
-        ...(action === 'accept' ? { clientConfirmed: false } : {}),
-        ...(action === 'accept' && appointmentType === 'video_engagement_rings' ? {
-          meetingUrl: cleanMeetingUrl,
-          meetingProvider: cleanMeetingProvider,
-          meetingInstructions: cleanMeetingInstructions,
-        } : {}),
-      })
-
-      if (action === 'accept') {
-        // Clear heldUntil so releaseExpiredHolds never picks up this slot.
-        // Slot stays available:false, bookedBy unchanged.
-        tx.update(adminDb.collection('slots').doc(freshData.slotId), { heldUntil: null })
-      } else {
-        tx.update(adminDb.collection('slots').doc(freshData.slotId), {
-          available: true,
-          heldUntil: null,
-          bookedBy: null,
-        })
-        releaseSlotLock(tx, freshData.slotDatetime as Timestamp)
-      }
-
-      appointment = mapAppointment(id, freshData, newStatus)
-      if (action === 'accept' && appointmentType === 'video_engagement_rings') {
-        appointment.meetingUrl = cleanMeetingUrl
-        appointment.meetingProvider = cleanMeetingProvider
-        appointment.meetingInstructions = cleanMeetingInstructions
-      }
-    })
-
-    after(sendStatusUpdate(appointment!, action, reason).catch(err =>
-      console.error('Status email failed (non-fatal):', err)
-    ))
-    after(logAppointmentEvent({
-      appointmentId: id,
-      action: 'decision',
-      actor: admin.email,
-      summary: action === 'accept' ? 'Cita aceptada' : 'Cita rechazada',
-      metadata: { action, reason: reason ?? '' },
-    }).catch(err => console.error('Appointment event log failed:', err)))
-
-    if (action === 'accept') {
-      try {
-        googleCalendarEventId = await createAppointmentCalendarEvent(appointment!)
-        await adminDb.collection('appointments').doc(id).update({ googleCalendarEventId })
-      } catch (err) {
-        console.error('Google Calendar create failed (non-fatal):', err)
-        await adminDb.collection('appointments').doc(id).update({ calendarSyncFailed: true }).catch(() => {})
-        after(sendCalendarError(appointment!, err instanceof Error ? err.message : String(err)).catch(() => {}))
-        return NextResponse.json({ ok: true, googleCalendarEventId: null, calendarSyncFailed: true })
-      }
-    }
-
-    return NextResponse.json({ ok: true, googleCalendarEventId })
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : ''
-    if (msg === 'NOT_FOUND') return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
-    if (msg === 'ALREADY_PROCESSED') return NextResponse.json({ error: 'Esta cita ya fue procesada' }, { status: 409 })
-    if (msg === 'MISSING_IDENTIFICATION') {
-      return NextResponse.json({ error: 'La cita de showroom necesita identificación antes de aceptarse.' }, { status: 422 })
-    }
-    console.error(`POST /api/admin/appointments/${id}/decision`, err)
-    return NextResponse.json({ error: 'Error al procesar la decisión' }, { status: 500 })
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
   }
+  return NextResponse.json({
+    ok: true,
+    googleCalendarEventId: result.googleCalendarEventId ?? null,
+    ...(result.calendarSyncFailed ? { calendarSyncFailed: true } : {}),
+  })
 }
