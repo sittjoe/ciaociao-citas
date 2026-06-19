@@ -11,6 +11,8 @@ export type AppointmentEventAction =
   | 'email_resent'
   | 'guest_verified'
   | 'guest_excluded'
+  | 'marked_attended'
+  | 'marked_no_show'
 
 export async function logAppointmentEvent(params: {
   appointmentId: string

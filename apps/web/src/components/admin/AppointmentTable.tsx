@@ -139,6 +139,16 @@ const columns = [
               {row.guestCount}
             </span>
           )}
+          {row.attended === true && (
+            <span title="El cliente asistió" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Asistió
+            </span>
+          )}
+          {row.attended === false && (
+            <span title="El cliente no se presentó" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+              No asistió
+            </span>
+          )}
         </div>
       )
     },
@@ -291,6 +301,29 @@ export function AppointmentTable() {
       setDetailLoading(false)
     }
   }, [])
+
+  const markAttendance = useCallback(async (attended: boolean) => {
+    if (!selected) return
+    setDeciding(true)
+    try {
+      const res = await fetch(`/api/admin/appointments/${selected.id}/attend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attended }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(err.error ?? 'Error')
+      }
+      toast.success(attended ? 'Marcada como asistió' : 'Marcada como no asistió')
+      setSelected(prev => prev ? { ...prev, attended } : prev)
+      setAppointments(prev => prev.map(a => a.id === selected.id ? { ...a, attended } : a))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al registrar asistencia')
+    } finally {
+      setDeciding(false)
+    }
+  }, [selected])
 
   const decide = useCallback(async (action: 'accept' | 'reject') => {
     if (!selected) return
@@ -863,6 +896,36 @@ export function AppointmentTable() {
                 Guardar seguimiento
               </Button>
             </div>
+
+            {/* Attendance — only for confirmed appointments */}
+            {selected.status === 'accepted' && (
+              <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
+                <div className="mb-3">
+                  <p className="h-eyebrow mb-1">Asistencia</p>
+                  <p className="text-xs text-ink-muted">
+                    {selected.attended === true ? 'Registrada como asistió.'
+                      : selected.attended === false ? 'Registrada como no se presentó.'
+                      : 'Marca si el cliente acudió a su cita. Los no-shows se excluyen de la conversión.'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={selected.attended === true ? 'gold' : 'outline'}
+                    size="sm" className="flex-1" loading={deciding}
+                    onClick={() => void markAttendance(true)}
+                  >
+                    <CheckCircle size={14} strokeWidth={1.5} /> Asistió
+                  </Button>
+                  <Button
+                    variant={selected.attended === false ? 'danger' : 'ghost'}
+                    size="sm" className="flex-1" loading={deciding}
+                    onClick={() => void markAttendance(false)}
+                  >
+                    <XCircle size={14} strokeWidth={1.5} /> No asistió
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {selected.customerHistory && selected.customerHistory.length > 0 && (
               <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
