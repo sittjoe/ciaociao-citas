@@ -145,8 +145,8 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
             <div className="flex items-start gap-2 min-w-0">
               <StatusDot status={g.status} />
               <div className="min-w-0">
-                <p className="text-sm text-ink font-medium truncate">{g.name}</p>
-                <p className="text-xs text-ink-muted truncate">{g.email}</p>
+                <p className="text-sm text-ink font-medium truncate" title={g.name}>{g.name}</p>
+                <p className="text-xs text-ink-muted truncate" title={g.email}>{g.email}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -159,7 +159,7 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                   href={`/api/admin/id-url?path=${encodeURIComponent(g.identificationUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-ink-muted hover:text-champagne transition-colors"
+                  className="text-ink-muted hover:text-champagne-solid transition-colors"
                   title="Ver identificación"
                   aria-label="Ver identificación"
                 >
@@ -174,7 +174,7 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                 <button
                   onClick={() => resendInvitation(g.id)}
                   disabled={acting === g.id}
-                  className="text-ink-muted hover:text-champagne transition-colors disabled:opacity-40"
+                  className="text-ink-muted hover:text-champagne-solid transition-colors disabled:opacity-40 disabled:cursor-wait"
                   title="Reenviar invitación"
                   aria-label={`Reenviar invitación a ${g.name}`}
                 >
@@ -186,7 +186,7 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                 <button
                   onClick={() => act(g.id, 'verify')}
                   disabled={acting === g.id}
-                  className="text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40"
+                  className="text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-wait"
                   title="Verificar manualmente"
                   aria-label={`Verificar manualmente a ${g.name}`}
                 >
@@ -198,7 +198,7 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
                 <button
                   onClick={() => act(g.id, 'exclude')}
                   disabled={acting === g.id}
-                  className="text-red-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                  className="text-red-400 hover:text-red-500 transition-colors disabled:opacity-40 disabled:cursor-wait"
                   title="Excluir invitado"
                   aria-label={`Excluir a ${g.name}`}
                 >

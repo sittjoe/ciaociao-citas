@@ -135,7 +135,7 @@ export default async function ProblemasPage() {
       <div className="grid gap-4 xl:grid-cols-2">
         <Card variant="admin">
           <CardHeader className="flex flex-row items-center gap-2">
-            <Bell size={18} className="text-champagne" />
+            <Bell size={18} className="text-champagne-solid" />
             <h2 className="font-serif text-lg text-ink">Avisos de disponibilidad</h2>
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
@@ -201,7 +201,7 @@ export default async function ProblemasPage() {
                     <p className="font-medium text-ink">{String(email.subject ?? 'Sin asunto')}</p>
                     <p className="text-xs text-ink-muted">{Array.isArray(email.to) ? email.to.join(', ') : ''}</p>
                   </div>
-                  {email.appointmentId && <Link className="text-xs text-champagne hover:underline" href="/admin/citas">Abrir citas</Link>}
+                  {email.appointmentId && <Link className="text-xs text-champagne-solid hover:underline" href="/admin/citas">Abrir citas</Link>}
                 </div>
                 {email.error && <p className="mt-1 text-xs text-red-600">{String(email.error).slice(0, 180)}</p>}
               </div>
@@ -228,7 +228,7 @@ export default async function ProblemasPage() {
 
         <Card variant="admin">
           <CardHeader className="flex flex-row items-center gap-2">
-            <ShieldAlert size={18} className="text-champagne" />
+            <ShieldAlert size={18} className="text-champagne-solid" />
             <h2 className="font-serif text-lg text-ink">Invitados</h2>
           </CardHeader>
           <CardBody className="space-y-3 pt-0">

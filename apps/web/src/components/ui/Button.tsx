@@ -20,7 +20,7 @@ const variantClasses: Record<Variant, string> = {
     'disabled:opacity-40',
   ].join(' '),
   outline: [
-    'border border-champagne text-champagne',
+    'border border-champagne text-champagne-solid',
     'hover:bg-champagne-soft',
     'active:scale-[0.98]',
     'disabled:opacity-40',

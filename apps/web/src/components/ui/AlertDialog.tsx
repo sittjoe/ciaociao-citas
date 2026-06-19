@@ -68,6 +68,7 @@ export function AlertDialog({
             className={cn(
               'relative w-full max-w-sm bg-white rounded-2xl shadow-lift',
               'border border-ink-line p-6',
+              'max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain',
             )}
             initial={{ opacity: 0, scale: 0.97, y: 4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -85,7 +86,7 @@ export function AlertDialog({
                 {description}
               </p>
             )}
-            <div className="flex gap-3 justify-end">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button
                 ref={cancelRef}
                 variant="ghost"

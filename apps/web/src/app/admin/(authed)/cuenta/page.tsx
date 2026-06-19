@@ -144,7 +144,7 @@ export default function CuentaPage() {
             )}
           </Field>
 
-          <Button type="submit" loading={savingPassword} disabled={mismatch}>
+          <Button type="submit" loading={savingPassword} disabled={password.length < 8 || password !== confirmPassword}>
             Guardar contraseña
           </Button>
         </Card>

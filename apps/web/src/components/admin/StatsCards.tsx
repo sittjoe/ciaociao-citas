@@ -49,6 +49,7 @@ export function UpcomingList({ appointments }: { appointments: AdminStats['nextA
         <Link
           key={appt.id}
           href="/admin/citas"
+          aria-label={`Ver cita de ${appt.name} · ${formatShortDate(appt.slotDatetime)}`}
           className="flex items-center justify-between p-3 bg-cream-soft rounded-xl border border-ink-line hover:border-champagne-soft transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring"
         >
           <div className="min-w-0">

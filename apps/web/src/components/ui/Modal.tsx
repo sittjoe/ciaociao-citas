@@ -30,7 +30,10 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
         const last  = focusable[focusable.length - 1]
         if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
           e.preventDefault()
-          ;(e.shiftKey ? last : first)?.focus()
+          const target = e.shiftKey ? last : first
+          // Body scrolls now, so bring the wrapped target into view before focus
+          target?.scrollIntoView({ block: 'nearest' })
+          target?.focus()
         }
       }
     }
@@ -39,7 +42,9 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
     const firstFocusable = panelRef.current?.querySelector<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     )
-    firstFocusable?.focus()
+    // Fall back to the panel itself so focus never lands on document.body
+    // for content-only modals (keeps the focus trap and Escape working).
+    ;(firstFocusable ?? panelRef.current)?.focus()
     return () => {
       document.removeEventListener('keydown', handler)
       document.body.style.overflow = ''
@@ -49,7 +54,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-modal="true" role="dialog">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
           <motion.div
             className="absolute inset-0 bg-black/25 backdrop-blur-sm"
             initial={{ opacity: 0 }}
@@ -60,37 +65,47 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
           />
           <motion.div
             ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            aria-labelledby={title ? 'modal-title' : undefined}
+            aria-label={title ? undefined : 'Diálogo'}
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.35 }}
             className={cn(
-              'relative w-full bg-admin-panel border border-admin-line rounded-2xl shadow-lift p-6',
+              // Cap height to the viewport and lay out as a column so a long
+              // body scrolls internally instead of pushing the action buttons
+              // (Confirmar/Rechazar) off the bottom of the screen.
+              'relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden',
+              'bg-admin-panel border border-admin-line rounded-2xl shadow-lift',
               sizeMap[size],
             )}
           >
-            {title && (
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="font-serif text-xl text-ink">{title}</h2>
+            {title ? (
+              <div className="flex shrink-0 items-center justify-between gap-4 border-b border-admin-line px-6 py-4">
+                <h2 id="modal-title" className="font-serif text-xl text-ink">{title}</h2>
                 <button
                   onClick={onClose}
-                  className="text-ink-muted hover:text-ink transition-colors p-1.5 rounded-lg hover:bg-cream-soft"
+                  className="-mr-1.5 shrink-0 rounded-lg p-1.5 text-ink-muted transition-colors hover:bg-cream-soft hover:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring"
                   aria-label="Cerrar"
                 >
                   <X size={18} />
                 </button>
               </div>
-            )}
-            {!title && (
+            ) : (
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 text-ink-muted hover:text-ink transition-colors p-1.5 rounded-lg hover:bg-cream-soft"
+                className="absolute top-4 right-4 z-10 rounded-lg p-1.5 text-ink-muted transition-colors hover:bg-cream-soft hover:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring"
                 aria-label="Cerrar"
               >
                 <X size={18} />
               </button>
             )}
-            {children}
+            <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain px-6', title ? 'py-5' : 'pt-12 pb-6')}>
+              {children}
+            </div>
           </motion.div>
         </div>
       )}

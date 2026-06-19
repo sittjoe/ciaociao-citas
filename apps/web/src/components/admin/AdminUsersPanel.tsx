@@ -109,8 +109,9 @@ export function AdminUsersPanel() {
     <div className="space-y-5">
       <form onSubmit={addAdmin} className="flex flex-col gap-3 rounded-2xl border border-admin-line bg-admin-panel p-4 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <label className="label-clean">Email de Firebase Auth</label>
+          <label htmlFor="admin-email" className="label-clean">Email de Firebase Auth</label>
           <input
+            id="admin-email"
             value={email}
             onChange={e => setEmail(e.target.value)}
             type="email"
@@ -181,7 +182,7 @@ export function AdminUsersPanel() {
             <code className="flex-1 text-sm font-mono text-ink tracking-wider select-all">{tempPassword}</code>
             <button
               onClick={copyPassword}
-              className="text-ink-muted hover:text-champagne transition-colors p-1 rounded"
+              className="text-ink-muted hover:text-champagne-solid transition-colors p-1 rounded"
               aria-label="Copiar contraseña"
             >
               {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}

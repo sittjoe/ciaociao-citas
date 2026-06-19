@@ -228,7 +228,7 @@ export function AdminCalendar() {
       </div>
 
       {/* Calendar */}
-      <div className="rounded-2xl border border-admin-line bg-admin-panel p-4 overflow-hidden fc-admin-wrap">
+      <div className="rounded-2xl border border-admin-line bg-admin-panel p-4 overflow-x-auto fc-admin-wrap">
         <FullCalendar
           ref={calRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -389,6 +389,17 @@ export function AdminCalendar() {
         }
         .fc-admin-wrap .fc-timegrid-slot {
           height: 2.5rem !important;
+        }
+
+        /* ── Mobile: denser rows, stronger rejected contrast ──── */
+        @media (max-width: 640px) {
+          .fc-admin-wrap .fc-timegrid-slot {
+            height: 1.75rem !important;
+          }
+          .fc-admin-wrap .fc-event-status-rejected,
+          .fc-admin-wrap .fc-event-status-cancelled {
+            opacity: 0.85 !important;
+          }
         }
       `}</style>
     </>
