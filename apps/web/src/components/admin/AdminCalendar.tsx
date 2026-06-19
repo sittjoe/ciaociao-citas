@@ -169,6 +169,14 @@ export function AdminCalendar() {
     []
   )
 
+  // A 7-day week is unreadable on a phone; open on the single-day view there.
+  // Runs after mount (avoids hydration mismatch); the operator can still switch.
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      calRef.current?.getApi().changeView('timeGridDay')
+    }
+  }, [])
+
   // Keyboard shortcuts for the operator: j/k prev/next, t today, m/w/d view switch
   const modalOpenRef = useRef(false)
   modalOpenRef.current = selectedId !== null
@@ -242,6 +250,12 @@ export function AdminCalendar() {
           slotMinTime="08:00:00"
           slotMaxTime="21:00:00"
           height="auto"
+          allDaySlot={false}
+          expandRows={true}
+          slotDuration="01:00:00"
+          slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          dayMaxEvents={3}
           timeZone="America/Mexico_City"
           now={businessNow}
           nowIndicator={true}
@@ -323,62 +337,115 @@ export function AdminCalendar() {
 
         /* ── Time labels ───────────────────────────────────────── */
         .fc-admin-wrap .fc-timegrid-slot-label-cushion {
-          font-size: 0.68rem !important;
+          font-size: 0.7rem !important;
+          font-weight: 500 !important;
+          color: var(--ink-muted) !important;
+        }
+        .fc-admin-wrap .fc-timegrid-axis-cushion {
           color: var(--ink-subtle) !important;
         }
 
         /* ── Today column ──────────────────────────────────────── */
         .fc-admin-wrap .fc-day-today {
-          background-color: var(--champagne-tint) !important;
+          background-color: color-mix(in oklch, var(--champagne-tint) 55%, transparent) !important;
         }
 
         /* ── Now indicator (champagne line) ───────────────────── */
         .fc-admin-wrap .fc-timegrid-now-indicator-line {
-          border-color: var(--champagne) !important;
+          border-color: var(--champagne-solid) !important;
+          border-width: 2px !important;
         }
         .fc-admin-wrap .fc-timegrid-now-indicator-arrow {
-          border-color: var(--champagne) transparent transparent !important;
+          border-color: var(--champagne-solid) transparent transparent !important;
         }
 
-        /* ── Event base ────────────────────────────────────────── */
+        /* ── Event base — legible card, dark status text + time ── */
         .fc-admin-wrap .fc-event {
           cursor: pointer !important;
-          border-radius: 4px !important;
+          border-radius: 7px !important;
           font-size: 0.72rem !important;
           border-width: 1px !important;
           border-style: solid !important;
+          box-shadow: 0 1px 2px color-mix(in oklch, var(--ink) 6%, transparent) !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
+        .fc-admin-wrap .fc-timegrid-event { box-shadow: none !important; }
+        .fc-admin-wrap .fc-event .fc-event-main {
+          color: inherit !important;
+          padding: 3px 7px !important;
+        }
+        /* Force title + time to take the dark status colour (FC defaults to white) */
+        .fc-admin-wrap .fc-event .fc-event-title,
+        .fc-admin-wrap .fc-event .fc-event-time {
+          color: inherit !important;
+        }
+        .fc-admin-wrap .fc-event .fc-event-time {
+          font-weight: 600 !important;
+          font-size: 0.66rem !important;
+          opacity: 0.78 !important;
+          margin-bottom: 1px !important;
+        }
+        .fc-admin-wrap .fc-event .fc-event-title {
+          font-weight: 500 !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+          overflow: hidden !important;
+        }
+        /* Month-view dot rows: align the leading time + dot cleanly */
+        .fc-admin-wrap .fc-daygrid-event {
+          padding: 1px 4px !important;
+        }
+        .fc-admin-wrap .fc-daygrid-dot-event:hover {
+          background: var(--champagne-tint) !important;
         }
 
         /* ── Status colours (matching .status-* in globals.css) ── */
         .fc-admin-wrap .fc-event-status-accepted {
           background: #ecfdf5 !important;
-          border-color: #a7f3d0 !important;
+          border-color: #6ee7b7 !important;
           color: #065f46 !important;
         }
         .fc-admin-wrap .fc-event-status-pending {
           background: #fffbeb !important;
-          border-color: #fde68a !important;
-          color: #92400e !important;
+          border-color: #fcd34d !important;
+          color: #854d0e !important;
         }
         .fc-admin-wrap .fc-event-status-rejected {
           background: #fef2f2 !important;
-          border-color: #fecaca !important;
+          border-color: #fca5a5 !important;
           color: #991b1b !important;
-          opacity: 0.7 !important;
+          opacity: 0.78 !important;
         }
         .fc-admin-wrap .fc-event-status-cancelled {
           background: var(--admin-surface) !important;
           border-color: var(--admin-line) !important;
-          color: var(--ink-subtle) !important;
-          opacity: 0.7 !important;
+          color: var(--ink-muted) !important;
+          opacity: 0.78 !important;
         }
+        /* Status dot for month-view dot events */
+        .fc-admin-wrap .fc-event-status-accepted .fc-daygrid-event-dot { border-color: #059669 !important; }
+        .fc-admin-wrap .fc-event-status-pending .fc-daygrid-event-dot  { border-color: #d97706 !important; }
+        .fc-admin-wrap .fc-event-status-rejected .fc-daygrid-event-dot { border-color: #dc2626 !important; }
         .fc-admin-wrap .fc-event-done .fc-event-title {
           text-decoration: line-through !important;
         }
+        .fc-admin-wrap .fc-more-link {
+          color: var(--champagne-deep) !important;
+          font-size: 0.66rem !important;
+          font-weight: 600 !important;
+        }
 
-        /* ── Slot background events ───────────────────────────── */
+        /* ── Free-slot indicator — subtle warm wash, not a peach blob ── */
         .fc-admin-wrap .fc-bg-event {
-          opacity: 0.5 !important;
+          opacity: 1 !important;
+          background: repeating-linear-gradient(
+            -45deg,
+            color-mix(in oklch, var(--champagne) 9%, transparent),
+            color-mix(in oklch, var(--champagne) 9%, transparent) 6px,
+            transparent 6px,
+            transparent 12px
+          ) !important;
         }
 
         /* ── Grid lines (warm, not cool-gray) ─────────────────── */
@@ -388,17 +455,26 @@ export function AdminCalendar() {
           border-color: var(--admin-line) !important;
         }
         .fc-admin-wrap .fc-timegrid-slot {
-          height: 2.5rem !important;
+          height: 3rem !important;
+        }
+        /* Soften the minor (half-hour) lines */
+        .fc-admin-wrap .fc-timegrid-slot-minor {
+          border-top-style: dotted !important;
+          border-top-color: color-mix(in oklch, var(--admin-line) 60%, transparent) !important;
         }
 
         /* ── Mobile: denser rows, stronger rejected contrast ──── */
         @media (max-width: 640px) {
           .fc-admin-wrap .fc-timegrid-slot {
-            height: 1.75rem !important;
+            height: 2.25rem !important;
           }
           .fc-admin-wrap .fc-event-status-rejected,
           .fc-admin-wrap .fc-event-status-cancelled {
-            opacity: 0.85 !important;
+            opacity: 0.9 !important;
+          }
+          .fc-admin-wrap .fc-toolbar.fc-header-toolbar {
+            flex-direction: column !important;
+            gap: 0.6rem !important;
           }
         }
       `}</style>
