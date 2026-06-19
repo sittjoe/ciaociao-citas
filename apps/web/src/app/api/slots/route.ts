@@ -5,6 +5,7 @@ import { releaseExpiredHolds } from '@/lib/holds'
 import { fromZonedTime } from 'date-fns-tz'
 import { BUSINESS_TZ } from '@/lib/utils'
 import { normalizeAppointmentType } from '@/lib/commercial'
+import { getBlockedDateSet, businessDateKey } from '@/lib/blocked-dates'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,25 +52,31 @@ export async function GET(request: Request) {
     // Never return slots already in the past
     if (start < now) start = now
 
-    const snap = await adminDb
-      .collection('slots')
-      .where('datetime', '>=', Timestamp.fromDate(start))
-      .where('datetime', '<', Timestamp.fromDate(end))
-      .where('available', '==', true)
-      .orderBy('datetime')
-      .get()
+    const [snap, blocked] = await Promise.all([
+      adminDb
+        .collection('slots')
+        .where('datetime', '>=', Timestamp.fromDate(start))
+        .where('datetime', '<', Timestamp.fromDate(end))
+        .where('available', '==', true)
+        .orderBy('datetime')
+        .get(),
+      getBlockedDateSet(),
+    ])
 
     const slots = snap.docs
       .map(doc => {
         const data = doc.data()
+        const dt = (data.datetime as Timestamp).toDate()
         return {
           id:        doc.id,
-          datetime:  (data.datetime as Timestamp).toDate().toISOString(),
+          datetime:  dt.toISOString(),
           available: data.available as boolean,
           slotType:  normalizeAppointmentType(data.slotType),
+          _dateKey:  businessDateKey(dt),
         }
       })
-      .filter(slot => slot.slotType === requestedType)
+      .filter(slot => slot.slotType === requestedType && !blocked.has(slot._dateKey))
+      .map(({ _dateKey, ...slot }) => slot) // eslint-disable-line @typescript-eslint/no-unused-vars
 
     return NextResponse.json({ slots })
   } catch (err) {

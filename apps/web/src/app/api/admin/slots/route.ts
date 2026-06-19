@@ -6,6 +6,7 @@ import { bulkSlotsSchema } from '@/lib/schemas'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { BUSINESS_TZ } from '@/lib/utils'
 import { normalizeAppointmentType } from '@/lib/commercial'
+import { getBlockedDateSet } from '@/lib/blocked-dates'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,11 +73,16 @@ export async function POST(request: Request) {
   const { dates, times, slotType } = parsed.data
 
   try {
+    const blockedDates = await getBlockedDateSet()
     let   created  = 0
     const skipped: string[] = []
     const seenDatetimes = new Set<number>()
 
     for (const date of dates) {
+      if (blockedDates.has(date)) {
+        for (const time of times) skipped.push(`${date}T${time}`)
+        continue
+      }
       for (const time of times) {
         const dt = fromZonedTime(`${date}T${time}:00`, BUSINESS_TZ)
         if (isNaN(dt.getTime())) { skipped.push(`${date}T${time}`); continue }
