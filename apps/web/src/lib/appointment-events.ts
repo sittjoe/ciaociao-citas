@@ -9,6 +9,8 @@ export type AppointmentEventAction =
   | 'rescheduled'
   | 'cancelled'
   | 'email_resent'
+  | 'guest_verified'
+  | 'guest_excluded'
 
 export async function logAppointmentEvent(params: {
   appointmentId: string

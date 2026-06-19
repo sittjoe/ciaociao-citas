@@ -132,7 +132,10 @@ export type AdminLoginInput = z.infer<typeof adminLoginSchema>
 export const appointmentDecisionSchema = z.object({
   action: z.enum(['accept', 'reject']),
   reason: z.string().max(500).optional(),
-  meetingUrl: z.string().url('URL inválida').max(500).optional().or(z.literal('')),
+  meetingUrl: z.string().url('URL inválida').max(500)
+    .refine(v => { try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:' } catch { return false } },
+      'La URL debe empezar con http:// o https://')
+    .optional().or(z.literal('')),
   meetingProvider: z.string().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
   meetingInstructions: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
 })
@@ -198,7 +201,10 @@ export const commercialUpdateSchema = z.object({
   commercialStatus: z.enum(commercialStatusOptions).default('pending'),
   internalNote: z.string().max(1000, 'Máximo 1000 caracteres').optional().or(z.literal('')),
   followUpAt: z.string().datetime('Fecha inválida').optional().or(z.literal('')),
-  meetingUrl: z.string().url('URL inválida').max(500).optional().or(z.literal('')),
+  meetingUrl: z.string().url('URL inválida').max(500)
+    .refine(v => { try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:' } catch { return false } },
+      'La URL debe empezar con http:// o https://')
+    .optional().or(z.literal('')),
   meetingProvider: z.string().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
   meetingInstructions: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
 })

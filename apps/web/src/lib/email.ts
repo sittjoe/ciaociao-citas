@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 import { FieldValue } from 'firebase-admin/firestore'
 import { formatInTimeZone } from 'date-fns-tz'
-import { formatDate, formatTime, BUSINESS_TZ } from './utils'
+import { formatDate, formatTime, BUSINESS_TZ, redactPII } from './utils'
 import { adminDb } from './firebase-admin'
 import { appointmentTypeLabels, engagementBriefRows, isVideoEngagement } from './commercial'
 import type { Appointment } from '@/types'
@@ -124,7 +124,7 @@ async function sendTracked(params: {
     }).catch(() => {})
     return result
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = redactPII(err instanceof Error ? err.message : String(err))
     await outboxRef.update({
       status: 'failed',
       error: message,
@@ -186,7 +186,7 @@ export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; s
       })
       sent++
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = redactPII(err instanceof Error ? err.message : String(err))
       await doc.ref.update({
         status: 'failed',
         error: message,
