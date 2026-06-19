@@ -42,7 +42,8 @@ export function getConfiguredAdminEmails(): string[] {
 export async function getActiveAdminEmails(): Promise<string[]> {
   const configured = getConfiguredAdminEmails()
   try {
-    const snap = await adminDb.collection('admins').where('active', '==', true).get()
+    // Single-field equality is auto-indexed; cap reads — there are never many admins.
+    const snap = await adminDb.collection('admins').where('active', '==', true).limit(100).get()
     const firestoreEmails = snap.docs
       .map(doc => String(doc.data().email ?? '').trim().toLowerCase())
       .filter(Boolean)
@@ -142,7 +143,10 @@ async function sendTracked(params: {
   }
 }
 
-export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; sent: number; failed: number; errors: string[] }> {
+// After this many tries a stuck email is abandoned instead of retried forever.
+const MAX_EMAIL_ATTEMPTS = 5
+
+export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; sent: number; failed: number; abandoned: number; errors: string[] }> {
   const snap = await adminDb
     .collection('emailOutbox')
     .where('status', '==', 'failed')
@@ -151,11 +155,18 @@ export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; s
 
   let sent = 0
   let failed = 0
+  let abandoned = 0
   const errors: string[] = []
 
   for (const doc of snap.docs) {
     const data = doc.data()
     const attempts = Number(data.attempts ?? 0)
+    if (attempts >= MAX_EMAIL_ATTEMPTS) {
+      await doc.ref.update({ status: 'abandoned', updatedAt: FieldValue.serverTimestamp() }).catch(() => {})
+      errors.push(`${doc.id}: abandonado tras ${attempts} intentos`)
+      abandoned++
+      continue
+    }
     try {
       await doc.ref.update({
         status: 'sending',
@@ -197,7 +208,7 @@ export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; s
     }
   }
 
-  return { retried: snap.size, sent, failed, errors }
+  return { retried: snap.size, sent, failed, abandoned, errors }
 }
 
 function escapeHtml(value: string): string {

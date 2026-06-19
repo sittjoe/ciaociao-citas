@@ -3,6 +3,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { mapAppointmentForEmail } from '@/lib/appointment-email'
 import { sendGuestInvitation } from '@/lib/email'
+import { checkPublicRateLimit } from '@/lib/public-rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,11 @@ export async function POST(
   if (!admin) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { id, guestId } = await params
+
+  // Cap resends so an invited guest can't be spammed (accidental or abusive)
+  if (await checkPublicRateLimit({ key: `guest-resend:${guestId}`, windowMs: 60 * 60 * 1000, max: 3 })) {
+    return NextResponse.json({ error: 'Demasiados reenvíos para este invitado. Intenta más tarde.' }, { status: 429 })
+  }
 
   try {
     const apptRef = adminDb.collection('appointments').doc(id)

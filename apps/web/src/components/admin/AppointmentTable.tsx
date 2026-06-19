@@ -265,7 +265,7 @@ export function AppointmentTable() {
       toast.success(action === 'accept' ? 'Cita confirmada' : 'Cita rechazada')
       setSelected(null)
       setRejectReason('')
-      fetchAppointments(true)
+      await fetchAppointments(true)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al procesar')
     } finally {
@@ -304,7 +304,7 @@ export function AppointmentTable() {
         meetingProvider,
         meetingInstructions,
       } : prev)
-      fetchAppointments(true)
+      await fetchAppointments(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar seguimiento')
     } finally {

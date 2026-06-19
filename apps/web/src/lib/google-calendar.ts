@@ -263,6 +263,14 @@ export async function updateAppointmentCalendarEvent(appt: Appointment): Promise
       googleCalendarEventId: appt.googleCalendarEventId,
     })
   } catch (err) {
+    // The event was deleted on Google's side (404/410): recreate it instead
+    // of failing forever, so the accepted appointment regains a valid event.
+    const code = (err as { code?: number })?.code
+    if (code === 404 || code === 410) {
+      const newId = await createAppointmentCalendarEvent(appt)
+      await adminDb.collection('appointments').doc(appt.id).update({ googleCalendarEventId: newId })
+      return
+    }
     await recordCalendarEvent({
       appointmentId: appt.id,
       action: 'update',

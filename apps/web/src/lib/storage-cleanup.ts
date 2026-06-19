@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase-admin/firestore'
 import { adminDb, adminStorage } from './firebase-admin'
+import { normalizeIdentificationPath } from './identifications'
 
 interface CleanupResult {
   scanned: number
@@ -10,11 +11,11 @@ interface CleanupResult {
   errors: string[]
 }
 
+// Reuse the hardened path normalizer (path-traversal/host checks) instead of
+// a weaker local copy, so the cleanup and the access route agree on validity.
 function normalizeStoragePath(value: unknown): string | null {
   if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  if (!trimmed.startsWith('identifications/')) return null
-  return trimmed
+  return normalizeIdentificationPath(value)
 }
 
 async function collectReferencedIdentifications(): Promise<Set<string>> {
@@ -46,10 +47,9 @@ export async function cleanupOrphanedIdentifications(options?: {
   const cutoffMs = Date.now() - Math.max(1, retentionDays) * 24 * 60 * 60 * 1000
 
   const referenced = await collectReferencedIdentifications()
-  const [files] = await adminStorage.bucket().getFiles({ prefix: 'identifications/' })
 
   const result: CleanupResult = {
-    scanned: files.length,
+    scanned: 0,
     referenced: referenced.size,
     orphaned: 0,
     deleted: 0,
@@ -57,26 +57,41 @@ export async function cleanupOrphanedIdentifications(options?: {
     errors: [],
   }
 
-  for (const file of files) {
-    if (referenced.has(file.name)) continue
+  // Page through the bucket instead of loading every file into memory at once
+  // (avoids OOM on large buckets). Stop early once maxDeletes is reached.
+  let pageToken: string | undefined
+  pageLoop: do {
+    const [files, nextQuery] = await adminStorage.bucket().getFiles({
+      prefix: 'identifications/',
+      maxResults: 500,
+      autoPaginate: false,
+      pageToken,
+    })
+    result.scanned += files.length
 
-    result.orphaned++
-    if (result.deleted >= maxDeletes) continue
+    for (const file of files) {
+      if (referenced.has(file.name)) continue
 
-    try {
-      const [metadata] = await file.getMetadata()
-      const createdMs = metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : 0
-      if (!createdMs || createdMs > cutoffMs) {
-        result.skippedRecent++
-        continue
+      result.orphaned++
+      if (result.deleted >= maxDeletes) break pageLoop
+
+      try {
+        const [metadata] = await file.getMetadata()
+        const createdMs = metadata.timeCreated ? new Date(metadata.timeCreated).getTime() : 0
+        if (!createdMs || createdMs > cutoffMs) {
+          result.skippedRecent++
+          continue
+        }
+
+        if (!dryRun) await file.delete()
+        result.deleted++
+      } catch (err) {
+        result.errors.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`)
       }
-
-      if (!dryRun) await file.delete()
-      result.deleted++
-    } catch (err) {
-      result.errors.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`)
     }
-  }
+
+    pageToken = (nextQuery as { pageToken?: string } | null | undefined)?.pageToken
+  } while (pageToken)
 
   await adminDb.collection('maintenanceRuns').add({
     type: 'orphaned_identifications_cleanup',

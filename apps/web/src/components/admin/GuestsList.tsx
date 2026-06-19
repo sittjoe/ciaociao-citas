@@ -61,6 +61,8 @@ export function GuestsList({ appointmentId }: GuestsListProps) {
   const fetchGuests = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/appointments/${appointmentId}/guests`)
+      if (res.status === 401) { window.location.href = '/admin/login'; return }
+      if (res.status === 404) { toast.error('La cita ya no existe'); setGuests([]); return }
       if (!res.ok) throw new Error()
       const data = await res.json() as { guests: GuestRow[] }
       setGuests(data.guests)
