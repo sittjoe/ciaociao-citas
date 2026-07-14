@@ -2,11 +2,13 @@ import { adminDb } from '@/lib/firebase-admin'
 import type { AppointmentType } from '@/types'
 
 /**
- * Horario recurrente que alimenta el generador automático de slots
- * (/api/cron/generate-slots). Editable sin código: documento Firestore
- * `config/slotSchedule` con { schedules: SlotSchedule[] }. Si no existe,
- * se usan estos valores por defecto (derivados del patrón real que el
- * showroom publicaba: lun-sáb, 10:00-13:00 y 15:00-17:00).
+ * Horario recurrente que alimenta el generador de slots bajo demanda
+ * (/api/cron/generate-slots — ya NO corre como cron: los horarios se
+ * publican a mano y los lunes se envía un recordatorio a los admins).
+ * Editable sin código: documento Firestore `config/slotSchedule` con
+ * { schedules: SlotSchedule[] }. Si no existe, se usan estos valores por
+ * defecto (derivados del patrón real que el showroom publicaba:
+ * lun-sáb, 10:00-13:00 y 15:00-17:00).
  */
 export interface SlotSchedule {
   /** Días de la semana (0=domingo … 6=sábado) en que se abren horarios. */

@@ -10,12 +10,17 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /**
- * Generador AUTOMÁTICO de horarios. Antes los slots se publicaban 100% a mano
- * y se agotaban → las clientas no podían agendar (todo "sin horarios"). Este cron
- * diario mantiene siempre publicadas las próximas semanas según config/slotSchedule
- * (o DEFAULT_SCHEDULES). Idempotente: el id del slot es el epoch ms del datetime,
- * el mismo esquema que el alta manual (/api/admin/slots), así nunca duplica ni pisa
- * un slot ya reservado. Salta días bloqueados y horas pasadas.
+ * Generador de horarios BAJO DEMANDA (ya NO corre como cron).
+ *
+ * Decisión del negocio (jul 2026): los horarios se publican A MANO cada
+ * semana — este endpoint se retiró de vercel.json y en su lugar el cron
+ * /api/cron/slots-reminder envía un recordatorio a los admins cada lunes.
+ * Se conserva como herramienta manual (curl con CRON_SECRET) por si algún
+ * día se quiere rellenar el calendario según config/slotSchedule.
+ *
+ * Idempotente: el id del slot es el epoch ms del datetime, el mismo esquema
+ * que el alta manual (/api/admin/slots), así nunca duplica ni pisa un slot
+ * ya reservado. Salta días bloqueados y horas pasadas.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim()

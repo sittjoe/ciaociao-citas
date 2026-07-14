@@ -10,7 +10,7 @@ const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
 const SHOWROOM_ADDRESS = process.env.SHOWROOM_ADDRESS || 'Ciudad de México'
 
-type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'confirmation_request' | 'calendar_error' | 'guest_invitation' | 'guest_reminder' | 'reservation_recovery'
+type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'confirmation_request' | 'calendar_error' | 'guest_invitation' | 'guest_reminder' | 'reservation_recovery' | 'slots_reminder'
 
 let resendClient: Resend | null = null
 
@@ -689,6 +689,49 @@ export async function sendRescheduleNotice(appt: Appointment) {
       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>
     `),
   })
+}
+
+/**
+ * Recordatorio semanal a los socios/admins para publicar horarios a mano.
+ * La generación automática de slots está desactivada por decisión del negocio
+ * (los horarios se curan manualmente cada semana); este correo es el sustituto.
+ */
+export async function sendSlotsReminderEmail(stats: {
+  published: number
+  available: number
+  horizonDays: number
+}) {
+  const adminRecipients = await getActiveAdminEmails()
+  if (adminRecipients.length === 0) {
+    console.error('slots_reminder: no hay admins activos ni ADMIN_EMAIL configurado')
+    return { sent: false as const, recipients: 0 }
+  }
+
+  const lowInventory = stats.available < 5
+  const intro = lowInventory
+    ? `Arranca la semana y quedan <strong>solo ${stats.available}</strong> horarios disponibles para agendar. Las clientas no pueden reservar si no hay slots publicados.`
+    : 'Arranca la semana: recuerda publicar los horarios de citas para los próximos días.'
+
+  await sendTracked({
+    kind: 'slots_reminder',
+    from: `Sistema Citas <${FROM}>`,
+    to: adminRecipients,
+    subject: lowInventory
+      ? `🗓 Recordatorio: quedan ${stats.available} horarios — publica los de esta semana`
+      : '🗓 Recordatorio semanal: publica los horarios de citas',
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Hora de publicar horarios</p>
+        <p class="copy">${intro} Los horarios se añaden a mano — la generación automática está desactivada.</p>
+        ${details([
+          [`Publicados (próx. ${stats.horizonDays} días)`, String(stats.published)],
+          ['Disponibles para agendar', String(stats.available)],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${SITE}/admin/slots">Añadir horarios</a></p>
+    `),
+  })
+  return { sent: true as const, recipients: adminRecipients.length }
 }
 
 export async function sendReservationRecovery(appt: Appointment) {
