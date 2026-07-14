@@ -26,12 +26,11 @@ export const DEFAULT_SCHEDULES: SlotSchedule[] = [
     slotType: 'showroom',
     horizonDays: 28,
   },
-  {
-    weekdays: [1, 2, 3, 4, 5], // lunes a viernes
-    times: ['11:00', '13:00', '16:00'],
-    slotType: 'video_engagement_rings',
-    horizonDays: 28,
-  },
+  // Video-consulta: NO se genera por defecto. El id del slot es la hora exacta
+  // (un solo slot por datetime), así que horarios de video que coincidan con los
+  // del showroom se descartan como duplicados. Para ofrecer video, agrega en
+  // config/slotSchedule un bloque slotType:'video_engagement_rings' con HORAS QUE
+  // NO USE el showroom (p. ej. 18:00-19:00) y los días reales de atención por video.
 ]
 
 const VALID_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
