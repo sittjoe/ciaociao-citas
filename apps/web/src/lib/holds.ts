@@ -1,7 +1,7 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from './firebase-admin'
 import { logAppointmentEvent } from './appointment-events'
-import { releaseSlotLockForAppointment } from './slot-locks'
+import { slotLockRef } from './slot-locks'
 
 export async function releaseExpiredHolds(limit = 50): Promise<number> {
   const now = Timestamp.now()
@@ -17,6 +17,10 @@ export async function releaseExpiredHolds(limit = 50): Promise<number> {
 
   for (const slotDoc of snap.docs) {
     const result = await adminDb.runTransaction(async tx => {
+      // Firestore exige TODAS las lecturas antes de cualquier escritura en una
+      // transacción: por eso el lock se lee AQUÍ arriba y su borrado se decide
+      // con este snapshot (leerlo después de los update tira la transacción y
+      // tumbaba /api/slots completo mientras existiera un hold expirado).
       const freshSlotSnap = await tx.get(slotDoc.ref)
       if (!freshSlotSnap.exists) return { released: false, appointmentId: '', logEvent: false }
       const slot = freshSlotSnap.data()!
@@ -28,6 +32,14 @@ export async function releaseExpiredHolds(limit = 50): Promise<number> {
       const apptRef = adminDb.collection('appointments').doc(appointmentId)
       const apptSnap = await tx.get(apptRef)
       const apptStatus = apptSnap.exists ? apptSnap.data()?.status : null
+
+      let lockRef: FirebaseFirestore.DocumentReference | null = null
+      let lockDeletable = false
+      if (slot.datetime) {
+        lockRef = slotLockRef(slot.datetime as Timestamp)
+        const lockSnap = await tx.get(lockRef)
+        lockDeletable = !lockSnap.exists || lockSnap.data()?.appointmentId === appointmentId
+      }
 
       if (apptStatus === 'accepted') {
         tx.update(slotDoc.ref, { heldUntil: null })
@@ -46,7 +58,7 @@ export async function releaseExpiredHolds(limit = 50): Promise<number> {
           updatedAt: FieldValue.serverTimestamp(),
         })
       }
-      if (slot.datetime) await releaseSlotLockForAppointment(tx, slot.datetime as Timestamp, appointmentId)
+      if (lockRef && lockDeletable) tx.delete(lockRef)
       return { released: true, appointmentId, logEvent: apptSnap.exists && apptStatus === 'pending' }
     })
 

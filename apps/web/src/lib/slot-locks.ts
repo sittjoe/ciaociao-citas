@@ -26,14 +26,7 @@ export function releaseSlotLock(
   txOrBatch.delete(slotLockRef(slotDatetime))
 }
 
-export async function releaseSlotLockForAppointment(
-  tx: FirebaseFirestore.Transaction,
-  slotDatetime: Date | Timestamp,
-  appointmentId: string,
-) {
-  const ref = slotLockRef(slotDatetime)
-  const snap = await tx.get(ref)
-  if (!snap.exists || snap.data()?.appointmentId === appointmentId) {
-    tx.delete(ref)
-  }
-}
+// OJO: no agregar aquí helpers que hagan tx.get() — un get llamado después de
+// un write dentro de la misma transacción lanza "reads before writes" y tumbó
+// /api/slots en producción. Si necesitas verificar el lock, léelo con
+// slotLockRef() ANTES de los writes del llamador y decide con ese snapshot.
