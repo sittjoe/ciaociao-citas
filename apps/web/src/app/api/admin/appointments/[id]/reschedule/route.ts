@@ -4,7 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { rescheduleSchema } from '@/lib/schemas'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
-import { sendRescheduleNotice, sendCalendarError } from '@/lib/email'
+import { sendRescheduleNotice, sendCalendarError, syncScheduledReminderEmails } from '@/lib/email'
 import { createSlotLock, releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
@@ -29,6 +29,7 @@ export async function POST(
 
   try {
     let updatedAppt: Appointment | null = null
+    let previousScheduledEmails: unknown = null
 
     await adminDb.runTransaction(async tx => {
       const apptRef    = adminDb.collection('appointments').doc(id)
@@ -69,6 +70,7 @@ export async function POST(
       tx.update(newSlotRef, { available: false, bookedBy: id, heldUntil: null })
 
       // Update appointment
+      previousScheduledEmails = apptData.scheduledEmails ?? null
       tx.update(apptRef, {
         slotId:       newSlotId,
         slotDatetime: newSlotData.datetime,
@@ -79,6 +81,7 @@ export async function POST(
         reminder2Sent: false,
         clientConfirmed: false,
         clientConfirmedAt: FieldValue.delete(),
+        scheduledEmails: FieldValue.delete(),
       })
 
       updatedAppt = {
@@ -108,6 +111,10 @@ export async function POST(
       }
     })
 
+    // Cancela en Resend los recordatorios programados del horario anterior y
+    // programa los del nuevo (la cita siempre queda accepted en esta ruta).
+    after(syncScheduledReminderEmails(updatedAppt!, previousScheduledEmails)
+      .catch(err => console.error('Scheduled reminders resync failed (non-fatal):', err)))
     after(sendRescheduleNotice(updatedAppt!).catch(err =>
       console.error('Reschedule email failed (non-fatal):', err)
     ))

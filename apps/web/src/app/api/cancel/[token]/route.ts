@@ -2,7 +2,7 @@ import { NextResponse, after } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
-import { sendCancellationEmail } from '@/lib/email'
+import { sendCancellationEmail, cancelScheduledReminderEmails } from '@/lib/email'
 import { releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
@@ -75,6 +75,7 @@ export async function POST(
 
     let calendarEventIdToDelete: string | null = null
     let cancelledWasAccepted = false
+    let scheduledEmailIds: unknown = null
 
     await adminDb.runTransaction(async tx => {
       const fresh = await tx.get(doc.ref)
@@ -84,10 +85,12 @@ export async function POST(
       if (freshData.status === 'rejected') throw new Error('ALREADY_REJECTED')
       cancelledWasAccepted = freshData.status === 'accepted'
       calendarEventIdToDelete = freshData.googleCalendarEventId ?? null
+      scheduledEmailIds = freshData.scheduledEmails ?? null
       const slotRef = adminDb.collection('slots').doc(freshData.slotId)
       tx.update(doc.ref, {
         status:    'cancelled',
         googleCalendarEventId: null,
+        scheduledEmails: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       })
       tx.update(slotRef, {
@@ -112,6 +115,8 @@ export async function POST(
       }
     }
 
+    // Cancela en Resend los recordatorios programados (24h/2h); ignora errores.
+    after(cancelScheduledReminderEmails(scheduledEmailIds))
     after(sendCancellationEmail(appointment).catch(err =>
       console.error('Cancellation email failed (non-fatal):', err)
     ))

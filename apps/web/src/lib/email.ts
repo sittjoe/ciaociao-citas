@@ -8,7 +8,9 @@ import type { Appointment } from '@/types'
 
 const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
-const SHOWROOM_ADDRESS = process.env.SHOWROOM_ADDRESS || 'Ciudad de México'
+// Dirección física del showroom. No existe en el repo: se lee del entorno y,
+// si no está configurada, los bloques de ubicación simplemente no se renderizan.
+const SHOWROOM_ADDRESS = process.env.SHOWROOM_ADDRESS || ''
 
 type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'confirmation_request' | 'calendar_error' | 'guest_invitation' | 'guest_reminder' | 'reservation_recovery' | 'slots_reminder'
 
@@ -282,6 +284,29 @@ function videoMeetingRows(appt: Appointment): [string, string][] {
   ]
 }
 
+/** Bloque con la dirección del showroom y link a Google Maps. Vacío si no hay dirección configurada. */
+function showroomLocationBlock(): string {
+  if (!SHOWROOM_ADDRESS) return ''
+  const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(SHOWROOM_ADDRESS)}`
+  return `<div style="text-align:center;margin:20px 0;padding:18px 20px;background:#FAF7F2;border-radius:14px;border:1px solid #E7E2D7;">
+         <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px;">Ubicación del showroom</p>
+         <p style="font-size:14px;color:#1A1A1A;font-weight:600;margin:0 0 4px;">${escapeHtml(SHOWROOM_ADDRESS)}</p>
+         <a href="${mapsUrl}" style="font-size:12px;color:#9A7E50;text-decoration:none;">Ver en Google Maps →</a>
+       </div>`
+}
+
+/** Botón «Agregar a mi calendario» — descarga el .ics desde /api/calendar/[apptId] (solo citas aceptadas). */
+function addToCalendarButton(appt: Appointment): string {
+  const url = `${SITE}/api/calendar/${appt.id}?code=${encodeURIComponent(appt.confirmationCode)}`
+  return `<p style="text-align:center"><a class="btn" href="${url}">Agregar a mi calendario</a></p>`
+}
+
+/** Botón para entrar a la videollamada; vacío si aún no hay link. */
+function videoJoinButton(appt: Appointment): string {
+  if (!appt.meetingUrl) return ''
+  return `<p style="text-align:center"><a class="btn" href="${escapeHtml(appt.meetingUrl)}">Entrar a la videollamada</a></p>`
+}
+
 export async function sendBookingConfirmation(
   appt: Appointment,
   guestNames: string[] = [],
@@ -363,7 +388,6 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
     ? [{ filename: 'cita-ciaociao.ics', content: Buffer.from(icsContent).toString('base64') }]
     : []
 
-  const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(SHOWROOM_ADDRESS)}`
   const body = accepted
     ? isVideo
       ? `<div class="card">
@@ -387,11 +411,8 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
           ['Código', appt.confirmationCode],
         ])}
        </div>
-       <div style="text-align:center;margin:20px 0;padding:18px 20px;background:#FAF7F2;border-radius:14px;border:1px solid #E7E2D7;">
-         <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px;">Ubicación del showroom</p>
-         <p style="font-size:14px;color:#1A1A1A;font-weight:600;margin:0 0 4px;">${escapeHtml(SHOWROOM_ADDRESS)}</p>
-         <a href="${mapsUrl}" style="font-size:12px;color:#9A7E50;text-decoration:none;">Ver en Google Maps →</a>
-       </div>
+       ${showroomLocationBlock()}
+       ${addToCalendarButton(appt)}
        <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>`
     : `<div class="card">
         <p class="title">No pudimos confirmar tu solicitud</p>
@@ -466,6 +487,221 @@ export async function sendReminder24Confirm(appt: Appointment) {
   })
 }
 
+
+// ─── Recordatorios programados con Resend (scheduledAt) ──────────────────────
+//
+// Al aceptar una cita se programan en Resend los correos de 24h y 2h antes,
+// con hora exacta, en lugar de depender del cron diario (que puede llegar con
+// horas de desfase y hace imposible el de 2h). El cron de /api/reminders sigue
+// siendo la red de seguridad: para citas a más de 30 días (límite de Resend)
+// y para cuando la programación falla, gracias a los flags reminder*Sent.
+
+export interface ScheduledReminderEmailIds {
+  h24?: string
+  h2?: string
+}
+
+const HOUR_MS = 60 * 60 * 1000
+/** Resend solo permite programar correos hasta 30 días hacia adelante. */
+const RESEND_MAX_SCHEDULE_AHEAD_MS = 30 * 24 * HOUR_MS
+
+/**
+ * Programa un correo en Resend con `scheduledAt` (ISO 8601). Los correos
+ * programados no pasan por el outbox de reintentos: si la programación falla
+ * devolvemos null y el cron diario cubre el hueco (flag reminder*Sent en false).
+ * Nota: Resend no admite adjuntos ni headers extra en correos programados.
+ */
+async function scheduleTracked(params: {
+  kind: EmailKind
+  appointmentId: string
+  to: string
+  subject: string
+  html: string
+  scheduledAt: string
+  idempotencyKey: string
+}): Promise<string | null> {
+  try {
+    const result = await getResend().emails.send({
+      from: `Ciao Ciao Joyería <${FROM}>`,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      scheduledAt: params.scheduledAt,
+    }, { idempotencyKey: params.idempotencyKey })
+    if (result.error || !result.data?.id) {
+      throw new Error(result.error?.message ?? 'Resend no devolvió id del correo programado')
+    }
+    await adminDb.collection('emailEvents').add({
+      kind: params.kind,
+      to: [params.to],
+      subject: params.subject,
+      appointmentId: params.appointmentId,
+      ok: true,
+      scheduled: true,
+      scheduledAt: params.scheduledAt,
+      resendId: result.data.id,
+      createdAt: FieldValue.serverTimestamp(),
+    }).catch(err => console.error('Unable to record scheduled email event:', err))
+    return result.data.id
+  } catch (err) {
+    const message = redactPII(err instanceof Error ? err.message : String(err))
+    console.error(`No se pudo programar el correo ${params.kind} (cita ${params.appointmentId}):`, message)
+    await recordEmailEvent({
+      kind: params.kind,
+      to: params.to,
+      subject: params.subject,
+      appointmentId: params.appointmentId,
+      ok: false,
+      error: message,
+    })
+    return null
+  }
+}
+
+/** Recordatorio 24h programado — deriva del correo de confirmación de asistencia del cron. */
+function scheduledReminder24Content(appt: Appointment): { subject: string; html: string } {
+  const dateStr = formatDate(appt.slotDatetime)
+  const timeStr = formatTime(appt.slotDatetime)
+  const isVideo = isVideoAppointment(appt)
+
+  return {
+    subject: `Confirma tu cita de mañana — ${dateStr}`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Tu ${isVideo ? 'video consulta' : 'cita'} es mañana</p>
+        <p class="copy">Hola ${escapeHtml(appt.name)}, ${isVideo ? 'mañana será tu video consulta con Ciao Ciao Joyería' : 'te esperamos mañana en el showroom privado de Ciao Ciao Joyería'}. Para tenerlo todo listo, confírmanos que podrás asistir.</p>
+        ${details([
+          ['Fecha', dateStr],
+          ['Hora', timeStr],
+          ['Código', appt.confirmationCode],
+          ...videoMeetingRows(appt),
+        ])}
+      </div>
+      ${isVideo ? '' : showroomLocationBlock()}
+      <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
+      ${isVideo ? videoJoinButton(appt) : addToCalendarButton(appt)}
+      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${SITE}/reserva/${appt.confirmationCode}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
+    `),
+  }
+}
+
+/** Recordatorio 2h programado — corto y directo. */
+function scheduledReminder2Content(appt: Appointment): { subject: string; html: string } {
+  const timeStr = formatTime(appt.slotDatetime)
+  const isVideo = isVideoAppointment(appt)
+
+  return {
+    subject: `Tu ${isVideo ? 'video consulta' : 'cita'} es en 2 horas — ${timeStr} h`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Te esperamos en 2 horas</p>
+        <p class="copy">${escapeHtml(appt.name)}, tu ${isVideo ? 'video consulta' : 'cita en el showroom privado'} es hoy a las ${timeStr} h.${isVideo && !appt.meetingUrl ? ' El equipo te compartirá el enlace de videollamada antes de iniciar.' : ''}</p>
+        ${details([
+          ['Hora', timeStr],
+          ['Código', appt.confirmationCode],
+          ...videoMeetingRows(appt),
+        ])}
+      </div>
+      ${isVideo ? videoJoinButton(appt) : `${showroomLocationBlock()}
+      ${addToCalendarButton(appt)}`}
+    `),
+  }
+}
+
+/**
+ * Programa los recordatorios de una cita aceptada. Reglas:
+ *  - 24h antes: solo si la cita está a más de 24 horas;
+ *  - 2h antes: solo si la cita está a más de 2 horas;
+ *  - ambos solo si la cita está a ≤30 días (límite de Resend). Si está más
+ *    lejos, NO se programa nada y el cron diario la cubre con sus flags.
+ * Nunca lanza: cada fallo se registra y se devuelve el mapa parcial de ids.
+ */
+export async function scheduleAppointmentReminderEmails(appt: Appointment): Promise<ScheduledReminderEmailIds> {
+  const scheduled: ScheduledReminderEmailIds = {}
+  if (!isEmailConfigured()) return scheduled
+
+  const slotMs = appt.slotDatetime.getTime()
+  const msUntil = slotMs - Date.now()
+  if (msUntil <= 0 || msUntil > RESEND_MAX_SCHEDULE_AHEAD_MS) return scheduled
+
+  if (msUntil > 24 * HOUR_MS) {
+    const { subject, html } = scheduledReminder24Content(appt)
+    const id = await scheduleTracked({
+      kind: 'confirmation_request',
+      appointmentId: appt.id,
+      to: appt.email,
+      subject,
+      html,
+      scheduledAt: new Date(slotMs - 24 * HOUR_MS).toISOString(),
+      idempotencyKey: `reminder-h24/${appt.id}-${slotMs}`,
+    })
+    if (id) scheduled.h24 = id
+  }
+
+  if (msUntil > 2 * HOUR_MS) {
+    const { subject, html } = scheduledReminder2Content(appt)
+    const id = await scheduleTracked({
+      kind: 'reminder',
+      appointmentId: appt.id,
+      to: appt.email,
+      subject,
+      html,
+      scheduledAt: new Date(slotMs - 2 * HOUR_MS).toISOString(),
+      idempotencyKey: `reminder-h2/${appt.id}-${slotMs}`,
+    })
+    if (id) scheduled.h2 = id
+  }
+
+  return scheduled
+}
+
+/**
+ * Cancela en Resend los correos programados de una cita. Acepta el valor
+ * crudo del campo `scheduledEmails` del doc (unknown). Ignora todos los
+ * errores: un id ya enviado o ya cancelado no debe romper el flujo.
+ */
+export async function cancelScheduledReminderEmails(ids: unknown): Promise<void> {
+  if (!ids || typeof ids !== 'object' || !isEmailConfigured()) return
+  const { h24, h2 } = ids as { h24?: unknown; h2?: unknown }
+  for (const id of [h24, h2]) {
+    if (typeof id !== 'string' || !id) continue
+    try {
+      await getResend().emails.cancel(id)
+    } catch (err) {
+      console.error('No se pudo cancelar un correo programado (ignorado):', err)
+    }
+  }
+}
+
+/**
+ * Cancela los recordatorios programados previos (si los hay), programa los del
+ * horario vigente y persiste los ids en `scheduledEmails` del doc de la cita.
+ * Marca reminder24Sent/reminder2Sent para que el cron diario no duplique.
+ * Si no se puede persistir, cancela lo recién programado (mejor perder el
+ * recordatorio — el cron lo cubre — que mandarlo doble). Nunca lanza.
+ */
+export async function syncScheduledReminderEmails(
+  appt: Appointment,
+  previousIds?: unknown,
+): Promise<ScheduledReminderEmailIds> {
+  await cancelScheduledReminderEmails(previousIds)
+  const scheduled = await scheduleAppointmentReminderEmails(appt)
+  if (!scheduled.h24 && !scheduled.h2) return scheduled
+
+  try {
+    await adminDb.collection('appointments').doc(appt.id).update({
+      scheduledEmails: scheduled,
+      ...(scheduled.h24 ? { reminder24Sent: true } : {}),
+      ...(scheduled.h2 ? { reminder2Sent: true } : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    return scheduled
+  } catch (err) {
+    console.error(`No se pudieron guardar los ids de correos programados (cita ${appt.id}); se cancelan para evitar dobles:`, err)
+    await cancelScheduledReminderEmails(scheduled)
+    return {}
+  }
+}
 
 export async function sendCalendarError(appt: Appointment, errorMessage: string) {
   const adminRecipients = await getActiveAdminEmails()

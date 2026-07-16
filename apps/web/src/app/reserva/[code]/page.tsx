@@ -7,10 +7,11 @@ import { formatDate, formatTime } from '@/lib/utils'
 import { appointmentTypeLabels, isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
-import { CalendarPlus, Gem, Monitor } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Gem, Monitor } from 'lucide-react'
 import type { AppointmentStatus, GuestStatus } from '@/types'
 import CancelButton from './CancelButton'
 import RescheduleSection from './RescheduleSection'
+import LocationCard, { getShowroomAddress } from './LocationCard'
 import GuestsPanel, { type GuestSummary } from './GuestsPanel'
 import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
 
@@ -35,6 +36,45 @@ function statusMessage(status: AppointmentStatus, isVideo: boolean, hasMeetingUr
     return 'En este momento no podemos confirmar tu cita. Te invitamos a agendar en otro horario.'
   }
   return 'Esta cita fue cancelada.'
+}
+
+/**
+ * Enlace «Agregar en Google Calendar» (plantilla render?action=TEMPLATE).
+ * Google espera las fechas en UTC (sufijo Z); slotDatetime ya es el instante
+ * UTC y la duración de 60 min replica la del .ics de /api/calendar/[apptId].
+ */
+function googleCalendarUrl(appt: {
+  slotDatetime: Date
+  confirmationCode: string
+  meetingUrl?: string
+  meetingInstructions?: string
+}, isVideo: boolean, showroomAddress: string): string {
+  const start  = appt.slotDatetime
+  const end    = new Date(start.getTime() + 60 * 60 * 1000)
+  const fmtUtc = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
+
+  const details = isVideo
+    ? [
+        'Video consulta para anillo de compromiso en Ciao Ciao Joyería.',
+        appt.meetingUrl ? `Link: ${appt.meetingUrl}` : 'Link pendiente por enviar.',
+        appt.meetingInstructions ? `Indicaciones: ${appt.meetingInstructions}` : '',
+        `Código de confirmación: ${appt.confirmationCode}`,
+      ].filter(Boolean).join('\n')
+    : [
+        'Tu cita personalizada en el showroom privado de Ciao Ciao Joyería.',
+        `Código de confirmación: ${appt.confirmationCode}`,
+      ].join('\n')
+
+  const params = new URLSearchParams({
+    action:   'TEMPLATE',
+    text:     isVideo ? 'Video consulta Ciao Ciao' : 'Cita en Ciao Ciao Joyería',
+    dates:    `${fmtUtc(start)}/${fmtUtc(end)}`,
+    details,
+    location: isVideo
+      ? (appt.meetingUrl || 'Videollamada')
+      : (showroomAddress || 'Showroom Ciao Ciao Joyería'),
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
 export default async function ReservaPage({ params }: PageProps) {
@@ -71,6 +111,13 @@ export default async function ReservaPage({ params }: PageProps) {
 
   const canCancel = appt.status === 'pending' || appt.status === 'accepted'
   const isVideo = isVideoEngagement(appt.appointmentType)
+
+  // Acciones (calendario, videollamada, cómo llegar): solo citas aceptadas
+  // que aún no ocurren.
+  const isUpcoming       = appt.slotDatetime.getTime() > Date.now()
+  const showActions      = appt.status === 'accepted' && isUpcoming
+  const showroomAddress  = getShowroomAddress()
+  const showroomMapsUrl  = (process.env.NEXT_PUBLIC_SHOWROOM_MAPS_URL ?? process.env.SHOWROOM_MAPS_URL ?? '').trim()
 
   // La clienta puede mover su cita hasta 12 horas antes del horario actual
   // (misma regla que valida /api/reschedule/[token]).
@@ -156,25 +203,42 @@ export default async function ReservaPage({ params }: PageProps) {
               />
             )}
 
-            {appt.status === 'accepted' && (
+            {showActions && (
               <div className="space-y-2.5">
                 {isVideo && appt.meetingUrl && (
                   <a
                     href={appt.meetingUrl}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-champagne-solid px-5 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-champagne-deep"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-champagne-solid px-5 py-3 text-sm font-semibold text-white transition-colors duration-200 hover:bg-champagne-deep"
                   >
-                    <Monitor size={15} strokeWidth={1.5} />
-                    Entrar a la videollamada
+                    <Monitor size={16} strokeWidth={1.5} />
+                    Unirme a la videollamada
                   </a>
                 )}
-                <a
-                  href={`/api/calendar/${appt.id}?code=${encodeURIComponent(appt.confirmationCode)}`}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
-                >
-                  <CalendarPlus size={15} strokeWidth={1.5} />
-                  Agregar a mi calendario
-                </a>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <a
+                    href={`/api/calendar/${appt.id}?code=${encodeURIComponent(appt.confirmationCode)}`}
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
+                  >
+                    <CalendarPlus size={15} strokeWidth={1.5} />
+                    Agregar a mi calendario
+                  </a>
+                  <a
+                    href={googleCalendarUrl(appt, isVideo, showroomAddress)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-ink-line px-5 py-2.5 text-sm font-medium text-ink-muted transition-colors duration-200 hover:bg-cream-soft hover:text-ink"
+                  >
+                    <CalendarDays size={15} strokeWidth={1.5} />
+                    Google Calendar
+                  </a>
+                </div>
               </div>
+            )}
+
+            {showActions && !isVideo && showroomAddress && (
+              <LocationCard address={showroomAddress} googleMapsUrl={showroomMapsUrl || undefined} />
             )}
 
             {canReschedule && (

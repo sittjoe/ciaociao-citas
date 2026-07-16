@@ -2,7 +2,7 @@ import { NextResponse, after } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
-import { sendRescheduleNotice, sendCalendarError } from '@/lib/email'
+import { sendRescheduleNotice, sendCalendarError, syncScheduledReminderEmails, cancelScheduledReminderEmails } from '@/lib/email'
 import { createSlotLock, releaseSlotLock, slotLockRef } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
@@ -56,6 +56,7 @@ export async function POST(
     let updatedAppt: Appointment | null = null
     let previousSlotId = ''
     let wasAccepted = false
+    let previousScheduledEmails: unknown = null
 
     await adminDb.runTransaction(async tx => {
       const apptRef    = doc.ref
@@ -123,10 +124,12 @@ export async function POST(
         reminder2Sent:  false,
         clientConfirmed: false,
         clientConfirmedAt: FieldValue.delete(),
+        scheduledEmails: FieldValue.delete(),
       })
 
       previousSlotId = apptData.slotId
       wasAccepted    = apptData.status === 'accepted'
+      previousScheduledEmails = apptData.scheduledEmails ?? null
 
       updatedAppt = {
         id:           doc.id,
@@ -156,6 +159,16 @@ export async function POST(
       }
     })
 
+    // Cancela en Resend los recordatorios programados del horario anterior y,
+    // si la cita sigue aceptada, programa los del nuevo horario (los ids se
+    // guardan en el doc). Nunca lanza; el .catch es cinturón y tirantes.
+    after((async () => {
+      if (wasAccepted) {
+        await syncScheduledReminderEmails(updatedAppt!, previousScheduledEmails)
+      } else {
+        await cancelScheduledReminderEmails(previousScheduledEmails)
+      }
+    })().catch(err => console.error('Scheduled reminders resync failed (non-fatal):', err)))
     after(sendRescheduleNotice(updatedAppt!).catch(err =>
       console.error('Reschedule email failed (non-fatal):', err)
     ))

@@ -1,6 +1,6 @@
 import { adminDb } from './firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { sendStatusUpdate, sendCalendarError } from './email'
+import { sendStatusUpdate, sendCalendarError, syncScheduledReminderEmails, cancelScheduledReminderEmails } from './email'
 import { createAppointmentCalendarEvent } from './google-calendar'
 import { releaseSlotLock } from './slot-locks'
 import { normalizeAppointmentType } from './commercial'
@@ -75,6 +75,10 @@ export async function applyAppointmentDecision(opts: {
   const cleanMeetingInstructions = sanitize(opts.meetingInstructions ?? '')
 
   let appointment: Appointment | null = null
+  // Ids de correos programados en Resend que ya vivan en el doc (defensivo:
+  // una cita pending normalmente no tiene, pero si el flujo cambia algún día
+  // el rechazo debe cancelarlos igual).
+  let scheduledEmailIds: unknown = null
 
   try {
     const apptRef = adminDb.collection('appointments').doc(id)
@@ -89,6 +93,7 @@ export async function applyAppointmentDecision(opts: {
       if (!freshSnap.exists) throw new Error('NOT_FOUND')
       const freshData = freshSnap.data()!
       if (freshData.status !== 'pending') throw new Error('ALREADY_PROCESSED')
+      scheduledEmailIds = freshData.scheduledEmails ?? null
 
       const newStatus = action === 'accept' ? 'accepted' : 'rejected'
       const appointmentType = normalizeAppointmentType(freshData.appointmentType)
@@ -102,6 +107,7 @@ export async function applyAppointmentDecision(opts: {
         decidedBy: adminEmail,
         ...(reason ? { adminNote: reason } : {}),
         ...(action === 'accept' ? { clientConfirmed: false } : {}),
+        ...(action === 'reject' ? { scheduledEmails: FieldValue.delete() } : {}),
         ...(action === 'accept' && appointmentType === 'video_engagement_rings' ? {
           meetingUrl: cleanMeetingUrl,
           meetingProvider: cleanMeetingProvider,
@@ -136,6 +142,16 @@ export async function applyAppointmentDecision(opts: {
       summary: action === 'accept' ? 'Cita aceptada' : 'Cita rechazada',
       metadata: { action, reason: reason ?? '' },
     }).catch(err => console.error('Appointment event log failed:', err))
+
+    if (action === 'accept') {
+      // Recordatorios 24h/2h con hora exacta vía Resend scheduledAt; marca
+      // reminder24Sent/reminder2Sent en el doc para que el cron diario no
+      // duplique. Nunca lanza; si falla, el cron diario es la red de seguridad.
+      await syncScheduledReminderEmails(appointment!)
+    } else {
+      // Rechazo: si el doc traía correos programados, se cancelan (ignora errores).
+      await cancelScheduledReminderEmails(scheduledEmailIds)
+    }
 
     if (action === 'accept') {
       try {
