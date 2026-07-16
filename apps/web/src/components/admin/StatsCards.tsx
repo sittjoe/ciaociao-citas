@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { CalendarCheck, Clock, Gem, XCircle, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { AdminStats } from '@/types'
+import type { AdminStats, CommercialStatus } from '@/types'
 import { StatusBadge } from '@/components/ui/Badge'
+import { commercialStatusLabels } from '@/lib/commercial'
 import { formatShortDate } from '@/lib/utils'
 import { NumberRoll } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
@@ -48,7 +49,7 @@ export function UpcomingList({ appointments }: { appointments: AdminStats['nextA
       {appointments.map(appt => (
         <Link
           key={appt.id}
-          href="/admin/citas"
+          href={`/admin/citas?open=${appt.id}`}
           aria-label={`Ver cita de ${appt.name} · ${formatShortDate(appt.slotDatetime)}`}
           className="flex items-center justify-between p-3 bg-cream-soft rounded-xl border border-ink-line hover:border-champagne-soft transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring"
         >
@@ -57,6 +58,42 @@ export function UpcomingList({ appointments }: { appointments: AdminStats['nextA
             <p className="text-xs text-ink-muted">{formatShortDate(appt.slotDatetime)}</p>
           </div>
           <StatusBadge status={appt.status} />
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+export type OverdueFollowUpItem = {
+  id: string
+  name: string
+  followUpAt: Date
+  commercialStatus?: CommercialStatus
+}
+
+export function OverdueFollowUpsList({ items }: { items: OverdueFollowUpItem[] }) {
+  if (!items.length) {
+    return (
+      <p className="text-sm text-ink-muted py-6 text-center italic">Sin seguimientos vencidos</p>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map(item => (
+        <Link
+          key={item.id}
+          href={`/admin/citas?open=${item.id}`}
+          aria-label={`Abrir seguimiento de ${item.name}`}
+          className="flex items-center justify-between gap-3 p-3 bg-cream-soft rounded-xl border border-ink-line hover:border-champagne-soft transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring"
+        >
+          <div className="min-w-0">
+            <p className="text-sm text-ink font-medium truncate">{item.name}</p>
+            <p className="text-xs text-amber-700">Venció: {formatShortDate(item.followUpAt)}</p>
+          </div>
+          <span className="shrink-0 text-[0.7rem] text-ink-subtle">
+            {commercialStatusLabels[item.commercialStatus ?? 'pending']}
+          </span>
         </Link>
       ))}
     </div>

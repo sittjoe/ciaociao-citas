@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Timestamp } from 'firebase-admin/firestore'
-import { AlertTriangle, Bell, CalendarX, MailWarning, Monitor, ShieldAlert, Wrench } from 'lucide-react'
+import { AlertTriangle, Bell, CalendarX, ClipboardCheck, MailWarning, Monitor, ShieldAlert, UserX, Wrench } from 'lucide-react'
 import { adminDb } from '@/lib/firebase-admin'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { formatShortDate } from '@/lib/utils'
-import { normalizeAppointmentType } from '@/lib/commercial'
+import { formatWhatsAppUrl, normalizeAppointmentType } from '@/lib/commercial'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Problemas' }
@@ -17,10 +17,24 @@ function ts(value: unknown): string | null {
   return value instanceof Timestamp ? value.toDate().toISOString() : null
 }
 
+/**
+ * Reusa la normalización de teléfono de formatWhatsAppUrl pero con un mensaje
+ * amable de reagendado (lib/commercial es territorio compartido; solo se lee).
+ */
+function whatsappRescheduleUrl(phone: string, name: string): string {
+  const url = new URL(formatWhatsAppUrl(phone, name))
+  url.searchParams.set(
+    'text',
+    `Hola${name ? ` ${name}` : ''}, te escribimos de Ciao Ciao Joyería. Sentimos no haber coincidido en tu cita pasada. ¿Te gustaría reagendar? Con gusto te proponemos nuevos horarios.`,
+  )
+  return url.toString()
+}
+
 async function getProblems() {
   const now = new Date()
   const weekEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  const [failedEmails, calendarAppts, guestIssues, lastRuns, waitlist, upcomingSlots, upcomingVideoAppts] = await Promise.all([
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+  const [failedEmails, calendarAppts, guestIssues, lastRuns, waitlist, upcomingSlots, upcomingVideoAppts, pastAccepted] = await Promise.all([
     adminDb.collection('emailOutbox').where('status', '==', 'failed').limit(12).get(),
     adminDb.collection('appointments').where('calendarSyncFailed', '==', true).limit(12).get(),
     adminDb.collectionGroup('guests').where('status', 'in', ['pending', 'expired']).limit(30).get(),
@@ -39,6 +53,15 @@ async function getProblems() {
       .orderBy('slotDatetime')
       .limit(30)
       .get(),
+    // Misma forma que el índice (status, slotDatetime) que ya usa el dashboard;
+    // el campo `attended` se separa en memoria para no pedir un índice nuevo.
+    adminDb.collection('appointments')
+      .where('status', '==', 'accepted')
+      .where('slotDatetime', '>=', Timestamp.fromDate(twoWeeksAgo))
+      .where('slotDatetime', '<', Timestamp.fromDate(now))
+      .orderBy('slotDatetime')
+      .limit(200)
+      .get(),
   ])
 
   const apptIds = Array.from(new Set(guestIssues.docs.map(doc => String(doc.data().appointmentId ?? '')).filter(Boolean)))
@@ -52,6 +75,11 @@ async function getProblems() {
     acc[normalizeAppointmentType(doc.data().slotType)]++
     return acc
   }, { showroom: 0, video_engagement_rings: 0 })
+
+  // Más recientes primero (la query ordena ascendente para reusar el índice existente).
+  const pastAcceptedDocs = pastAccepted.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }) as ProblemDoc)
+    .reverse()
 
   return {
     failedEmails: failedEmails.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: ts(doc.data().createdAt) })) as ProblemDoc[],
@@ -78,6 +106,8 @@ async function getProblems() {
     videoMissingLink: upcomingVideoAppts.docs
       .map(doc => ({ id: doc.id, ...doc.data() }) as ProblemDoc)
       .filter(appt => !String(appt.meetingUrl ?? '').trim()),
+    attendanceUnrecorded: pastAcceptedDocs.filter(appt => appt.attended === null || appt.attended === undefined),
+    noShows: pastAcceptedDocs.filter(appt => appt.attended === false),
   }
 }
 
@@ -96,6 +126,8 @@ export default async function ProblemasPage() {
     + data.calendarAppts.length
     + data.videoMissingLink.length
     + data.guestIssues.filter(g => g.status === 'expired').length
+    + data.attendanceUnrecorded.length
+    + data.noShows.length
 
   return (
     <div className="space-y-6">
@@ -103,7 +135,7 @@ export default async function ProblemasPage() {
         <div>
           <p className="h-eyebrow mb-2">Operación</p>
           <h1 className="font-serif text-2xl text-ink">Problemas</h1>
-          <p className="text-sm text-ink-muted mt-1">Bandeja de excepciones: emails, invitados, Calendar y mantenimientos.</p>
+          <p className="text-sm text-ink-muted mt-1">Bandeja de excepciones: asistencia, no-shows, emails, invitados, Calendar y mantenimientos.</p>
         </div>
         <Badge className={totalIssues > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}>
           {totalIssues > 0 ? `${totalIssues} requieren atención` : 'Sin bloqueos críticos'}
@@ -133,6 +165,74 @@ export default async function ProblemasPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <Card variant="admin">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <ClipboardCheck size={18} className="text-amber-600" />
+            <h2 className="font-serif text-lg text-ink">Asistencia sin registrar</h2>
+          </CardHeader>
+          <CardBody className="space-y-3 pt-0">
+            {data.attendanceUnrecorded.length === 0 ? (
+              <p className="text-sm text-ink-muted">Todas las citas recientes tienen asistencia registrada.</p>
+            ) : data.attendanceUnrecorded.map(appt => (
+              <div key={appt.id} className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink truncate">{String(appt.name ?? '')}</p>
+                    <p className="text-xs text-ink-muted">
+                      {appt.slotDatetime instanceof Timestamp ? formatShortDate(appt.slotDatetime.toDate()) : 'Sin fecha'}
+                    </p>
+                  </div>
+                  <Link
+                    className="shrink-0 py-3 text-xs font-medium text-champagne-deep hover:underline"
+                    href={`/admin/citas?open=${appt.id}`}
+                  >
+                    Registrar asistencia
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+
+        <Card variant="admin">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <UserX size={18} className="text-red-500" />
+            <h2 className="font-serif text-lg text-ink">No-shows por recuperar</h2>
+          </CardHeader>
+          <CardBody className="space-y-3 pt-0">
+            {data.noShows.length === 0 ? (
+              <p className="text-sm text-ink-muted">No hay ausencias registradas en los últimos 14 días.</p>
+            ) : data.noShows.map(appt => (
+              <div key={appt.id} className="rounded-xl border border-red-100 bg-red-50/60 px-3 py-2 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink truncate">{String(appt.name ?? '')}</p>
+                    <p className="text-xs text-red-700">
+                      Faltó el {appt.slotDatetime instanceof Timestamp ? formatShortDate(appt.slotDatetime.toDate()) : 'día sin registrar'}
+                    </p>
+                  </div>
+                  <Link
+                    className="shrink-0 py-3 text-xs font-medium text-champagne-deep hover:underline"
+                    href={`/admin/citas?open=${appt.id}`}
+                  >
+                    Ver cita
+                  </Link>
+                </div>
+                {String(appt.phone ?? '').trim() && (
+                  <a
+                    href={whatsappRescheduleUrl(String(appt.phone), String(appt.name ?? ''))}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-admin-line bg-admin-surface px-4 text-xs font-medium text-ink transition-colors hover:border-champagne-soft"
+                  >
+                    Invitar a reagendar por WhatsApp
+                  </a>
+                )}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+
         <Card variant="admin">
           <CardHeader className="flex flex-row items-center gap-2">
             <Bell size={18} className="text-champagne-solid" />
@@ -176,7 +276,7 @@ export default async function ProblemasPage() {
                     <p className="font-medium text-ink">{String(appt.name ?? '')}</p>
                     <p className="text-xs text-ink-muted">{String(appt.email ?? '')}</p>
                   </div>
-                  <Link className="text-xs font-medium text-red-600 hover:underline" href="/admin/citas">Agregar link</Link>
+                  <Link className="text-xs font-medium text-red-600 hover:underline" href={`/admin/citas?open=${appt.id}`}>Agregar link</Link>
                 </div>
                 <p className="mt-1 text-xs text-red-700">
                   {appt.slotDatetime instanceof Timestamp ? formatShortDate(appt.slotDatetime.toDate()) : 'Sin fecha'}
@@ -201,7 +301,7 @@ export default async function ProblemasPage() {
                     <p className="font-medium text-ink">{String(email.subject ?? 'Sin asunto')}</p>
                     <p className="text-xs text-ink-muted">{Array.isArray(email.to) ? email.to.join(', ') : ''}</p>
                   </div>
-                  {email.appointmentId && <Link className="text-xs text-champagne-solid hover:underline" href="/admin/citas">Abrir citas</Link>}
+                  {email.appointmentId && <Link className="text-xs text-champagne-solid hover:underline" href={`/admin/citas?open=${String(email.appointmentId)}`}>Abrir cita</Link>}
                 </div>
                 {email.error && <p className="mt-1 text-xs text-red-600">{String(email.error).slice(0, 180)}</p>}
               </div>

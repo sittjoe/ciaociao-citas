@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { formatInTimeZone } from 'date-fns-tz'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { getCommercialPriority, normalizeAppointmentType } from '@/lib/commercial'
+import { BUSINESS_TZ } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
+
+// Estados comerciales cerrados: el trato ya se resolvió (compró / no compró),
+// por lo que un follow-up vencido deja de ser accionable.
+const CLOSED_COMMERCIAL_STATUSES = new Set(['purchased', 'not_purchased'])
 
 export async function GET(request: Request) {
   if (!(await requireAdminSession())) {
@@ -19,6 +25,9 @@ export async function GET(request: Request) {
   const budgetRange = searchParams.get('budgetRange')
   const priority = searchParams.get('priority')
   const commercialStatus = searchParams.get('commercialStatus')
+  const clientConfirmed = searchParams.get('clientConfirmed') // 'false' → aceptadas sin confirmación del cliente
+  const attended = searchParams.get('attended')               // 'false' → solo no-shows registrados
+  const followUpDue = searchParams.get('followUpDue')         // '1' → follow-up vencido (hoy CDMX o antes)
   const dateFrom = searchParams.get('dateFrom')   // ISO
   const dateTo   = searchParams.get('dateTo')     // ISO
   const cursor   = searchParams.get('cursor')     // doc ID
@@ -47,7 +56,10 @@ export async function GET(request: Request) {
       if (cursorDoc.exists) query = query.startAfter(cursorDoc)
     }
 
-    const hasClientFilters = Boolean(search || productType || appointmentType || budgetRange || priority || commercialStatus)
+    const hasClientFilters = Boolean(
+      search || productType || appointmentType || budgetRange || priority || commercialStatus ||
+      clientConfirmed === 'false' || attended === 'false' || followUpDue === '1',
+    )
     query = query.limit(hasClientFilters ? 500 : limit + 1)
 
     const snap  = await query.get()
@@ -95,6 +107,30 @@ export async function GET(request: Request) {
       })
     } else if (commercialStatus) {
       docs = docs.filter(doc => String(doc.data().commercialStatus ?? '') === commercialStatus)
+    }
+    if (clientConfirmed === 'false') {
+      // Citas aceptadas cuya asistencia el cliente aún no confirma.
+      docs = docs.filter(doc => {
+        const d = doc.data()
+        return d.status === 'accepted' && d.clientConfirmed !== true
+      })
+    }
+    if (attended === 'false') {
+      docs = docs.filter(doc => doc.data().attended === false)
+    }
+    if (followUpDue === '1') {
+      // Follow-up vencido: existe followUpAt y cae hoy (día CDMX) o antes,
+      // y el seguimiento comercial no está cerrado.
+      const todayCdmx = formatInTimeZone(new Date(), BUSINESS_TZ, 'yyyy-MM-dd')
+      // CDMX es UTC-6 todo el año (sin horario de verano desde 2022).
+      const endOfTodayCdmx = new Date(`${todayCdmx}T23:59:59.999-06:00`).getTime()
+      docs = docs.filter(doc => {
+        const d = doc.data()
+        const followUpAt = d.followUpAt
+        if (!(followUpAt instanceof Timestamp)) return false
+        if (CLOSED_COMMERCIAL_STATUSES.has(String(d.commercialStatus ?? ''))) return false
+        return followUpAt.toMillis() <= endOfTodayCdmx
+      })
     }
 
     const hasMore    = !hasClientFilters && docs.length > limit

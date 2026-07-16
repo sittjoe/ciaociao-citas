@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   useReactTable,
   getCoreRowModel,
@@ -18,7 +19,8 @@ import { TableSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Textarea } from '@/components/ui/Input'
 import { GuestsList } from './GuestsList'
-import { formatShortDate, csvRow, cn } from '@/lib/utils'
+import { formatInTimeZone } from 'date-fns-tz'
+import { formatShortDate, csvRow, cn, BUSINESS_TZ } from '@/lib/utils'
 import { appointmentTypeLabels, commercialStatusLabels, engagementBriefRows, formatWhatsAppUrl } from '@/lib/commercial'
 import { appointmentTypeOptions, budgetRangeOptions, commercialStatusOptions, productTypeOptions } from '@/lib/schemas'
 import type { Appointment, AppointmentStatus, AppointmentType, CommercialPriority, CommercialStatus } from '@/types'
@@ -155,6 +157,22 @@ const columns = [
   }),
 ]
 
+/** Día calendario CDMX (yyyy-MM-dd), con desplazamiento opcional en días. */
+function cdmxDay(offsetDays = 0): string {
+  return formatInTimeZone(new Date(Date.now() + offsetDays * 86_400_000), BUSINESS_TZ, 'yyyy-MM-dd')
+}
+
+/**
+ * Refleja la cita abierta en la URL (?open=<id>) sin recargar, para poder
+ * compartir el enlace directo al detalle. Conserva el state de Next.
+ */
+function syncOpenParam(id: string | null) {
+  const url = new URL(window.location.href)
+  if (id) url.searchParams.set('open', id)
+  else url.searchParams.delete('open')
+  window.history.replaceState(window.history.state, '', url)
+}
+
 function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
   if (sorted === 'asc')  return <ChevronUp size={13} className="text-champagne-solid" aria-label="Orden ascendente" />
   if (sorted === 'desc') return <ChevronDown size={13} className="text-champagne-solid" aria-label="Orden descendente" />
@@ -162,6 +180,8 @@ function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
 }
 
 export function AppointmentTable() {
+  const searchParams = useSearchParams()
+  const deepLinkHandled = useRef(false)
   const [appointments, setAppointments] = useState<SerialAppt[]>([])
   const [loading,     setLoading]       = useState(true)
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
@@ -175,6 +195,9 @@ export function AppointmentTable() {
   const [budgetFilter, setBudgetFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<CommercialPriority | ''>('')
   const [commercialFilter, setCommercialFilter] = useState<CommercialStatus | ''>('')
+  const [unconfirmedOnly, setUnconfirmedOnly] = useState(false)
+  const [noShowOnly, setNoShowOnly] = useState(false)
+  const [followUpDueOnly, setFollowUpDueOnly] = useState(false)
   const [sorting,     setSorting]       = useState<SortingState>([])
   const [selected,    setSelected]      = useState<SerialAppt | null>(null)
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set())
@@ -206,6 +229,9 @@ export function AppointmentTable() {
     if (budgetFilter) params.set('budgetRange', budgetFilter)
     if (priorityFilter) params.set('priority', priorityFilter)
     if (commercialFilter) params.set('commercialStatus', commercialFilter)
+    if (unconfirmedOnly) params.set('clientConfirmed', 'false')
+    if (noShowOnly) params.set('attended', 'false')
+    if (followUpDueOnly) params.set('followUpDue', '1')
     // Date inputs are CDMX calendar days; the backend filters slotDatetime,
     // so 'hasta' is the start of the following day (exclusive upper bound).
     if (dateFrom) params.set('dateFrom', `${dateFrom}T00:00:00`)
@@ -227,9 +253,9 @@ export function AppointmentTable() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, dateFrom, dateTo, nextCursor])
+  }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, unconfirmedOnly, noShowOnly, followUpDueOnly, dateFrom, dateTo, nextCursor])
 
-  useEffect(() => { fetchAppointments(true); setSelectedIds(new Set()) }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, dateFrom, dateTo]) // eslint-disable-line
+  useEffect(() => { fetchAppointments(true); setSelectedIds(new Set()) }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, unconfirmedOnly, noShowOnly, followUpDueOnly, dateFrom, dateTo]) // eslint-disable-line
 
   const pendingIds = appointments.filter(a => a.status === 'pending').map(a => a.id)
   const allPendingSelected = pendingIds.length > 0 && pendingIds.every(id => selectedIds.has(id))
@@ -285,6 +311,7 @@ export function AppointmentTable() {
 
   const openAppointment = useCallback(async (appt: SerialAppt) => {
     setSelected(appt)
+    syncOpenParam(appt.id)
     setDetailLoading(true)
     try {
       const res = await fetch(`/api/admin/appointments/${appt.id}`)
@@ -301,6 +328,33 @@ export function AppointmentTable() {
       setDetailLoading(false)
     }
   }, [])
+
+  // Deep-link: ?open=<id> abre el detalle de esa cita al montar la tabla.
+  // Solo se tiene el id, así que se carga el detalle completo directamente.
+  useEffect(() => {
+    if (deepLinkHandled.current) return
+    deepLinkHandled.current = true
+    const openId = searchParams.get('open')
+    if (!openId) return
+    void (async () => {
+      setDetailLoading(true)
+      try {
+        const res = await fetch(`/api/admin/appointments/${openId}`)
+        if (res.status === 401) {
+          window.location.href = '/admin/login?from=/admin/citas'
+          return
+        }
+        if (!res.ok) throw new Error()
+        const detail = await res.json() as SerialAppt
+        setSelected(detail)
+      } catch {
+        toast.error('No se encontró la cita del enlace')
+        syncOpenParam(null)
+      } finally {
+        setDetailLoading(false)
+      }
+    })()
+  }, [searchParams])
 
   const markAttendance = useCallback(async (attended: boolean) => {
     if (!selected) return
@@ -359,6 +413,7 @@ export function AppointmentTable() {
       setAppointments(prev => prev.map(a =>
         a.id === selected.id ? { ...a, status: newStatus, clientConfirmed: false } : a))
       setSelected(null)
+      syncOpenParam(null)
       setRejectReason('')
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al procesar')
@@ -449,8 +504,76 @@ export function AppointmentTable() {
     getSortedRowModel: getSortedRowModel(),
   })
 
+  // Chips de filtros rápidos: solo setean el estado de los filtros existentes.
+  // Volver a tocar un chip activo lo des-selecciona (quita ese filtro).
+  const today    = cdmxDay(0)
+  const tomorrow = cdmxDay(1)
+  const weekEnd  = cdmxDay(6)
+  const dateChip = (label: string, from: string, to: string) => {
+    const active = dateFrom === from && dateTo === to
+    return {
+      key: label,
+      label,
+      active,
+      toggle: () => { setDateFrom(active ? '' : from); setDateTo(active ? '' : to) },
+    }
+  }
+  const quickChips = [
+    dateChip('Hoy', today, today),
+    dateChip('Mañana', tomorrow, tomorrow),
+    dateChip('7 días', today, weekEnd),
+    {
+      key: 'pendientes',
+      label: 'Pendientes',
+      active: statusFilter === 'pending',
+      toggle: () => setStatusFilter(prev => prev === 'pending' ? '' : 'pending'),
+    },
+    {
+      key: 'sin-confirmar',
+      label: 'Sin confirmar',
+      active: unconfirmedOnly,
+      toggle: () => setUnconfirmedOnly(v => !v),
+    },
+    {
+      key: 'no-shows',
+      label: 'No-shows',
+      active: noShowOnly,
+      toggle: () => setNoShowOnly(v => !v),
+    },
+    {
+      key: 'follow-ups',
+      label: 'Follow-ups',
+      active: followUpDueOnly,
+      toggle: () => setFollowUpDueOnly(v => !v),
+    },
+  ]
+
   return (
     <div className="space-y-4">
+      {/* Quick filter chips — un tap, scrolleable en móvil */}
+      <div
+        role="group"
+        aria-label="Filtros rápidos"
+        className="flex gap-2 overflow-x-auto pb-1 -mb-1"
+      >
+        {quickChips.map(chip => (
+          <button
+            key={chip.key}
+            type="button"
+            onClick={chip.toggle}
+            aria-pressed={chip.active}
+            className={cn(
+              'min-h-[44px] shrink-0 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring',
+              chip.active
+                ? 'border-champagne-solid bg-champagne-solid text-white'
+                : 'border-ink-line bg-admin-panel text-ink-muted hover:border-champagne hover:bg-champagne-tint hover:text-ink',
+            )}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="grid grid-cols-1 gap-2 rounded-2xl border border-admin-line bg-admin-panel p-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_165px_170px_190px_130px_150px_auto]">
         <div className="relative sm:col-span-2 xl:col-span-1">
@@ -588,7 +711,7 @@ export function AppointmentTable() {
         ) : appointments.length === 0 ? (
           <EmptyState
             title="Sin citas"
-            description={search || statusFilter ? 'Ninguna cita coincide con los filtros.' : 'No hay citas registradas aún.'}
+            description={search || statusFilter || dateFrom || dateTo || unconfirmedOnly || noShowOnly || followUpDueOnly ? 'Ninguna cita coincide con los filtros.' : 'No hay citas registradas aún.'}
           />
         ) : (
           <table className="w-full text-sm">
@@ -731,7 +854,7 @@ export function AppointmentTable() {
       {/* Detail modal */}
       <Modal
         open={!!selected}
-        onClose={() => { setSelected(null); setRejectReason('') }}
+        onClose={() => { setSelected(null); setRejectReason(''); syncOpenParam(null) }}
         title="Detalle de cita"
         size="md"
       >

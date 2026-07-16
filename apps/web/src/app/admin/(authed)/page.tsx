@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { StatsCards, UpcomingList } from '@/components/admin/StatsCards'
+import { StatsCards, UpcomingList, OverdueFollowUpsList, type OverdueFollowUpItem } from '@/components/admin/StatsCards'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
-import type { AdminStats, Appointment, AppointmentStatus } from '@/types'
+import type { AdminStats, Appointment, AppointmentStatus, CommercialStatus } from '@/types'
 
 export const dynamic  = 'force-dynamic'
 export const metadata: Metadata = { title: 'Dashboard' }
@@ -88,8 +88,40 @@ async function getStats(): Promise<AdminStats> {
   }
 }
 
+// Estados comerciales que ya no requieren seguimiento (ver lib/commercial).
+const CLOSED_COMMERCIAL_STATUSES: CommercialStatus[] = ['purchased', 'not_purchased']
+
+async function getOverdueFollowUps(): Promise<OverdueFollowUpItem[]> {
+  try {
+    // Rango + orderBy sobre el mismo campo único (followUpAt) usa el índice
+    // automático; el estado comercial se filtra en memoria para no requerir
+    // un índice compuesto nuevo.
+    const snap = await adminDb.collection('appointments')
+      .where('followUpAt', '<=', Timestamp.fromDate(new Date()))
+      .orderBy('followUpAt')
+      .limit(40)
+      .get()
+
+    return snap.docs
+      .map(doc => {
+        const d = doc.data()
+        return {
+          id: doc.id,
+          name: String(d.name ?? ''),
+          followUpAt: (d.followUpAt as Timestamp).toDate(),
+          commercialStatus: d.commercialStatus as CommercialStatus | undefined,
+        }
+      })
+      .filter(item => !CLOSED_COMMERCIAL_STATUSES.includes(item.commercialStatus ?? 'pending'))
+      .slice(0, 10)
+  } catch (err) {
+    console.error('getOverdueFollowUps failed, rendering empty list:', err)
+    return []
+  }
+}
+
 export default async function AdminDashboard() {
-  const stats = await getStats()
+  const [stats, overdueFollowUps] = await Promise.all([getStats(), getOverdueFollowUps()])
   const needsAttention = stats.totalPending + stats.upcomingSlots === 0
 
   return (
@@ -114,6 +146,18 @@ export default async function AdminDashboard() {
         </CardHeader>
         <CardBody className="pt-0">
           <UpcomingList appointments={stats.nextAppointments} />
+        </CardBody>
+      </Card>
+
+      <div className="space-y-4">
+      <Card variant="admin">
+        <CardHeader>
+          <h2 className="font-serif text-lg font-light text-ink">
+            Seguimientos vencidos ({overdueFollowUps.length})
+          </h2>
+        </CardHeader>
+        <CardBody className="pt-0">
+          <OverdueFollowUpsList items={overdueFollowUps} />
         </CardBody>
       </Card>
 
@@ -143,6 +187,7 @@ export default async function AdminDashboard() {
           </div>
         </div>
       </Card>
+      </div>
       </div>
     </div>
   )

@@ -347,7 +347,7 @@ export async function sendBookingConfirmation(
             ...videoMeetingRows(appt),
           ])}
         </div>
-        <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Gestionar cita</a></p>
+        <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}">Gestionar cita</a></p>
       `),
     })
   }
