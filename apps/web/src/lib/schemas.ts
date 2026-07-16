@@ -175,6 +175,15 @@ export const bulkSlotsSchema = z.object({
   slotType: z.enum(appointmentTypeOptions).default('showroom'),
 })
 
+// Borrado en lote de slots. Tope de 200 por llamada: acota el trabajo (cada id
+// hace lecturas + delete + auditoría) y evita que una petición malformada dispare
+// miles de escrituras. La UI trocea la selección en lotes si hace falta.
+export const batchSlotsDeleteSchema = z.object({
+  ids: z.array(z.string().min(1).max(64)).min(1, 'Selecciona al menos un slot').max(200, 'Máximo 200 slots por lote'),
+})
+
+export type BatchSlotsDeleteInput = z.infer<typeof batchSlotsDeleteSchema>
+
 export const guestInputSchema = z.object({
   name: z
     .string()

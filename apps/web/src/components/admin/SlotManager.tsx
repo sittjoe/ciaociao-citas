@@ -35,15 +35,25 @@ export function SlotManager() {
   const [futureOnly,    setFutureOnly]    = useState(true)
   const [typeFilter,    setTypeFilter]    = useState<AppointmentType | ''>('')
 
+  // Selección para borrado en lote (solo slots libres; los reservados no se pueden tocar).
+  const [selected,        setSelected]        = useState<Set<string>>(new Set())
+  const [bulkDeleting,    setBulkDeleting]    = useState(false)
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false)
+
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
   const [selectedTimes, setSelectedTimes] = useState<Set<string>>(new Set(DEFAULT_TIMES))
   const [slotType,      setSlotType]      = useState<AppointmentType>('showroom')
   const [customTime,    setCustomTime]    = useState('')
 
-  const fetchSlots = useCallback(async () => {
+  // El API por defecto solo devuelve slots futuros. Para poder LIMPIAR los viejos,
+  // cuando se ve "Todos" pedimos explícitamente desde un año atrás.
+  const fetchSlots = useCallback(async (includePast = false) => {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/slots')
+      const qs = includePast
+        ? `?dateFrom=${format(addDays(startOfDay(new Date()), -365), 'yyyy-MM-dd')}`
+        : ''
+      const res = await fetch('/api/admin/slots' + qs)
       if (res.status === 401) {
         window.location.href = '/admin/login?from=/admin/slots'
         return
@@ -61,7 +71,9 @@ export function SlotManager() {
     }
   }, [])
 
-  useEffect(() => { fetchSlots() }, [fetchSlots])
+  useEffect(() => { fetchSlots(!futureOnly) }, [fetchSlots, futureOnly])
+  // Al cambiar de filtro la selección previa deja de tener sentido: se limpia.
+  useEffect(() => { setSelected(new Set()) }, [futureOnly, typeFilter])
 
   const nextDays = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i + 1)
@@ -133,13 +145,13 @@ export function SlotManager() {
         : `${created} slot${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''}`)
       setShowAdd(false)
       resetAddForm()
-      fetchSlots()
+      fetchSlots(!futureOnly)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al crear slots')
     } finally {
       setCreating(false)
     }
-  }, [selectedDates, selectedTimes, slotType, fetchSlots, resetAddForm])
+  }, [selectedDates, selectedTimes, slotType, fetchSlots, resetAddForm, futureOnly])
 
   const deleteSlot = useCallback(async (id: string) => {
     setDeleting(id)
@@ -162,6 +174,63 @@ export function SlotManager() {
     ? slots.filter(s => new Date(s.datetime) >= new Date())
     : slots)
     .filter(s => !typeFilter || (s.slotType ?? 'showroom') === typeFilter)
+
+  // Solo los slots LIBRES se pueden seleccionar; un slot reservado nunca se borra.
+  const selectableIds = visibleSlots.filter(s => s.available).map(s => s.id)
+  const allSelected   = selectableIds.length > 0 && selectableIds.every(id => selected.has(id))
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(selectableIds))
+  }
+
+  const deleteBulk = useCallback(async () => {
+    const ids = [...selected]
+    if (!ids.length) return
+    setBulkDeleting(true)
+    try {
+      let deleted = 0
+      const failed: { id: string; error: string }[] = []
+      // El API acepta máximo 200 por lote: troceamos la selección.
+      for (let i = 0; i < ids.length; i += 200) {
+        const res = await fetch('/api/admin/slots/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: ids.slice(i, i + 200) }),
+        })
+        if (res.status === 401) {
+          window.location.href = '/admin/login?from=/admin/slots'
+          return
+        }
+        const data = await res.json().catch(() => ({})) as {
+          deleted?: number; failed?: { id: string; error: string }[]; error?: string
+        }
+        if (!res.ok) throw new Error(data.error ?? 'Error al eliminar slots')
+        deleted += data.deleted ?? 0
+        if (data.failed?.length) failed.push(...data.failed)
+      }
+      if (deleted && failed.length) {
+        toast.success(`${deleted} eliminado${deleted !== 1 ? 's' : ''} · ${failed.length} omitido${failed.length !== 1 ? 's' : ''} (con reserva)`)
+      } else if (deleted) {
+        toast.success(`${deleted} slot${deleted !== 1 ? 's' : ''} eliminado${deleted !== 1 ? 's' : ''}`)
+      } else {
+        toast.error(failed[0]?.error ?? 'No se eliminó ningún slot')
+      }
+      setSelected(new Set())
+      fetchSlots(!futureOnly)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar slots')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }, [selected, fetchSlots, futureOnly])
 
   return (
     <div className="space-y-4">
@@ -198,6 +267,26 @@ export function SlotManager() {
         </div>
       </div>
 
+      {/* Barra de acciones en lote — solo aparece con algo seleccionado */}
+      {selected.size > 0 && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-champagne-soft bg-champagne-tint px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-champagne-deep">
+            <strong>{selected.size}</strong> slot{selected.size !== 1 ? 's' : ''} seleccionado{selected.size !== 1 ? 's' : ''}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelected(new Set())}
+              className="rounded-lg border border-ink-line px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-champagne-soft hover:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring"
+            >
+              Limpiar selección
+            </button>
+            <Button size="sm" variant="danger" loading={bulkDeleting} onClick={() => setShowBulkConfirm(true)}>
+              <Trash2 size={14} strokeWidth={1.5} /> Eliminar seleccionados
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Slots list */}
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
@@ -217,6 +306,16 @@ export function SlotManager() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-admin-line bg-admin-surface/70">
+                  <th className="w-10 px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      disabled={selectableIds.length === 0}
+                      aria-label="Seleccionar todos los slots libres"
+                      className="h-4 w-4 cursor-pointer accent-champagne-solid disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </th>
                   {['Fecha y hora', 'Tipo', 'Estado', 'Acciones'].map(h => (
                     <th key={h} className="px-4 py-3 text-left h-eyebrow text-ink-muted">{h}</th>
                   ))}
@@ -234,6 +333,17 @@ export function SlotManager() {
                       transition={{ duration: 0.2 }}
                       className="border-b border-admin-line last:border-0 hover:bg-champagne-tint/60"
                     >
+                      <td className="px-4 py-3">
+                        {slot.available && (
+                          <input
+                            type="checkbox"
+                            checked={selected.has(slot.id)}
+                            onChange={() => toggleSelect(slot.id)}
+                            aria-label={`Seleccionar slot ${formatShortDate(slot.datetime)}`}
+                            className="h-4 w-4 cursor-pointer accent-champagne-solid"
+                          />
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-ink">{formatShortDate(slot.datetime)}</td>
                       <td className="px-4 py-3">
                         <span className="rounded-full border border-admin-line bg-admin-surface px-2.5 py-0.5 text-xs text-ink-muted">
@@ -288,6 +398,19 @@ export function SlotManager() {
           setPendingDelete(null)
         }}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      {/* Bulk delete confirm dialog */}
+      <AlertDialog
+        open={showBulkConfirm}
+        title={`¿Eliminar ${selected.size} slot${selected.size !== 1 ? 's' : ''}?`}
+        description="Esta acción no se puede deshacer. Los slots que tengan una reserva se omiten automáticamente."
+        confirmLabel="Sí, eliminar"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={bulkDeleting}
+        onConfirm={() => { setShowBulkConfirm(false); deleteBulk() }}
+        onCancel={() => setShowBulkConfirm(false)}
       />
 
       {/* Add slots modal */}

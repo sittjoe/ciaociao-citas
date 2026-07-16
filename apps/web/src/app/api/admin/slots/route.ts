@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { fromZonedTime } from 'date-fns-tz'
 import { bulkSlotsSchema } from '@/lib/schemas'
 import { requireAdminSession } from '@/lib/admin-auth'
+import { deleteSlotById } from '@/lib/slot-delete'
 import { BUSINESS_TZ } from '@/lib/utils'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { getBlockedDateSet } from '@/lib/blocked-dates'
@@ -126,7 +127,8 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE — remove a single slot
+// DELETE — remove a single slot. La lógica y las guardas viven en deleteSlotById
+// (compartidas con el borrado en lote) para que ninguna ruta se salte una protección.
 export async function DELETE(request: Request) {
   const session = await requireAdminSession()
   if (!session) {
@@ -139,36 +141,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
   }
 
-  try {
-    const slotRef  = adminDb.collection('slots').doc(slotId)
-    const slotSnap = await slotRef.get()
-    if (!slotSnap.exists) {
-      return NextResponse.json({ error: 'Slot no encontrado' }, { status: 404 })
-    }
-    const data = slotSnap.data()!
-    if (!data.available) {
-      return NextResponse.json({ error: 'No se puede eliminar un slot con reserva' }, { status: 409 })
-    }
-    const activeAppts = await adminDb
-      .collection('appointments')
-      .where('slotId', '==', slotId)
-      .where('status', 'in', ['pending', 'accepted'])
-      .limit(1)
-      .get()
-    if (!activeAppts.empty) {
-      return NextResponse.json({ error: 'No se puede eliminar un slot con reserva activa' }, { status: 409 })
-    }
-    await slotRef.delete()
-    await adminDb.collection('auditLog').add({
-      action: 'slot_deleted',
-      slotId,
-      slotDatetime: data.datetime ? (data.datetime as Timestamp).toDate().toISOString() : null,
-      actorEmail: session.email,
-      ts: new Date(),
-    }).catch(() => {})
-    return NextResponse.json({ ok: true })
-  } catch (err) {
-    console.error('DELETE /api/admin/slots', err)
-    return NextResponse.json({ error: 'Error al eliminar slot' }, { status: 500 })
-  }
+  const result = await deleteSlotById(slotId, session.email)
+  if (result.ok) return NextResponse.json({ ok: true })
+
+  const status = result.code === 'not_found' ? 404 : result.code === 'error' ? 500 : 409
+  return NextResponse.json({ error: result.error }, { status })
 }
