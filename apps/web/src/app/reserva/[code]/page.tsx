@@ -8,8 +8,10 @@ import { appointmentTypeLabels, isVideoEngagement, normalizeAppointmentType } fr
 import { StatusBadge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { CalendarPlus, Gem, Monitor } from 'lucide-react'
-import type { AppointmentStatus } from '@/types'
+import type { AppointmentStatus, GuestStatus } from '@/types'
 import CancelButton from './CancelButton'
+import RescheduleSection from './RescheduleSection'
+import GuestsPanel, { type GuestSummary } from './GuestsPanel'
 import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
 
 export const dynamic  = 'force-dynamic'
@@ -54,6 +56,7 @@ export default async function ReservaPage({ params }: PageProps) {
     status:            data.status as AppointmentStatus,
     name:              data.name as string,
     email:             data.email as string,
+    slotId:            data.slotId as string,
     slotDatetime:      (data.slotDatetime as Timestamp).toDate(),
     confirmationCode:  data.confirmationCode as string,
     cancelToken:       data.cancelToken as string,
@@ -68,6 +71,25 @@ export default async function ReservaPage({ params }: PageProps) {
 
   const canCancel = appt.status === 'pending' || appt.status === 'accepted'
   const isVideo = isVideoEngagement(appt.appointmentType)
+
+  // La clienta puede mover su cita hasta 12 horas antes del horario actual
+  // (misma regla que valida /api/reschedule/[token]).
+  const canReschedule = canCancel
+    && appt.slotDatetime.getTime() - Date.now() >= 12 * 60 * 60 * 1000
+
+  let guests: GuestSummary[] = []
+  if (canCancel && appt.guestCount > 0) {
+    const guestsSnap = await doc.ref.collection('guests').orderBy('invitedAt', 'asc').get()
+    guests = guestsSnap.docs.map(g => {
+      const gd = g.data()
+      return {
+        id:          g.id,
+        name:        gd.name as string,
+        status:      gd.status as GuestStatus,
+        verifyToken: (gd.verifyToken as string | undefined) ?? null,
+      }
+    })
+  }
 
   return (
     <main className="min-h-screen bg-cream">
@@ -107,16 +129,6 @@ export default async function ReservaPage({ params }: PageProps) {
 
             <p className="text-sm leading-6 text-ink-muted">{statusMessage(appt.status, isVideo, Boolean(appt.meetingUrl))}</p>
 
-            {appt.status === 'accepted' && !isVideo && appt.guestCount > 0 && !appt.guestsAllVerified && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-                <p className="font-semibold text-amber-900">Invitados pendientes de verificación</p>
-                <p className="mt-1 text-xs leading-relaxed text-amber-700">
-                  {appt.guestCount} invitado{appt.guestCount !== 1 ? 's' : ''} aún no ha verificado su identidad.
-                  Cada uno recibió un correo con su link personal. Sin verificación no podrán ingresar al showroom.
-                </p>
-              </div>
-            )}
-
             <div className="rounded-2xl border border-ink-line bg-porcelain/70 px-4 py-2 text-sm">
               {([
                 ['Tipo',    appointmentTypeLabels[appt.appointmentType]],
@@ -134,6 +146,15 @@ export default async function ReservaPage({ params }: PageProps) {
                 </div>
               ))}
             </div>
+
+            {!isVideo && guests.length > 0 && (
+              <GuestsPanel
+                guests={guests}
+                hostName={appt.name}
+                dateStr={formatDate(appt.slotDatetime)}
+                timeStr={formatTime(appt.slotDatetime)}
+              />
+            )}
 
             {appt.status === 'accepted' && (
               <div className="space-y-2.5">
@@ -154,6 +175,14 @@ export default async function ReservaPage({ params }: PageProps) {
                   Agregar a mi calendario
                 </a>
               </div>
+            )}
+
+            {canReschedule && (
+              <RescheduleSection
+                token={appt.cancelToken}
+                appointmentType={appt.appointmentType}
+                currentSlotId={appt.slotId}
+              />
             )}
 
             {canCancel && <CancelButton token={appt.cancelToken} />}

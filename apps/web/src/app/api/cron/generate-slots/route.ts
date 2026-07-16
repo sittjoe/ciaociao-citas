@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server'
-import { adminDb } from '@/lib/firebase-admin'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { fromZonedTime } from 'date-fns-tz'
-import { BUSINESS_TZ } from '@/lib/utils'
-import { businessDateKey, getBlockedDateSet } from '@/lib/blocked-dates'
-import { getSlotSchedules } from '@/lib/slot-schedule'
+import { generateSlots } from '@/lib/slot-generator'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -18,9 +13,9 @@ export const maxDuration = 60
  * Se conserva como herramienta manual (curl con CRON_SECRET) por si algún
  * día se quiere rellenar el calendario según config/slotSchedule.
  *
- * Idempotente: el id del slot es el epoch ms del datetime, el mismo esquema
- * que el alta manual (/api/admin/slots), así nunca duplica ni pisa un slot
- * ya reservado. Salta días bloqueados y horas pasadas.
+ * La lógica vive en lib/slot-generator (compartida con el botón «Publicar
+ * semanas» del panel, /api/admin/slots/publish); este route solo autentica
+ * y delega.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim()
@@ -32,57 +27,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [schedules, blocked] = await Promise.all([getSlotSchedules(), getBlockedDateSet()])
-    const now = new Date()
-    const maxHorizon = Math.max(...schedules.map(s => s.horizonDays))
-
-    let created = 0
-    let skipped = 0
-    let blockedDays = 0
-
-    for (let i = 0; i <= maxHorizon; i++) {
-      const day = new Date(now.getTime() + i * 86_400_000)
-      const dateKey = businessDateKey(day) // YYYY-MM-DD en zona CDMX
-      if (blocked.has(dateKey)) {
-        blockedDays++
-        continue
-      }
-      // Día de la semana de esa fecha CDMX (mediodía UTC evita bordes de zona).
-      const [y, m, d] = dateKey.split('-').map(Number)
-      const weekday = new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay()
-
-      for (const sch of schedules) {
-        if (i > sch.horizonDays) continue
-        if (!sch.weekdays.includes(weekday)) continue
-
-        for (const time of sch.times) {
-          const dt = fromZonedTime(`${dateKey}T${time}:00`, BUSINESS_TZ)
-          if (Number.isNaN(dt.getTime()) || dt <= now) {
-            skipped++
-            continue
-          }
-          const key = String(dt.getTime())
-          const ref = adminDb.collection('slots').doc(key)
-          const didCreate = await adminDb.runTransaction(async tx => {
-            const existing = await tx.get(ref)
-            if (existing.exists) return false
-            tx.create(ref, {
-              datetime: Timestamp.fromDate(dt),
-              available: true,
-              slotType: sch.slotType,
-              heldUntil: null,
-              bookedBy: null,
-              createdAt: FieldValue.serverTimestamp(),
-            })
-            return true
-          })
-          if (didCreate) created++
-          else skipped++
-        }
-      }
-    }
-
-    return NextResponse.json({ ok: true, created, skipped, blockedDays, schedules: schedules.length })
+    const { created, skipped, blockedDays, schedules } = await generateSlots()
+    return NextResponse.json({ ok: true, created, skipped, blockedDays, schedules })
   } catch (err) {
     console.error('GET /api/cron/generate-slots', err)
     return NextResponse.json({ error: 'Error al generar horarios' }, { status: 500 })

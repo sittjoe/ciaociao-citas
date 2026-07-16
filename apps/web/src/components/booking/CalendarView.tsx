@@ -52,10 +52,6 @@ function formatKey(key: string, pattern: string): string {
 
 export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarViewProps) {
   const todayKey = businessTodayKey()
-  const [viewMonth, setViewMonth] = useState<YearMonth>(() => {
-    const [y, m] = businessTodayKey().split('-').map(Number)
-    return { year: y, month: m }
-  })
 
   const slotDates = useMemo(() => {
     const set = new Map<string, number>()
@@ -67,6 +63,35 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
     }
     return set
   }, [slots])
+
+  /** Earliest CDMX date with availability within the loaded horizon */
+  const firstAvailableKey = useMemo(() => {
+    let min: string | null = null
+    for (const key of slotDates.keys()) {
+      if (min === null || key < min) min = key
+    }
+    return min
+  }, [slotDates])
+
+  // Open the calendar where there is something to book: the month of the
+  // restored selection if it still has slots, otherwise the first month with
+  // availability (which is the current month whenever this month has slots).
+  const [viewMonth, setViewMonth] = useState<YearMonth>(() => {
+    const anchor =
+      (selectedDate && slotDates.has(selectedDate) ? selectedDate : null)
+      ?? firstAvailableKey
+      ?? todayKey
+    const [y, m] = anchor.split('-').map(Number)
+    return { year: y, month: m }
+  })
+
+  const monthHasAvailability = useMemo(() => {
+    const prefix = `${viewMonth.year}-${String(viewMonth.month).padStart(2, '0')}`
+    for (const key of slotDates.keys()) {
+      if (key.startsWith(prefix)) return true
+    }
+    return false
+  }, [slotDates, viewMonth])
 
   const dayKeys = useMemo(
     () => Array.from({ length: daysInMonth(viewMonth) }, (_, i) => dateKey(viewMonth, i + 1)),
@@ -80,8 +105,32 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
 
   const weekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
+  const nextAvailableLabel = firstAvailableKey
+    ? formatKey(firstAvailableKey, "EEE d 'de' MMMM").replace(/\./g, '')
+    : null
+
   return (
     <div className="w-full">
+      {/* Next available date — tapping it selects that day directly */}
+      {firstAvailableKey && nextAvailableLabel && (
+        <button
+          type="button"
+          onClick={() => onSelectDate(firstAvailableKey)}
+          aria-label={`Seleccionar la próxima fecha disponible, ${formatKey(firstAvailableKey, "EEEE d 'de' MMMM")}`}
+          className="mb-4 flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-2.5 text-left transition-colors duration-150 hover:border-champagne"
+        >
+          <span>
+            <span className="block text-[0.6rem] font-semibold uppercase tracking-eyebrow text-champagne-deep">
+              Próxima fecha disponible
+            </span>
+            <span className="mt-0.5 block font-serif text-sm text-ink">
+              {nextAvailableLabel}
+            </span>
+          </span>
+          <ChevronRight size={16} strokeWidth={1.5} className="shrink-0 text-champagne" />
+        </button>
+      )}
+
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-4">
         <button
@@ -167,6 +216,12 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
         })}
       </div>
       </LayoutGroup>
+
+      {!monthHasAvailability && (
+        <p className="mt-4 text-center text-sm text-ink-muted">
+          Sin fechas disponibles en este mes.
+        </p>
+      )}
     </div>
   )
 }

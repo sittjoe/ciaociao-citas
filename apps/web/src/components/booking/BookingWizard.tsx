@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format, parseISO } from 'date-fns'
@@ -195,6 +195,14 @@ export function BookingWizard() {
       setValue('productType', 'Anillo')
     }
   }, [isVideo, setValue])
+
+  // The API can answer with slots that are no longer bookable (all in the past
+  // by the time the response lands): without this check, the calendar would
+  // render mute and empty instead of offering the waitlist.
+  const hasAvailability = useMemo(
+    () => slots.some(slot => parseISO(slot.datetime).getTime() > Date.now()),
+    [slots],
+  )
 
   const stepIndex = activeSteps.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
@@ -439,7 +447,7 @@ export function BookingWizard() {
                     Reintentar
                   </Button>
                 </div>
-              ) : slots.length === 0 ? (
+              ) : !hasAvailability ? (
                   <WaitlistForm appointmentType={appointmentType} />
               ) : (
                 <CalendarView

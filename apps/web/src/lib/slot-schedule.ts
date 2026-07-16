@@ -37,7 +37,13 @@ export const DEFAULT_SCHEDULES: SlotSchedule[] = [
 
 const VALID_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
-function sanitize(raw: unknown): SlotSchedule | null {
+/**
+ * Normaliza un horario crudo (Firestore o body de un PUT del panel) a un
+ * SlotSchedule válido, o null si no se puede salvar. Exportada para que
+ * /api/admin/slot-schedule valide con EXACTAMENTE la misma regla con la que
+ * luego se leerá el documento.
+ */
+export function sanitizeSlotSchedule(raw: unknown): SlotSchedule | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   const weekdays = Array.isArray(r.weekdays)
@@ -54,18 +60,33 @@ function sanitize(raw: unknown): SlotSchedule | null {
   return { weekdays, times, slotType, horizonDays }
 }
 
-/** Lee la config de Firestore; cae a DEFAULT_SCHEDULES si no existe o es inválida. */
-export async function getSlotSchedules(): Promise<SlotSchedule[]> {
+export interface SlotScheduleConfig {
+  schedules: SlotSchedule[]
+  /** true si el horario salió del documento Firestore; false si son los defaults. */
+  fromFirestore: boolean
+}
+
+/**
+ * Lee la config de Firestore junto con su origen; cae a DEFAULT_SCHEDULES si
+ * el documento no existe o es inválido. El panel usa `fromFirestore` para
+ * avisar «estás viendo el horario por defecto, guárdalo para personalizarlo».
+ */
+export async function getSlotScheduleConfig(): Promise<SlotScheduleConfig> {
   try {
     const doc = await adminDb.collection('config').doc('slotSchedule').get()
     if (doc.exists) {
       const data = doc.data()
       const list = Array.isArray(data?.schedules) ? data!.schedules : []
-      const cleaned = list.map(sanitize).filter((s): s is SlotSchedule => s !== null)
-      if (cleaned.length) return cleaned
+      const cleaned = list.map(sanitizeSlotSchedule).filter((s): s is SlotSchedule => s !== null)
+      if (cleaned.length) return { schedules: cleaned, fromFirestore: true }
     }
   } catch (err) {
-    console.error('getSlotSchedules failed, using defaults:', err)
+    console.error('getSlotScheduleConfig failed, using defaults:', err)
   }
-  return DEFAULT_SCHEDULES
+  return { schedules: DEFAULT_SCHEDULES, fromFirestore: false }
+}
+
+/** Lee la config de Firestore; cae a DEFAULT_SCHEDULES si no existe o es inválida. */
+export async function getSlotSchedules(): Promise<SlotSchedule[]> {
+  return (await getSlotScheduleConfig()).schedules
 }

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2, Calendar } from 'lucide-react'
-import { format, addDays, startOfDay } from 'date-fns'
+import { Plus, Trash2, Calendar, CalendarPlus, ChevronDown } from 'lucide-react'
+import { format, addDays, startOfDay, parseISO } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence, LayoutGroup } from '@/components/motion'
 import { Button } from '@/components/ui/Button'
@@ -12,7 +13,7 @@ import { AlertDialog } from '@/components/ui/AlertDialog'
 import { TableSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { appointmentTypeLabels } from '@/lib/commercial'
-import { cn, formatShortDate } from '@/lib/utils'
+import { cn, formatShortDate, BUSINESS_TZ } from '@/lib/utils'
 import type { AppointmentType } from '@/types'
 
 interface SlotRow {
@@ -25,6 +26,9 @@ interface SlotRow {
 
 const DEFAULT_TIMES = ['10:00', '11:00', '12:00', '13:00', '15:00', '16:00', '17:00']
 
+/** Día calendario CDMX de un ISO — misma llave que usa el negocio. */
+const businessDayKey = (iso: string) => formatInTimeZone(parseISO(iso), BUSINESS_TZ, 'yyyy-MM-dd')
+
 export function SlotManager() {
   const [slots,         setSlots]         = useState<SlotRow[]>([])
   const [loading,       setLoading]       = useState(true)
@@ -34,6 +38,8 @@ export function SlotManager() {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [futureOnly,    setFutureOnly]    = useState(true)
   const [typeFilter,    setTypeFilter]    = useState<AppointmentType | ''>('')
+  // Filtro por día calendario (CDMX), activado desde la barra de ocupación.
+  const [dayFilter,     setDayFilter]     = useState<string | null>(null)
 
   // Selección para borrado en lote (solo slots libres; los reservados no se pueden tocar).
   const [selected,        setSelected]        = useState<Set<string>>(new Set())
@@ -73,7 +79,7 @@ export function SlotManager() {
 
   useEffect(() => { fetchSlots(!futureOnly) }, [fetchSlots, futureOnly])
   // Al cambiar de filtro la selección previa deja de tener sentido: se limpia.
-  useEffect(() => { setSelected(new Set()) }, [futureOnly, typeFilter])
+  useEffect(() => { setSelected(new Set()) }, [futureOnly, typeFilter, dayFilter])
 
   const nextDays = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(startOfDay(new Date()), i + 1)
@@ -174,6 +180,7 @@ export function SlotManager() {
     ? slots.filter(s => new Date(s.datetime) >= new Date())
     : slots)
     .filter(s => !typeFilter || (s.slotType ?? 'showroom') === typeFilter)
+    .filter(s => !dayFilter || businessDayKey(s.datetime) === dayFilter)
 
   // Solo los slots LIBRES se pueden seleccionar; un slot reservado nunca se borra.
   const selectableIds = visibleSlots.filter(s => s.available).map(s => s.id)
@@ -234,6 +241,12 @@ export function SlotManager() {
 
   return (
     <div className="space-y-4">
+      {/* Horario recurrente + publicación por semanas */}
+      <ScheduleEditor onPublished={() => fetchSlots(!futureOnly)} />
+
+      {/* Ocupación de los próximos 14 días — clic en un día filtra la tabla */}
+      <OccupancyStrip slots={slots} dayFilter={dayFilter} onSelectDay={setDayFilter} />
+
       <div className="flex flex-col gap-3 rounded-2xl border border-admin-line bg-admin-panel p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="h-eyebrow mb-1">Disponibilidad</p>
@@ -293,8 +306,8 @@ export function SlotManager() {
           <TableSkeleton rows={5} cols={4} />
         ) : visibleSlots.length === 0 ? (
           <EmptyState
-            title={futureOnly ? 'Sin slots futuros' : 'Sin slots'}
-            description={futureOnly ? 'Crea slots para los próximos días.' : 'No hay slots registrados.'}
+            title={dayFilter ? 'Sin slots ese día' : futureOnly ? 'Sin slots futuros' : 'Sin slots'}
+            description={dayFilter ? 'No hay slots publicados para el día seleccionado.' : futureOnly ? 'Crea slots para los próximos días.' : 'No hay slots registrados.'}
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} /> Agregar slots
@@ -531,6 +544,398 @@ export function SlotManager() {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Horario recurrente — editor semanal + «Publicar semanas»
+// ---------------------------------------------------------------------------
+
+/** Espejo cliente de SlotSchedule (lib/slot-schedule). */
+interface ScheduleDraft {
+  weekdays:    number[]
+  times:       string[]
+  slotType:    AppointmentType
+  horizonDays: number
+}
+
+const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: 'Lun' },
+  { value: 2, label: 'Mar' },
+  { value: 3, label: 'Mié' },
+  { value: 4, label: 'Jue' },
+  { value: 5, label: 'Vie' },
+  { value: 6, label: 'Sáb' },
+  { value: 0, label: 'Dom' },
+]
+
+const WEEK_OPTIONS = [2, 4, 6, 8]
+
+const VALID_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+
+function ScheduleEditor({ onPublished }: { onPublished: () => void }) {
+  const [expanded,   setExpanded]   = useState(false)
+  const [loading,    setLoading]    = useState(true)
+  const [schedules,  setSchedules]  = useState<ScheduleDraft[]>([])
+  const [source,     setSource]     = useState<'firestore' | 'default'>('firestore')
+  const [saving,     setSaving]     = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [weeks,      setWeeks]      = useState(4)
+  const [timeDrafts, setTimeDrafts] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/admin/slot-schedule')
+        if (res.status === 401) {
+          window.location.href = '/admin/login?from=/admin/slots'
+          return
+        }
+        const data = await res.json().catch(() => ({})) as {
+          schedules?: ScheduleDraft[]; source?: string; error?: string
+        }
+        if (!res.ok) throw new Error(data.error ?? 'Error al cargar el horario')
+        if (cancelled) return
+        setSchedules(data.schedules ?? [])
+        setSource(data.source === 'firestore' ? 'firestore' : 'default')
+      } catch (err) {
+        if (!cancelled) toast.error(err instanceof Error ? err.message : 'Error al cargar el horario')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const updateSchedule = (idx: number, patch: Partial<ScheduleDraft>) => {
+    setSchedules(prev => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
+  }
+
+  const toggleWeekday = (idx: number, day: number) => {
+    const sch = schedules[idx]
+    const weekdays = sch.weekdays.includes(day)
+      ? sch.weekdays.filter(d => d !== day)
+      : [...sch.weekdays, day]
+    updateSchedule(idx, { weekdays })
+  }
+
+  const removeTime = (idx: number, time: string) => {
+    updateSchedule(idx, { times: schedules[idx].times.filter(t => t !== time) })
+  }
+
+  const addTime = (idx: number) => {
+    const draft = timeDrafts[idx] ?? ''
+    if (!VALID_TIME.test(draft)) return
+    updateSchedule(idx, { times: [...new Set([...schedules[idx].times, draft])].sort() })
+    setTimeDrafts(prev => ({ ...prev, [idx]: '' }))
+  }
+
+  const save = useCallback(async () => {
+    for (const sch of schedules) {
+      if (!sch.weekdays.length || !sch.times.length) {
+        toast.error('Cada horario necesita al menos un día y una hora')
+        return
+      }
+    }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/slot-schedule', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedules }),
+      })
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/slots'
+        return
+      }
+      const data = await res.json().catch(() => ({})) as {
+        ok?: boolean; schedules?: ScheduleDraft[]; error?: string
+      }
+      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Error al guardar el horario')
+      if (data.schedules?.length) setSchedules(data.schedules)
+      setSource('firestore')
+      toast.success('Horario guardado')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar el horario')
+    } finally {
+      setSaving(false)
+    }
+  }, [schedules])
+
+  const publish = useCallback(async () => {
+    setPublishing(true)
+    try {
+      const res = await fetch('/api/admin/slots/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weeks }),
+      })
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/slots'
+        return
+      }
+      const data = await res.json().catch(() => ({})) as {
+        created?: number; skipped?: number; error?: string
+      }
+      if (!res.ok) throw new Error(data.error ?? 'Error al publicar horarios')
+      const created = data.created ?? 0
+      const skipped = data.skipped ?? 0
+      toast.success(skipped > 0
+        ? `${created} horario${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''} · ${skipped} ya existía${skipped !== 1 ? 'n' : ''}`
+        : `${created} horario${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''}`)
+      onPublished()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al publicar horarios')
+    } finally {
+      setPublishing(false)
+    }
+  }, [weeks, onPublished])
+
+  return (
+    <div className="rounded-2xl border border-admin-line bg-admin-panel">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        aria-expanded={expanded}
+        className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left focus-visible:outline-none focus-visible:shadow-focus-ring"
+      >
+        <div>
+          <p className="h-eyebrow mb-0.5">Agenda</p>
+          <span className="font-serif text-xl font-light text-ink">Horario recurrente</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {!loading && source === 'default' && (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-700">
+              Por defecto
+            </span>
+          )}
+          <ChevronDown
+            size={18}
+            strokeWidth={1.5}
+            className={cn('text-ink-muted transition-transform duration-200', expanded && 'rotate-180')}
+          />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="space-y-4 border-t border-admin-line px-4 py-4">
+          {loading ? (
+            <TableSkeleton rows={2} cols={3} />
+          ) : (
+            <>
+              {source === 'default' && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Usando horario por defecto — guárdalo para personalizarlo.
+                </p>
+              )}
+
+              {schedules.map((sch, idx) => (
+                <div key={idx} className="space-y-4 rounded-2xl border border-admin-line bg-admin-surface p-4">
+                  <span className="inline-block rounded-full border border-admin-line bg-admin-panel px-2.5 py-0.5 text-xs text-ink-muted">
+                    {appointmentTypeLabels[sch.slotType]}
+                  </span>
+
+                  <div>
+                    <p className="label-clean mb-2">Días de la semana</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {WEEKDAY_OPTIONS.map(({ value, label }) => {
+                        const active = sch.weekdays.includes(value)
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => toggleWeekday(idx, value)}
+                            aria-pressed={active}
+                            className={cn(
+                              'min-h-[44px] min-w-[44px] rounded-xl border px-2 text-xs transition-colors',
+                              active
+                                ? 'border-champagne-solid bg-champagne-solid text-white shadow-pop'
+                                : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-tint',
+                            )}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="label-clean mb-2">Horas</p>
+                    <div className="flex flex-wrap gap-2">
+                      {sch.times.map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => removeTime(idx, t)}
+                          aria-label={`Quitar la hora ${t}`}
+                          className="min-h-[44px] rounded-lg border border-champagne-solid bg-champagne-solid px-3 text-sm text-white transition-colors hover:bg-champagne-deep"
+                        >
+                          {t} ✕
+                        </button>
+                      ))}
+                      {sch.times.length === 0 && (
+                        <p className="self-center text-xs text-ink-muted">Sin horas — agrega al menos una.</p>
+                      )}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="time"
+                        value={timeDrafts[idx] ?? ''}
+                        onChange={e => setTimeDrafts(prev => ({ ...prev, [idx]: e.target.value }))}
+                        className="input-clean w-32"
+                        aria-label="Nueva hora para el horario recurrente"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addTime(idx)}
+                        disabled={!VALID_TIME.test(timeDrafts[idx] ?? '')}
+                      >
+                        <Plus size={14} /> Agregar hora
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="label-clean mb-2">Horizonte</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={sch.horizonDays}
+                        onChange={e => updateSchedule(idx, { horizonDays: Number(e.target.value) })}
+                        className="input-clean w-24"
+                        aria-label="Días publicados hacia adelante"
+                      />
+                      <span className="text-xs text-ink-muted">días hacia adelante (generador automático)</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" loading={saving} onClick={save}>
+                  Guardar horario
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Publicación — visible incluso con el editor colapsado */}
+      <div className="flex flex-col gap-2 border-t border-admin-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-ink-muted">
+          Crea los slots de las próximas semanas según este horario. Los existentes no se duplican.
+        </p>
+        <div className="flex items-center gap-2">
+          <select
+            value={weeks}
+            onChange={e => setWeeks(Number(e.target.value))}
+            className="input-clean h-11 w-32 min-h-0 py-1.5 text-xs"
+            aria-label="Semanas a publicar"
+          >
+            {WEEK_OPTIONS.map(w => (
+              <option key={w} value={w}>{w} semanas</option>
+            ))}
+          </select>
+          <Button loading={publishing} onClick={publish}>
+            <CalendarPlus size={14} strokeWidth={1.5} /> Publicar próximas {weeks} semanas
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Ocupación — próximos 14 días a partir de los slots ya cargados
+// ---------------------------------------------------------------------------
+
+interface DayOccupancy {
+  key:   string
+  total: number
+  free:  number
+}
+
+function OccupancyStrip({ slots, dayFilter, onSelectDay }: {
+  slots:       SlotRow[]
+  dayFilter:   string | null
+  onSelectDay: (day: string | null) => void
+}) {
+  const days = useMemo<DayOccupancy[]>(() => {
+    const now = new Date()
+    const byDay = new Map<string, { total: number; free: number }>()
+    for (const s of slots) {
+      const dt = parseISO(s.datetime)
+      // Las horas ya pasadas no son oferta: no cuentan ni como libres ni como total.
+      if (dt < now) continue
+      const key = businessDayKey(s.datetime)
+      const entry = byDay.get(key) ?? { total: 0, free: 0 }
+      entry.total++
+      if (s.available) entry.free++
+      byDay.set(key, entry)
+    }
+    return Array.from({ length: 14 }, (_, i) => {
+      const key = formatInTimeZone(new Date(now.getTime() + i * 86_400_000), BUSINESS_TZ, 'yyyy-MM-dd')
+      return { key, ...(byDay.get(key) ?? { total: 0, free: 0 }) }
+    })
+  }, [slots])
+
+  return (
+    <div className="rounded-2xl border border-admin-line bg-admin-panel p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="h-eyebrow">Ocupación · próximos 14 días</p>
+        {dayFilter && (
+          <button
+            onClick={() => onSelectDay(null)}
+            className="rounded-lg border border-ink-line px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-champagne-soft hover:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring"
+          >
+            Quitar filtro de día
+          </button>
+        )}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {days.map(d => {
+          const date     = new Date(d.key + 'T12:00:00')
+          const isActive = dayFilter === d.key
+          const tone = d.total === 0
+            ? 'border-admin-line bg-admin-surface text-ink-muted'
+            : d.free === 0
+              ? 'border-red-200 bg-red-50 text-red-700'
+              : d.free <= 2
+                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          return (
+            <button
+              key={d.key}
+              type="button"
+              onClick={() => onSelectDay(isActive ? null : d.key)}
+              aria-pressed={isActive}
+              aria-label={`${format(date, "EEEE d 'de' MMMM", { locale: es })}: ${
+                d.total === 0 ? 'sin slots' : d.free === 0 ? 'lleno' : `${d.free} de ${d.total} libres`
+              }`}
+              className={cn(
+                'flex min-h-[44px] min-w-[72px] shrink-0 flex-col items-center rounded-xl border px-2 py-1.5 text-xs transition-all',
+                tone,
+                isActive
+                  ? 'ring-2 ring-champagne-solid ring-offset-1'
+                  : 'hover:-translate-y-px hover:shadow-pop',
+              )}
+            >
+              <span className="uppercase opacity-70">{format(date, 'EEE', { locale: es })}</span>
+              <span className="text-sm font-semibold">{format(date, 'd MMM', { locale: es })}</span>
+              <span className="mt-0.5 tabular-nums">
+                {d.total === 0 ? 'Sin slots' : d.free === 0 ? 'Lleno' : `${d.free}/${d.total} libres`}
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
