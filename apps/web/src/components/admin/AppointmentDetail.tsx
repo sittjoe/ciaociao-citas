@@ -10,7 +10,8 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Textarea } from '@/components/ui/Input'
 import { GuestsList } from './GuestsList'
-import { formatShortDate, cn } from '@/lib/utils'
+import { formatShortDate, cn, BUSINESS_TZ } from '@/lib/utils'
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 import { appointmentTypeLabels, commercialStatusLabels, engagementBriefRows, formatWhatsAppUrl } from '@/lib/commercial'
 import { commercialStatusOptions } from '@/lib/schemas'
 import type { Appointment, AppointmentStatus, AppointmentType, CommercialPriority, CommercialStatus } from '@/types'
@@ -149,7 +150,8 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
   const applyFormState = (data: SerialAppointment) => {
     setCommercialStatus(data.commercialStatus ?? 'pending')
     setInternalNote(data.internalNote ?? '')
-    setFollowUpAt(data.followUpAt ? data.followUpAt.slice(0, 16) : '')
+    // El input datetime-local es "hora de pared" CDMX; el ISO viene en UTC.
+    setFollowUpAt(data.followUpAt ? formatInTimeZone(new Date(data.followUpAt), BUSINESS_TZ, "yyyy-MM-dd'T'HH:mm") : '')
     setMeetingUrl(data.meetingUrl ?? '')
     setMeetingProvider(data.meetingProvider ?? '')
     setMeetingInstructions(data.meetingInstructions ?? '')
@@ -295,7 +297,7 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
     if (!appt) return
     setSavingCommercial(true)
     try {
-      const followUpIso = followUpAt ? new Date(followUpAt).toISOString() : ''
+      const followUpIso = followUpAt ? fromZonedTime(followUpAt, BUSINESS_TZ).toISOString() : ''
       const res = await fetch(`/api/admin/appointments/${appt.id}/commercial`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

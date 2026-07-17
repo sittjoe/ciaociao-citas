@@ -64,6 +64,8 @@ export interface Appointment {
   cancelToken: string
   reminder24Sent: boolean
   reminder2Sent: boolean
+  /** Ids de correos programados en Resend (24h/2h antes) para poder cancelarlos al mover/cancelar la cita. */
+  scheduledEmails?: { h24?: string; h2?: string }
   googleCalendarEventId?: string | null
   calendarSyncFailed?: boolean | null
   decidedBy?: string | null

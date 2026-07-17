@@ -18,7 +18,7 @@ import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { AppointmentDetail, type SerialAppointment } from './AppointmentDetail'
 import { formatInTimeZone } from 'date-fns-tz'
-import { formatShortDate, csvRow, cn, BUSINESS_TZ } from '@/lib/utils'
+import { formatShortDate, cn, BUSINESS_TZ } from '@/lib/utils'
 import { appointmentTypeLabels, commercialStatusLabels, engagementBriefRows, formatWhatsAppUrl } from '@/lib/commercial'
 import { appointmentTypeOptions, budgetRangeOptions, commercialStatusOptions, productTypeOptions } from '@/lib/schemas'
 import type { AppointmentStatus, AppointmentType, CommercialPriority, CommercialStatus } from '@/types'
@@ -191,8 +191,7 @@ export function AppointmentTable() {
     return () => clearTimeout(t)
   }, [search])
 
-  const fetchAppointments = useCallback(async (reset = true) => {
-    if (reset) { setLoading(true); setError(false) }
+  const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams()
     if (debouncedSearch) params.set('search', debouncedSearch)
     if (statusFilter) params.set('status', statusFilter)
@@ -208,6 +207,12 @@ export function AppointmentTable() {
     // so 'hasta' is the start of the following day (exclusive upper bound).
     if (dateFrom) params.set('dateFrom', `${dateFrom}T00:00:00`)
     if (dateTo)   params.set('dateTo',   `${dateTo}T23:59:59`)
+    return params
+  }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, unconfirmedOnly, noShowOnly, followUpDueOnly, dateFrom, dateTo])
+
+  const fetchAppointments = useCallback(async (reset = true) => {
+    if (reset) { setLoading(true); setError(false) }
+    const params = buildFilterParams()
     if (!reset && nextCursor) params.set('cursor', nextCursor)
 
     try {
@@ -226,7 +231,7 @@ export function AppointmentTable() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, unconfirmedOnly, noShowOnly, followUpDueOnly, dateFrom, dateTo, nextCursor])
+  }, [buildFilterParams, nextCursor])
 
   useEffect(() => { fetchAppointments(true); setSelectedIds(new Set()) }, [debouncedSearch, statusFilter, appointmentTypeFilter, productFilter, budgetFilter, priorityFilter, commercialFilter, unconfirmedOnly, noShowOnly, followUpDueOnly, dateFrom, dateTo]) // eslint-disable-line
 
@@ -302,38 +307,32 @@ export function AppointmentTable() {
     setOpenId(linkedId)
   }, [searchParams])
 
-  const exportCSV = useCallback(() => {
-    const BOM  = '﻿'
-    const head = csvRow(['Código', 'Tipo', 'Nombre', 'Email', 'Teléfono', 'Fecha', 'Estado', 'Prioridad', 'Seguimiento', 'Producto', 'Presupuesto', 'Busca', 'Brief anillo', 'Meeting link', 'Notas cliente', 'Nota interna', 'Follow-up', 'Aprobado por'])
-    const rows = appointments.map(a => csvRow([
-      a.confirmationCode,
-      appointmentTypeLabels[a.appointmentType ?? 'showroom'],
-      a.name,
-      a.email,
-      a.phone,
-      new Date(a.slotDatetime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }),
-      a.status,
-      a.commercialPriority ?? '',
-      a.commercialStatus ? commercialStatusLabels[a.commercialStatus] : '',
-      a.productType ?? '',
-      a.budgetRange ?? '',
-      a.lookingFor ?? '',
-      engagementBriefRows(a.engagementBrief).map(([label, value]) => `${label}: ${value}`).join(' | '),
-      a.meetingUrl ?? '',
-      a.notes ?? '',
-      a.internalNote ?? '',
-      a.followUpAt ? new Date(a.followUpAt).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }) : '',
-      a.decidedBy ?? '',
-    ]))
-    const csv  = BOM + [head, ...rows].join('\r\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `citas-${Date.now()}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [appointments])
+  // Export del SERVIDOR: aplica los mismos filtros pero sobre TODAS las citas
+  // que matcheen (hasta 5000), no solo las filas ya cargadas en la tabla.
+  const [exporting, setExporting] = useState(false)
+  const exportCSV = useCallback(async () => {
+    setExporting(true)
+    try {
+      const res = await fetch(`/api/admin/appointments/export?${buildFilterParams()}`)
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/citas'
+        return
+      }
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      const stamp = new Date().toISOString().slice(0, 10)
+      a.download = `citas-ciaociao-${stamp}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('No se pudo exportar. Intenta de nuevo.')
+    } finally {
+      setExporting(false)
+    }
+  }, [buildFilterParams])
 
   const table = useReactTable({
     data: appointments,
@@ -516,8 +515,8 @@ export function AppointmentTable() {
               <option key={option} value={option}>{commercialStatusLabels[option]}</option>
             ))}
           </select>
-          <Button variant="outline" size="sm" onClick={exportCSV} className="min-h-[44px] shrink-0">
-            <Download size={14} strokeWidth={1.5} /> CSV
+          <Button variant="outline" size="sm" onClick={exportCSV} disabled={exporting} className="min-h-[44px] shrink-0">
+            <Download size={14} strokeWidth={1.5} /> {exporting ? 'Exportando…' : 'CSV'}
           </Button>
         </div>
 
