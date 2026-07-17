@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CalendarCheck, CheckCircle, XCircle, Phone, MessageCircle } from 'lucide-react'
+import { CalendarCheck, CheckCircle, XCircle, Phone, MessageCircle, AlertTriangle } from 'lucide-react'
 import { formatInTimeZone } from 'date-fns-tz'
 import { parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -104,7 +105,7 @@ function CardHeading({ appt }: { appt: TodayAppointment }) {
         </Link>
       </div>
       <div className="flex flex-col items-end gap-1.5 shrink-0">
-        <span className="whitespace-nowrap rounded-full border border-admin-line bg-admin-surface px-2 py-0.5 text-[10px] font-semibold text-ink-muted">
+        <span className="whitespace-nowrap rounded-full border border-admin-line bg-admin-surface px-2 py-0.5 text-11 font-semibold text-ink-muted">
           {appointmentTypeLabels[appt.appointmentType]}
         </span>
         {appt.attended === true && (
@@ -118,7 +119,16 @@ function CardHeading({ appt }: { appt: TodayAppointment }) {
   )
 }
 
-export function TodayList({ accepted, pending }: { accepted: TodayAppointment[]; pending: TodayAppointment[] }) {
+export function TodayList({
+  accepted,
+  pending,
+  error = false,
+}: {
+  accepted: TodayAppointment[]
+  pending: TodayAppointment[]
+  error?: boolean
+}) {
+  const router = useRouter()
   const [items, setItems] = useState(accepted)
   const [acting, setActing] = useState<string | null>(null)
 
@@ -151,6 +161,19 @@ export function TodayList({ accepted, pending }: { accepted: TodayAppointment[];
     }
   }, [])
 
+  if (error) {
+    return (
+      <Card variant="admin">
+        <EmptyState
+          icon={<AlertTriangle size={40} strokeWidth={1} />}
+          title="No pudimos cargar la agenda de hoy"
+          description="Hubo un problema al traer las citas. Vuelve a intentarlo en un momento."
+          action={{ label: 'Reintentar', onClick: () => router.refresh() }}
+        />
+      </Card>
+    )
+  }
+
   if (items.length === 0 && pending.length === 0) {
     return (
       <Card variant="admin">
@@ -168,11 +191,11 @@ export function TodayList({ accepted, pending }: { accepted: TodayAppointment[];
       <section className="space-y-3">
         <p className="h-eyebrow">Confirmadas</p>
         {items.length === 0 ? (
-          <Card variant="admin" className="p-4">
-            <p className="text-sm text-ink-muted">Sin citas confirmadas para hoy.</p>
+          <Card variant="admin" className="p-4 sm:p-5">
+            <p className="text-center text-sm text-ink-muted">Ninguna cita confirmada para hoy todavía.</p>
           </Card>
         ) : items.map(appt => (
-          <Card key={appt.id} variant="admin" className="p-4 space-y-3">
+          <Card key={appt.id} variant="admin" className="space-y-3 p-4 sm:p-5">
             <CardHeading appt={appt} />
             <Semaphores appt={appt} />
             <div className="flex gap-2 pt-1">
@@ -206,7 +229,7 @@ export function TodayList({ accepted, pending }: { accepted: TodayAppointment[];
         <section className="space-y-3">
           <p className="h-eyebrow">Pendientes de decidir hoy</p>
           {pending.map(appt => (
-            <Card key={appt.id} variant="admin" className="p-4 space-y-3">
+            <Card key={appt.id} variant="admin" className="space-y-3 p-4 sm:p-5">
               <CardHeading appt={appt} />
               <Semaphores appt={appt} />
               <Link

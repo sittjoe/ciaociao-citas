@@ -20,12 +20,12 @@ export default function LocationCard({ address, googleMapsUrl }: LocationCardPro
   const googleUrl = googleMapsUrl?.trim() || `https://maps.google.com/?q=${encodeURIComponent(address)}`
   const appleUrl  = `https://maps.apple.com/?q=${encodeURIComponent(address)}`
 
-  const buttonClass = 'flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-champagne px-4 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft'
+  const buttonClass = 'flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-champagne px-4 py-2.5 text-sm font-medium text-champagne-solid transition-colors duration-200 hover:bg-champagne-soft focus-visible:outline-none focus-visible:shadow-focus-ring'
 
   return (
     <div className="rounded-2xl border border-ink-line bg-porcelain/70 px-4 py-4">
       <p className="h-eyebrow mb-2 flex items-center gap-1.5">
-        <MapPin size={12} strokeWidth={1.5} className="text-champagne" />
+        <MapPin size={12} strokeWidth={1.5} className="text-champagne-solid" />
         Cómo llegar
       </p>
       <p className="text-sm leading-6 text-ink">{address}</p>

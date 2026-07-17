@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Camera, FileCheck, Images, Loader2, RefreshCw, Upload } from 'lucide-react'
 import { motion, AnimatePresence } from '@/components/motion'
+import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 
 interface IDUploaderProps {
@@ -220,17 +221,13 @@ export function IDUploader({ value, onChange, error }: IDUploaderProps) {
                 <p className="text-sm text-ink truncate">{value.name}</p>
                 <p className="text-xs text-ink-muted mt-0.5">Lista para enviar · {formatSize(value.size)}</p>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="outline"
                 onClick={reset}
-                className={cn(
-                  'shrink-0 min-h-[44px] px-4 rounded-xl text-sm font-medium',
-                  'border border-champagne text-champagne-solid',
-                  'hover:bg-champagne-soft active:scale-[0.98] transition-all duration-200',
-                )}
+                className="shrink-0 min-h-[44px]"
               >
                 Cambiar
-              </button>
+              </Button>
             </div>
             <p className="text-xs text-ink-muted">
               ¿Tu identificación se ve borrosa? Puedes volver a tomarla.
@@ -263,18 +260,10 @@ export function IDUploader({ value, onChange, error }: IDUploaderProps) {
           >
             <p className="text-sm text-red-600" role="alert">{processError}</p>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={retry}
-                className={cn(
-                  'flex items-center justify-center gap-2 min-h-[48px] px-3 rounded-xl',
-                  'bg-champagne-solid text-white text-sm font-semibold',
-                  'hover:bg-champagne-deep active:scale-[0.98] transition-all duration-200',
-                )}
-              >
+              <Button onClick={retry} className="w-full min-h-[48px]">
                 <RefreshCw size={16} strokeWidth={1.5} />
                 Reintentar
-              </button>
+              </Button>
               <button
                 type="button"
                 onClick={reset}
@@ -338,6 +327,9 @@ export function IDUploader({ value, onChange, error }: IDUploaderProps) {
                 JPG, PNG, WebP o PDF · la foto se optimiza automáticamente
               </p>
             </div>
+            <p className="text-center text-[11px] leading-4 text-ink-subtle">
+              Solo la usamos para verificar tu visita. Tus datos viajan cifrados.
+            </p>
           </motion.div>
         )}
       </AnimatePresence>

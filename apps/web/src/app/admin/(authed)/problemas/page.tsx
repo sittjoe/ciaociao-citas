@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Timestamp } from 'firebase-admin/firestore'
-import { AlertTriangle, Bell, CalendarX, ClipboardCheck, MailWarning, MailX, Monitor, ShieldAlert, UserX, Wrench } from 'lucide-react'
+import { AlertTriangle, Bell, CalendarX, Check, ClipboardCheck, MailWarning, MailX, Monitor, ShieldAlert, UserX, Wrench } from 'lucide-react'
 import { adminDb } from '@/lib/firebase-admin'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
@@ -152,8 +152,18 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
   return (
     <Card variant="admin" className="p-4">
       <p className="text-xs text-ink-muted">{label}</p>
-      <p className={`mt-1 text-3xl font-semibold ${tone}`}>{value}</p>
+      <p className={`mt-1 font-serif text-3xl font-light tabular-nums ${tone}`}>{value}</p>
     </Card>
+  )
+}
+
+/** Estado vacío consistente para cada sección: nada pendiente, todo en orden. */
+function SectionEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5 text-sm text-ink-muted">
+      <Check size={15} strokeWidth={2} className="shrink-0 text-emerald-600" aria-hidden="true" />
+      <span>{children}</span>
+    </div>
   )
 }
 
@@ -190,15 +200,15 @@ export default async function ProblemasPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Card variant="admin" className="p-4">
           <p className="text-xs text-ink-muted">Slots showroom próximos</p>
-          <p className="mt-1 text-2xl font-semibold text-ink">{data.slotsByType.showroom}</p>
+          <p className="mt-1 font-serif text-2xl font-light tabular-nums text-ink">{data.slotsByType.showroom}</p>
         </Card>
         <Card variant="admin" className="p-4">
           <p className="text-xs text-ink-muted">Slots video próximos</p>
-          <p className="mt-1 text-2xl font-semibold text-ink">{data.slotsByType.video_engagement_rings}</p>
+          <p className="mt-1 font-serif text-2xl font-light tabular-nums text-ink">{data.slotsByType.video_engagement_rings}</p>
         </Card>
         <Card variant="admin" className="p-4">
           <p className="text-xs text-ink-muted">Video aceptadas sin link</p>
-          <p className={`mt-1 text-2xl font-semibold ${data.videoMissingLink.length > 0 ? 'text-red-600' : 'text-emerald-700'}`}>{data.videoMissingLink.length}</p>
+          <p className={`mt-1 font-serif text-2xl font-light tabular-nums ${data.videoMissingLink.length > 0 ? 'text-red-600' : 'text-emerald-700'}`}>{data.videoMissingLink.length}</p>
         </Card>
       </div>
 
@@ -210,7 +220,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.attendanceUnrecorded.length === 0 ? (
-              <p className="text-sm text-ink-muted">Todas las citas recientes tienen asistencia registrada.</p>
+              <SectionEmpty>Todas las citas recientes tienen asistencia registrada.</SectionEmpty>
             ) : data.attendanceUnrecorded.map(appt => (
               <div key={appt.id} className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2 text-sm">
                 <div className="flex items-center justify-between gap-3">
@@ -239,7 +249,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.noShows.length === 0 ? (
-              <p className="text-sm text-ink-muted">No hay ausencias registradas en los últimos 14 días.</p>
+              <SectionEmpty>No hay ausencias registradas en los últimos 14 días.</SectionEmpty>
             ) : data.noShows.map(appt => (
               <div key={appt.id} className="rounded-xl border border-red-100 bg-red-50/60 px-3 py-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -278,7 +288,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.waitlist.length === 0 ? (
-              <p className="text-sm text-ink-muted">No hay personas esperando horarios.</p>
+              <SectionEmpty>No hay personas esperando horarios.</SectionEmpty>
             ) : data.waitlist.map(lead => (
               <div key={lead.id} className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -306,7 +316,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.videoMissingLink.length === 0 ? (
-              <p className="text-sm text-ink-muted">No hay video consultas aceptadas pendientes de enlace.</p>
+              <SectionEmpty>No hay video consultas aceptadas pendientes de enlace.</SectionEmpty>
             ) : data.videoMissingLink.map(appt => (
               <div key={appt.id} className="rounded-xl border border-red-100 bg-red-50/60 px-3 py-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -331,7 +341,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.failedEmails.length === 0 ? (
-              <p className="text-sm text-ink-muted">No hay emails fallidos en outbox.</p>
+              <SectionEmpty>No hay emails fallidos en outbox.</SectionEmpty>
             ) : data.failedEmails.map(email => (
               <div key={email.id} className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -354,7 +364,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.emailBounces.length === 0 ? (
-              <p className="text-sm text-ink-muted">Ningún correo ha rebotado en los últimos 7 días.</p>
+              <SectionEmpty>Ningún correo ha rebotado en los últimos 7 días.</SectionEmpty>
             ) : data.emailBounces.map(bounce => (
               <div key={bounce.id} className="rounded-xl border border-red-100 bg-red-50/60 px-3 py-2 text-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -390,7 +400,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.calendarAppts.length === 0 ? (
-              <p className="text-sm text-ink-muted">No hay citas con error de Calendar.</p>
+              <SectionEmpty>No hay citas con error de Calendar.</SectionEmpty>
             ) : data.calendarAppts.map(appt => (
               <div key={appt.id} className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2 text-sm">
                 <p className="font-medium text-ink">{String(appt.name ?? '')}</p>
@@ -407,7 +417,7 @@ export default async function ProblemasPage() {
           </CardHeader>
           <CardBody className="space-y-3 pt-0">
             {data.guestIssues.length === 0 ? (
-              <p className="text-sm text-ink-muted">No hay invitados pendientes o expirados.</p>
+              <SectionEmpty>No hay invitados pendientes o expirados.</SectionEmpty>
             ) : data.guestIssues.slice(0, 12).map(guest => (
               <div key={`${guest.appointmentId}-${guest.id}`} className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2 text-sm">
                 <div className="flex items-center justify-between gap-3">

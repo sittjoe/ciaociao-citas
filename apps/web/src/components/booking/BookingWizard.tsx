@@ -12,6 +12,8 @@ import { toast } from 'sonner'
 import { motion } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { CalendarView } from './CalendarView'
 import { SlotPicker, dualTimeLabel, useDeviceTimeZone } from './SlotPicker'
 import { IDUploader } from './IDUploader'
@@ -359,7 +361,7 @@ export function BookingWizard() {
   return (
     <div className="w-full max-w-2xl mx-auto">
       {draftRestored && step !== 'done' && (
-        <div className="mb-4 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-3 text-sm text-champagne-deep">
+        <div role="status" className="mb-4 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-3 text-sm text-champagne-deep">
           Recuperamos tu avance guardado en este dispositivo. Puedes continuar donde te quedaste.
         </div>
       )}
@@ -390,7 +392,7 @@ export function BookingWizard() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1 mb-2 sm:hidden">
+          <div className="flex items-center gap-1 mb-2 sm:hidden" aria-hidden="true">
             {activeSteps.slice(0, -1).map((s, i) => (
               <div
                 key={s}
@@ -403,7 +405,7 @@ export function BookingWizard() {
               />
             ))}
           </div>
-          <p className="text-[0.6rem] text-ink-muted text-right tracking-widest uppercase font-semibold">
+          <p className="text-[0.6rem] text-ink-muted text-right tracking-eyebrow uppercase font-semibold">
             Paso {Math.min(stepIndex + 1, activeSteps.length - 1)} de {activeSteps.length - 1} · {STEP_LABELS[step]}
           </p>
         </div>
@@ -412,8 +414,9 @@ export function BookingWizard() {
       {/* Back button */}
       {canGoBack && (
         <button
+          type="button"
           onClick={goBack}
-          className="flex items-center gap-1 text-ink-muted hover:text-ink text-sm mb-4 transition-colors duration-150"
+          className="-ml-2 mb-3 inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-sm text-ink-muted transition-colors duration-150 hover:text-ink"
         >
           <ChevronLeft size={16} strokeWidth={1.5} /> Volver
         </button>
@@ -500,15 +503,18 @@ export function BookingWizard() {
                 </span>
               </div>
               {loadingSlots ? (
-                <div className="h-64 shimmer rounded-xl" />
+                <div role="status" aria-live="polite">
+                  <span className="sr-only">Cargando horarios disponibles…</span>
+                  <CalendarSkeleton />
+                </div>
               ) : slotsError ? (
-                <div className="text-center py-12 px-4" role="alert">
-                  <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
-                    No pudimos cargar los horarios. Intenta de nuevo en un momento.
-                  </p>
-                  <Button type="button" variant="outline" className="mt-5" onClick={() => void loadSlots()}>
-                    Reintentar
-                  </Button>
+                <div role="alert">
+                  <EmptyState
+                    icon={<AlertTriangle size={26} strokeWidth={1.5} />}
+                    title="No pudimos cargar los horarios"
+                    description="Revisa tu conexión e intenta de nuevo en un momento."
+                    action={{ label: 'Reintentar', onClick: () => void loadSlots() }}
+                  />
                 </div>
               ) : !hasAvailability ? (
                   <WaitlistForm appointmentType={appointmentType} />
@@ -899,7 +905,7 @@ export function BookingWizard() {
                     <button
                       type="button"
                       onClick={() => goTo('form')}
-                      className="inline-flex items-center gap-1.5 text-xs text-champagne hover:text-champagne-deep font-medium transition-colors"
+                      className="inline-flex min-h-[44px] items-center gap-1.5 text-xs text-champagne-solid hover:text-champagne-deep font-medium transition-colors"
                     >
                       <UserPlus size={13} strokeWidth={1.5} />
                       {guests.length === 0 ? 'Agregar invitados' : 'Agregar otro invitado'}
@@ -963,8 +969,8 @@ export function BookingWizard() {
               <div className="space-y-2.5">
                 <a
                   href={`/reserva/${confirmCode}`}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 px-5 rounded-xl
-                             border border-champagne text-champagne text-sm font-medium
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 py-3 px-5 rounded-xl
+                             border border-champagne text-champagne-solid text-sm font-medium
                              hover:bg-champagne-soft transition-colors duration-200"
                 >
                   <ExternalLink size={15} strokeWidth={1.5} />
@@ -977,6 +983,31 @@ export function BookingWizard() {
             </Card>
           )}
       </motion.div>
+    </div>
+  )
+}
+
+// Placeholder con la misma silueta que CalendarView, para que el intercambio
+// carga → calendario no dé un salto de layout.
+function CalendarSkeleton() {
+  return (
+    <div className="w-full">
+      <Skeleton className="mb-4 h-[3.75rem] w-full" />
+      <div className="mb-4 flex items-center justify-between">
+        <Skeleton className="h-9 w-9" />
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-9 w-9" />
+      </div>
+      <div className="mb-2 grid grid-cols-7 gap-1.5">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <Skeleton key={i} className="mx-auto h-3 w-3.5" />
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1.5">
+        {Array.from({ length: 35 }).map((_, i) => (
+          <Skeleton key={i} className="aspect-square" />
+        ))}
+      </div>
     </div>
   )
 }
@@ -1018,13 +1049,13 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
 
   if (sent) {
     return (
-      <div className="px-4 py-12 text-center">
+      <div role="status" className="px-4 py-12 text-center">
         <CheckCircle2 size={30} strokeWidth={1.5} className="mx-auto text-champagne" />
         <h3 className="mt-4 font-serif text-2xl font-light text-ink">Quedaste en lista</h3>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
           Guardamos tus datos. En cuanto abramos nuevos horarios, el equipo podrá contactarte.
         </p>
-        <a href={`mailto:${SUPPORT_EMAIL}`} className="mt-5 inline-flex text-sm font-medium text-champagne hover:underline">
+        <a href={`mailto:${SUPPORT_EMAIL}`} className="mt-5 inline-flex min-h-[44px] items-center text-sm font-medium text-champagne-solid hover:underline">
           Tengo problema para reservar
         </a>
       </div>
@@ -1034,9 +1065,10 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
   return (
     <form className="space-y-4 px-1 py-2" onSubmit={submit}>
       <div className="text-center">
-        <h3 className="font-serif text-2xl font-light text-ink">Sin horarios disponibles</h3>
+        <p className="h-eyebrow mb-2">Lista de espera</p>
+        <h3 className="font-serif text-2xl font-light text-ink">Agenda completa por ahora</h3>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
-          Déjanos tus datos y te avisamos cuando haya nuevos espacios para {appointmentTypeLabels[appointmentType].toLowerCase()}. Nuestras piezas empiezan desde $20,000 MXN.
+          Déjanos tus datos y te avisamos en cuanto abramos nuevos espacios para {appointmentTypeLabels[appointmentType].toLowerCase()}. Nuestras piezas empiezan desde $20,000 MXN.
         </p>
       </div>
 
@@ -1135,7 +1167,7 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
         </Button>
         <a
           href={`mailto:${SUPPORT_EMAIL}?subject=Ayuda%20para%20reservar`}
-          className="inline-flex items-center justify-center rounded-xl border border-ink-line px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:border-champagne hover:text-champagne"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-ink-line px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:border-champagne hover:text-champagne-solid"
         >
           Tengo problema para reservar
         </a>

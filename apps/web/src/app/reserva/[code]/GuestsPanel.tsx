@@ -19,10 +19,12 @@ interface GuestsPanelProps {
   timeStr:  string
 }
 
+// Reusa los tokens de estado canónicos (globals.css) en vez de colores sueltos:
+// verde = listo, ámbar = falta algo, neutro = vencido.
 const statusMap: Record<Exclude<GuestStatus, 'excluded'>, { label: string; className: string }> = {
-  verified: { label: 'Verificado',           className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  pending:  { label: 'Falta identificación', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  expired:  { label: 'Plazo vencido',        className: 'bg-stone-100 text-stone-500 border border-stone-200' },
+  verified: { label: 'Verificado',           className: 'status-accepted'  },
+  pending:  { label: 'Falta identificación', className: 'status-pending'   },
+  expired:  { label: 'Plazo vencido',        className: 'status-cancelled' },
 }
 
 function whatsappShareUrl(guest: GuestSummary, hostName: string, dateStr: string, timeStr: string): string {
@@ -40,7 +42,7 @@ export default function GuestsPanel({ guests, hostName, dateStr, timeStr }: Gues
   return (
     <div className="rounded-2xl border border-ink-line bg-porcelain/70 px-4 py-4">
       <div className="mb-1.5 flex items-center gap-2">
-        <Users size={14} strokeWidth={1.5} className="text-champagne" />
+        <Users size={14} strokeWidth={1.5} className="text-champagne-solid" />
         <p className="h-eyebrow">Tus invitados</p>
       </div>
       <p className="text-xs leading-relaxed text-ink-muted">
@@ -65,7 +67,8 @@ export default function GuestsPanel({ guests, hostName, dateStr, timeStr }: Gues
                   href={whatsappShareUrl(guest, hostName, dateStr, timeStr)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-champagne px-4 py-2 text-xs font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft sm:min-h-[40px]"
+                  aria-label={`Reenviar su enlace de verificación a ${guest.name} por WhatsApp`}
+                  className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-champagne px-4 py-2 text-xs font-medium text-champagne-solid transition-colors duration-200 hover:bg-champagne-soft focus-visible:outline-none focus-visible:shadow-focus-ring sm:min-h-[40px]"
                 >
                   <MessageCircle size={14} strokeWidth={1.5} />
                   Reenviar su link

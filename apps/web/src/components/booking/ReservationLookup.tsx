@@ -88,17 +88,17 @@ export function ReservationLookup() {
               onChange={e => setCode(e.target.value.toUpperCase())}
               className="input-clean font-mono uppercase tracking-widest"
               placeholder="ABCD2345"
-            maxLength={12}
-          />
-        )}
-      </Field>
+              maxLength={12}
+            />
+          )}
+        </Field>
 
         <p className="text-xs leading-5 text-ink-subtle">
           Por seguridad, si usas teléfono y tienes tu código de referencia, lo validamos contra ambos datos.
         </p>
 
         {done && (
-          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
+          <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
             Listo. Si encontramos una cita con esos datos, el link llegará al email de la reserva.
           </p>
         )}

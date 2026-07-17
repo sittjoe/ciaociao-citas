@@ -94,10 +94,16 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot, 
       <div className={cn('grid gap-2', showLocalTime ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-3 sm:grid-cols-4')}>
         {entries.map(({ slot, dual }) => {
           const selected = selectedSlotId === slot.id
+          const ariaLabel = isVideo && dual
+            ? `${dual.cdmx} en Ciudad de México${dual.local ? `, ${dual.local} en tu zona horaria` : ''}`
+            : `${formatInTimeZone(parseISO(slot.datetime), BUSINESS_TZ, 'HH:mm')} horas, hora de Ciudad de México`
           return (
             <button
               key={slot.id}
+              type="button"
               onClick={() => onSelectSlot(slot.id)}
+              aria-pressed={selected}
+              aria-label={ariaLabel}
               className={cn(
                 'slot-3d relative min-h-[44px] overflow-hidden rounded-xl border px-2 text-sm font-medium',
                 showLocalTime ? 'py-2' : 'py-2.5',

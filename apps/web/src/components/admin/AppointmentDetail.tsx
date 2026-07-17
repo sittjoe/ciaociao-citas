@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useId, useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Calendar, ExternalLink, FileText, Loader2, Mail, MessageCircle, Save } from 'lucide-react'
+import { AlertTriangle, CheckCircle, XCircle, Calendar, ChevronDown, ExternalLink, FileText, Loader2, Mail, MessageCircle, Save } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { StatusBadge } from '@/components/ui/Badge'
+import { Badge, StatusBadge } from '@/components/ui/Badge'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { Textarea } from '@/components/ui/Input'
 import { GuestsList } from './GuestsList'
 import { formatShortDate, cn } from '@/lib/utils'
@@ -70,9 +72,56 @@ interface AppointmentDetailProps {
   onUpdated?: (id: string, patch: Partial<SerialAppointment>) => void
 }
 
+const priorityClass: Record<CommercialPriority, string> = {
+  high:   'border-red-200 bg-red-50 text-red-600',
+  medium: 'border-amber-200 bg-amber-50 text-amber-700',
+  normal: 'border-admin-line bg-admin-surface text-ink-muted',
+}
+const priorityLabelLong: Record<CommercialPriority, string> = {
+  high:   'Prioridad alta',
+  medium: 'Prioridad media',
+  normal: 'Prioridad normal',
+}
+
+/** Sección plegable para contenido de referencia (historiales) — reduce el muro en iPhone. */
+function Disclosure({
+  title,
+  count,
+  children,
+}: {
+  title: string
+  count?: number
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-2xl border border-admin-line bg-admin-surface/60">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left focus-visible:outline-none focus-visible:shadow-focus-ring"
+      >
+        <span className="h-eyebrow">
+          {title}{typeof count === 'number' ? ` (${count})` : ''}
+        </span>
+        <ChevronDown
+          size={16}
+          strokeWidth={1.5}
+          className={cn('shrink-0 text-ink-subtle transition-transform duration-200 ease-quart', open && 'rotate-180')}
+        />
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  )
+}
+
 export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdated }: AppointmentDetailProps) {
+  const uid = useId()
   const [appt, setAppt] = useState<SerialAppointment | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState(false)
+  const [retryTick, setRetryTick] = useState(0)
   const [deciding, setDeciding] = useState(false)
   const [savingCommercial, setSavingCommercial] = useState(false)
   const [resending, setResending] = useState(false)
@@ -107,16 +156,19 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
   }
 
   // Carga el detalle completo al abrir. Si hay initialData se pinta de inmediato
-  // y el detalle (historial, eventos) llega en segundo plano.
+  // y el detalle (historial, eventos) llega en segundo plano. Si no hay datos y
+  // la carga falla, se muestra un estado de error con reintento (no se cierra).
   useEffect(() => {
     if (!appointmentId) {
       setAppt(null)
+      setDetailError(false)
       return
     }
     setRejectReason('')
     setShowReschedule(false)
     setSelectedSlotId('')
     setSlots([])
+    setDetailError(false)
     const initial = initialRef.current && initialRef.current.id === appointmentId ? initialRef.current : null
     setAppt(initial)
     if (initial) applyFormState(initial)
@@ -140,15 +192,15 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
         if (initial) {
           toast.error('No se pudo cargar el historial del cliente')
         } else {
-          toast.error('Error al cargar la cita')
-          onCloseRef.current()
+          setDetailError(true)
         }
       } finally {
         if (!cancelled) setDetailLoading(false)
       }
     })()
     return () => { cancelled = true }
-  }, [appointmentId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointmentId, retryTick])
 
   const loadSlots = useCallback(async () => {
     if (!appt) return
@@ -322,180 +374,132 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
     }
   }, [appt])
 
+  const priority: CommercialPriority = appt?.commercialPriority ?? 'normal'
+  const isVideo = appt?.appointmentType === 'video_engagement_rings'
+
+  // Filas de la ficha de detalle (referencia). No incluye Estado ni Prioridad:
+  // ya se muestran de forma prominente en el encabezado.
+  const detailRows: [string, string][] = appt ? [
+    ['Código',    appt.confirmationCode],
+    ['Tipo',      appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
+    ['Nombre',    appt.name],
+    ['Email',     appt.email],
+    ['Teléfono',  appt.phone],
+    ['Fecha',     formatShortDate(appt.slotDatetime)],
+    ...(appt.productType ? [['Producto', appt.productType] as [string, string]] : []),
+    ...(appt.budgetRange ? [['Presupuesto', appt.budgetRange] as [string, string]] : []),
+    ...(appt.lookingFor ? [['Busca', appt.lookingFor] as [string, string]] : []),
+    ...engagementBriefRows(appt.engagementBrief),
+    ...(appt.meetingUrl ? [['Link videollamada', appt.meetingUrl] as [string, string]] : []),
+    ...(appt.meetingInstructions ? [['Instrucciones video', appt.meetingInstructions] as [string, string]] : []),
+    ['Seguimiento', appt.commercialStatus ? commercialStatusLabels[appt.commercialStatus] : 'Pendiente'],
+    ...(appt.followUpAt ? [['Follow-up', formatShortDate(appt.followUpAt)] as [string, string]] : []),
+    ['Calendar',  appt.googleCalendarEventId
+      ? 'Sincronizado'
+      : appt.calendarSyncFailed
+        ? 'Error de sincronización'
+        : 'Pendiente'],
+    ...(appt.decidedBy ? [['Aprobado por', appt.decidedBy] as [string, string]] : []),
+    ...(appt.decidedAt ? [['Fecha decisión', formatShortDate(appt.decidedAt)] as [string, string]] : []),
+    ...(appt.status === 'accepted'
+      ? [['Confirmación cliente', appt.clientConfirmed
+          ? (appt.clientConfirmedAt ? `Sí · ${formatShortDate(appt.clientConfirmedAt)}` : 'Sí')
+          : 'Pendiente'] as [string, string]]
+      : []),
+    ...(appt.adminNote ? [['Nota admin', appt.adminNote] as [string, string]] : []),
+    ...(appt.notes ? [['Notas cliente', appt.notes] as [string, string]] : []),
+    ...(appt.internalNote ? [['Notas internas', appt.internalNote] as [string, string]] : []),
+  ] : []
+
   return (
     <Modal
       open={!!appointmentId}
       onClose={onClose}
       title="Detalle de cita"
-      size="md"
+      size="lg"
     >
-      {!appt ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-champagne-solid" />
+      {detailError && !appt ? (
+        <EmptyState
+          icon={<AlertTriangle size={28} strokeWidth={1.5} />}
+          title="No se pudo cargar la cita"
+          description="Revisa tu conexión e inténtalo de nuevo."
+          action={{ label: 'Reintentar', onClick: () => { setDetailError(false); setRetryTick(t => t + 1) } }}
+        />
+      ) : !appt ? (
+        <div className="space-y-4" aria-busy="true" aria-label="Cargando cita">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2.5">
+              <Skeleton className="h-3 w-20 rounded-lg" />
+              <Skeleton className="h-8 w-48 rounded-lg" />
+            </div>
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-44 w-full" />
         </div>
       ) : (
         <div className="space-y-4">
+          {/* ── Encabezado: identidad + estado de un vistazo ── */}
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="h-eyebrow mb-1">Solicitud</p>
-              <h3 className="font-serif text-2xl font-light text-ink">{appt.name}</h3>
-              {detailLoading && <p className="mt-1 text-xs text-ink-muted">Cargando historial...</p>}
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <StatusBadge status={appt.status} />
-              <span className={cn(
-                'inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                appt.commercialPriority === 'high' && 'border-red-200 bg-red-50 text-red-600',
-                appt.commercialPriority === 'medium' && 'border-amber-200 bg-amber-50 text-amber-700',
-                (!appt.commercialPriority || appt.commercialPriority === 'normal') && 'border-admin-line bg-admin-surface text-ink-muted',
-              )}>
-                {appt.commercialPriority === 'high' ? 'Prioridad alta' : appt.commercialPriority === 'medium' ? 'Prioridad media' : 'Prioridad normal'}
-              </span>
-            </div>
-          </div>
-
-          <dl className="divide-y divide-admin-line rounded-2xl border border-admin-line bg-admin-surface/60 px-4 text-sm">
-            {[
-              ['Código',    appt.confirmationCode],
-              ['Tipo',      appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
-              ['Nombre',    appt.name],
-              ['Email',     appt.email],
-              ['Teléfono',  appt.phone],
-              ['Fecha',     formatShortDate(appt.slotDatetime)],
-              ...(appt.productType ? [['Producto', appt.productType]] : []),
-              ...(appt.budgetRange ? [['Presupuesto', appt.budgetRange]] : []),
-              ...(appt.lookingFor ? [['Busca', appt.lookingFor]] : []),
-              ...engagementBriefRows(appt.engagementBrief),
-              ...(appt.meetingUrl ? [['Link videollamada', appt.meetingUrl]] : []),
-              ...(appt.meetingInstructions ? [['Instrucciones video', appt.meetingInstructions]] : []),
-              ['Seguimiento', appt.commercialStatus ? commercialStatusLabels[appt.commercialStatus] : 'Pendiente'],
-              ...(appt.followUpAt ? [['Follow-up', formatShortDate(appt.followUpAt)]] : []),
-              ['Calendar',  appt.googleCalendarEventId
-                ? 'Sincronizado'
-                : appt.calendarSyncFailed
-                  ? 'Error de sincronización'
-                  : 'Pendiente'],
-              ...(appt.decidedBy ? [['Aprobado por', appt.decidedBy]] : []),
-              ...(appt.decidedAt ? [['Fecha decisión', formatShortDate(appt.decidedAt)]] : []),
-              ...(appt.status === 'accepted'
-                ? [['Confirmación cliente', appt.clientConfirmed
-                    ? (appt.clientConfirmedAt ? `Sí — ${formatShortDate(appt.clientConfirmedAt)}` : 'Sí')
-                    : 'Pendiente']]
-                : []),
-              ...(appt.adminNote ? [['Nota admin', appt.adminNote]] : []),
-              ...(appt.notes ? [['Notas cliente', appt.notes]] : []),
-              ...(appt.internalNote ? [['Notas internas', appt.internalNote]] : []),
-            ].map(([label, value]) => (
-              <div key={label as string} className="flex justify-between py-2.5 gap-4">
-                <dt className="text-ink-muted shrink-0">{label}</dt>
-                <dd className="text-ink text-right">{value as string}</dd>
-              </div>
-            ))}
-            <div className="flex justify-between py-2.5 gap-4">
-              <dt className="text-ink-muted">Estado</dt>
-              <dd><StatusBadge status={appt.status} /></dd>
-            </div>
-          </dl>
-
-          <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="h-eyebrow mb-1">Seguimiento comercial</p>
-                <p className="text-xs text-ink-muted">Uso interno del equipo. No se muestra al cliente.</p>
-              </div>
-              {appt.phone && (
-                <a
-                  href={formatWhatsAppUrl(appt.phone, appt.name)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Escribir a ${appt.name} por WhatsApp`}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                >
-                  <MessageCircle size={13} strokeWidth={1.5} />
-                  WhatsApp
-                </a>
+              <h3 className="font-serif text-2xl font-light leading-tight text-ink">{appt.name}</h3>
+              <p className="mt-1.5 text-xs text-ink-muted">
+                {[appt.confirmationCode, appointmentTypeLabels[appt.appointmentType ?? 'showroom'], formatShortDate(appt.slotDatetime)].join(' · ')}
+              </p>
+              {detailLoading && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-subtle">
+                  <Loader2 size={11} className="animate-spin" /> Actualizando historial…
+                </p>
               )}
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="label-clean">Estado</label>
-                <select
-                  value={commercialStatus}
-                  onChange={e => setCommercialStatus(e.target.value as CommercialStatus)}
-                  className="input-clean mt-1"
-                >
-                  {commercialStatusOptions.map(option => (
-                    <option key={option} value={option}>{commercialStatusLabels[option]}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label-clean">Fecha de follow-up</label>
-                <input
-                  type="datetime-local"
-                  value={followUpAt}
-                  onChange={e => setFollowUpAt(e.target.value)}
-                  className="input-clean mt-1"
-                />
-              </div>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <StatusBadge status={appt.status} />
+              <Badge className={cn('border', priorityClass[priority])}>
+                {priorityLabelLong[priority]}
+              </Badge>
             </div>
-            <div className="mt-3">
-              <label className="label-clean">Notas internas</label>
-              <Textarea
-                value={internalNote}
-                onChange={e => setInternalNote(e.target.value)}
-                placeholder="Preparación, resultado, siguiente paso o contexto comercial."
-                rows={3}
-                className="mt-1"
-              />
-            </div>
-            {appt.appointmentType === 'video_engagement_rings' && (
-              <div className="mt-3 rounded-xl border border-champagne-soft bg-champagne-tint/50 p-3">
-                <p className="h-eyebrow mb-3">Videollamada</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="label-clean">Proveedor</label>
-                    <input
-                      value={meetingProvider}
-                      onChange={e => setMeetingProvider(e.target.value)}
-                      placeholder="Google Meet, Zoom..."
-                      className="input-clean mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="label-clean">Link</label>
-                    <input
-                      value={meetingUrl}
-                      onChange={e => setMeetingUrl(e.target.value)}
-                      placeholder="https://meet.google.com/..."
-                      className="input-clean mt-1"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="label-clean">Instrucciones</label>
-                  <Textarea
-                    value={meetingInstructions}
-                    onChange={e => setMeetingInstructions(e.target.value)}
-                    placeholder="Ej: entra 5 minutos antes y ten referencias a la mano."
-                    rows={2}
-                    className="mt-1"
-                  />
-                </div>
-                {!meetingUrl && appt.status === 'accepted' && (
-                  <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Esta video cita ya está aceptada pero todavía no tiene link.
-                  </p>
-                )}
-              </div>
-            )}
-            <Button size="sm" className="mt-3" loading={savingCommercial} onClick={() => void saveCommercial()}>
-              <Save size={14} strokeWidth={1.5} />
-              Guardar seguimiento
-            </Button>
           </div>
 
-          {/* Attendance — only for confirmed appointments */}
+          {/* ── Aviso: sincronización de calendario fallida ── */}
+          {appt.calendarSyncFailed && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              <AlertTriangle size={14} strokeWidth={1.5} className="mt-px shrink-0" />
+              <p>La cita quedó confirmada, pero Google Calendar no pudo crear el evento. Revisa diagnósticos y vuelve a intentarlo manualmente si hace falta.</p>
+            </div>
+          )}
+
+          {/* ── Zona de decisión (pendiente): la acción principal, arriba ── */}
+          {appt.status === 'pending' && (
+            <div className="space-y-3 rounded-2xl border border-champagne-soft bg-champagne-tint/40 p-4">
+              <div>
+                <p className="h-eyebrow mb-1">Decisión</p>
+                <p className="text-xs text-ink-muted">Confirma o rechaza la solicitud. El cliente recibe el resultado por correo.</p>
+              </div>
+              <div>
+                <label htmlFor={`${uid}-reject`} className="label-clean">Motivo de rechazo (opcional)</label>
+                <Textarea
+                  id={`${uid}-reject`}
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  placeholder="Ej: Sin disponibilidad en esa fecha"
+                  rows={2}
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="gold" className="min-h-[44px] flex-1" loading={deciding} onClick={() => void decide('accept')}>
+                  <CheckCircle size={15} strokeWidth={1.5} /> Confirmar
+                </Button>
+                <Button variant="danger" className="min-h-[44px] flex-1" loading={deciding} onClick={() => void decide('reject')}>
+                  <XCircle size={15} strokeWidth={1.5} /> Rechazar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Asistencia (confirmada): registro clave de operación ── */}
           {appt.status === 'accepted' && (
             <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
               <div className="mb-3">
@@ -509,14 +513,16 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
               <div className="flex gap-2">
                 <Button
                   variant={appt.attended === true ? 'gold' : 'outline'}
-                  size="sm" className="flex-1" loading={deciding}
+                  size="sm" className="min-h-[44px] flex-1" loading={deciding}
+                  aria-pressed={appt.attended === true}
                   onClick={() => void markAttendance(true)}
                 >
                   <CheckCircle size={14} strokeWidth={1.5} /> Asistió
                 </Button>
                 <Button
                   variant={appt.attended === false ? 'danger' : 'ghost'}
-                  size="sm" className="flex-1" loading={deciding}
+                  size="sm" className="min-h-[44px] flex-1" loading={deciding}
+                  aria-pressed={appt.attended === false}
                   onClick={() => void markAttendance(false)}
                 >
                   <XCircle size={14} strokeWidth={1.5} /> No asistió
@@ -525,7 +531,7 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
             </div>
           )}
 
-          {/* Reschedule — only for confirmed appointments */}
+          {/* ── Reagendar (confirmada) ── */}
           {appt.status === 'accepted' && (
             <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
               <div className="mb-3">
@@ -536,28 +542,28 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full min-h-[44px]"
+                  className="min-h-[44px] w-full"
                   onClick={() => setShowReschedule(true)}
                 >
                   <Calendar size={14} strokeWidth={1.5} /> Reagendar cita
                 </Button>
               ) : (
                 <div className="space-y-3">
-                  <label htmlFor="reschedule-slot" className="block text-sm font-medium text-ink">Selecciona el nuevo horario</label>
+                  <label htmlFor={`${uid}-slot`} className="block text-sm font-medium text-ink">Selecciona el nuevo horario</label>
                   {slotsLoading ? (
                     <div className="flex justify-center py-4">
                       <Loader2 size={18} className="animate-spin text-champagne-solid" />
                     </div>
                   ) : slots.length === 0 ? (
-                    <p className="text-sm text-ink-muted text-center py-3">No hay horarios disponibles</p>
+                    <p className="py-3 text-center text-sm text-ink-muted">No hay horarios disponibles</p>
                   ) : (
                     <select
-                      id="reschedule-slot"
+                      id={`${uid}-slot`}
                       value={selectedSlotId}
                       onChange={e => setSelectedSlotId(e.target.value)}
                       className="input-clean w-full"
                     >
-                      <option value="">— Seleccionar horario —</option>
+                      <option value="">Elige un horario</option>
                       {slots.map(s => (
                         <option key={s.id} value={s.id}>
                           {new Date(s.datetime).toLocaleString('es-MX', {
@@ -573,7 +579,7 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="flex-1 min-h-[44px]"
+                      className="min-h-[44px] flex-1"
                       onClick={() => { setShowReschedule(false); setSelectedSlotId('') }}
                       disabled={rescheduling}
                     >
@@ -582,7 +588,7 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
                     <Button
                       variant="gold"
                       size="sm"
-                      className="flex-1 min-h-[44px]"
+                      className="min-h-[44px] flex-1"
                       loading={rescheduling}
                       disabled={!selectedSlotId}
                       onClick={() => void reschedule()}
@@ -595,74 +601,148 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
             </div>
           )}
 
-          {appt.customerHistory && appt.customerHistory.length > 0 && (
-            <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
-              <p className="h-eyebrow mb-3">Historial cliente</p>
-              <div className="space-y-2">
-                {appt.customerHistory.map(item => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-panel px-3 py-2 text-xs">
-                    <div>
-                      <p className="font-medium text-ink">{item.slotDatetime ? formatShortDate(item.slotDatetime) : 'Sin fecha'}</p>
-                      <p className="text-ink-muted">{[item.productType, item.budgetRange].filter(Boolean).join(' · ') || item.name}</p>
-                    </div>
-                    <div className="text-right">
-                      <StatusBadge status={item.status} />
-                      {item.commercialStatus && (
-                        <p className="mt-1 text-[10px] text-ink-muted">{commercialStatusLabels[item.commercialStatus]}</p>
-                      )}
-                    </div>
+          {/* ── Seguimiento comercial (uso interno) ── */}
+          <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="h-eyebrow mb-1">Seguimiento comercial</p>
+                <p className="text-xs text-ink-muted">Uso interno del equipo. No se muestra al cliente.</p>
+              </div>
+              {appt.phone && (
+                <a
+                  href={formatWhatsAppUrl(appt.phone, appt.name)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Escribir a ${appt.name} por WhatsApp`}
+                  className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:shadow-focus-ring"
+                >
+                  <MessageCircle size={13} strokeWidth={1.5} />
+                  WhatsApp
+                </a>
+              )}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor={`${uid}-cstatus`} className="label-clean">Estado</label>
+                <select
+                  id={`${uid}-cstatus`}
+                  value={commercialStatus}
+                  onChange={e => setCommercialStatus(e.target.value as CommercialStatus)}
+                  className="input-clean mt-1"
+                >
+                  {commercialStatusOptions.map(option => (
+                    <option key={option} value={option}>{commercialStatusLabels[option]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor={`${uid}-followup`} className="label-clean">Fecha de follow-up</label>
+                <input
+                  id={`${uid}-followup`}
+                  type="datetime-local"
+                  value={followUpAt}
+                  onChange={e => setFollowUpAt(e.target.value)}
+                  className="input-clean mt-1"
+                />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label htmlFor={`${uid}-note`} className="label-clean">Notas internas</label>
+              <Textarea
+                id={`${uid}-note`}
+                value={internalNote}
+                onChange={e => setInternalNote(e.target.value)}
+                placeholder="Preparación, resultado, siguiente paso o contexto comercial."
+                rows={3}
+                className="mt-1"
+              />
+            </div>
+            {isVideo && (
+              <div className="mt-4 border-t border-admin-line pt-4">
+                <p className="h-eyebrow mb-3">Videollamada</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor={`${uid}-provider`} className="label-clean">Proveedor</label>
+                    <input
+                      id={`${uid}-provider`}
+                      value={meetingProvider}
+                      onChange={e => setMeetingProvider(e.target.value)}
+                      placeholder="Google Meet, Zoom..."
+                      className="input-clean mt-1"
+                    />
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {appt.eventHistory && appt.eventHistory.length > 0 && (
-            <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
-              <p className="h-eyebrow mb-3">Historial operativo</p>
-              <div className="space-y-2">
-                {appt.eventHistory.map(event => (
-                  <div key={event.id} className="rounded-xl border border-admin-line bg-admin-panel px-3 py-2 text-xs">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-medium text-ink">{event.summary || event.action}</p>
-                      {event.createdAt && <span className="shrink-0 text-ink-subtle">{formatShortDate(event.createdAt)}</span>}
-                    </div>
-                    <p className="mt-1 text-ink-muted">{event.actor || 'Sistema'}</p>
+                  <div>
+                    <label htmlFor={`${uid}-link`} className="label-clean">Link</label>
+                    <input
+                      id={`${uid}-link`}
+                      value={meetingUrl}
+                      onChange={e => setMeetingUrl(e.target.value)}
+                      placeholder="https://meet.google.com/..."
+                      className="input-clean mt-1"
+                    />
                   </div>
-                ))}
+                </div>
+                <div className="mt-3">
+                  <label htmlFor={`${uid}-instr`} className="label-clean">Instrucciones</label>
+                  <Textarea
+                    id={`${uid}-instr`}
+                    value={meetingInstructions}
+                    onChange={e => setMeetingInstructions(e.target.value)}
+                    placeholder="Ej: entra 5 minutos antes y ten referencias a la mano."
+                    rows={2}
+                    className="mt-1"
+                  />
+                </div>
+                {!meetingUrl && appt.status === 'accepted' && (
+                  <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Esta video cita ya está aceptada pero todavía no tiene link.
+                  </p>
+                )}
               </div>
-            </div>
-          )}
-
-          {appt.calendarSyncFailed && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              La cita quedó confirmada, pero Google Calendar no pudo crear el evento. Revisa diagnósticos y vuelve a intentarlo manualmente si hace falta.
-            </div>
-          )}
-
-          {appt.appointmentType !== 'video_engagement_rings' ? (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileText size={16} strokeWidth={1.5} className="text-champagne-solid shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink">Identificación titular</p>
-                <p className="text-xs text-ink-muted truncate">
-                  {appt.identificationUrl ? 'Archivo protegido' : 'Sin archivo'}
-                </p>
-              </div>
-            </div>
-            {appt.identificationUrl && (
-              <a
-                href={`/api/admin/id-url?path=${encodeURIComponent(appt.identificationUrl)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne-solid hover:bg-champagne-soft transition-colors"
-              >
-                <ExternalLink size={13} strokeWidth={1.5} />
-                Ver
-              </a>
             )}
+            <Button size="sm" className="mt-4" loading={savingCommercial} onClick={() => void saveCommercial()}>
+              <Save size={14} strokeWidth={1.5} />
+              Guardar seguimiento
+            </Button>
           </div>
+
+          {/* ── Detalles de la solicitud (referencia) ── */}
+          <div className="rounded-2xl border border-admin-line bg-admin-surface/60 px-4">
+            <p className="h-eyebrow pt-4">Detalles de la solicitud</p>
+            <dl className="mt-1 divide-y divide-admin-line text-sm">
+              {detailRows.map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-4 py-2.5">
+                  <dt className="shrink-0 text-ink-muted">{label}</dt>
+                  <dd className="break-words text-right text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          {/* ── Documento / consulta por video ── */}
+          {!isVideo ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <FileText size={16} strokeWidth={1.5} className="shrink-0 text-champagne-solid" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">Identificación titular</p>
+                  <p className="truncate text-xs text-ink-muted">
+                    {appt.identificationUrl ? 'Archivo protegido' : 'Sin archivo'}
+                  </p>
+                </div>
+              </div>
+              {appt.identificationUrl && (
+                <a
+                  href={`/api/admin/id-url?path=${encodeURIComponent(appt.identificationUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne-solid transition-colors hover:bg-champagne-soft focus-visible:outline-none focus-visible:shadow-focus-ring"
+                >
+                  <ExternalLink size={13} strokeWidth={1.5} />
+                  Ver
+                </a>
+              )}
+            </div>
           ) : (
             <div className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5 text-sm">
               <p className="font-medium text-ink">Consulta por video</p>
@@ -672,13 +752,13 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
             </div>
           )}
 
-          {/* Resend status email */}
+          {/* ── Reenviar email de estado ── */}
           <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
-            <div className="flex items-center gap-2 min-w-0">
-              <Mail size={16} strokeWidth={1.5} className="text-champagne-solid shrink-0" />
+            <div className="flex min-w-0 items-center gap-2">
+              <Mail size={16} strokeWidth={1.5} className="shrink-0 text-champagne-solid" />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">Email de estado</p>
-                <p className="text-xs text-ink-muted truncate">Reenvía al cliente el correo según el estado actual.</p>
+                <p className="truncate text-xs text-ink-muted">Reenvía al cliente el correo según el estado actual.</p>
               </div>
             </div>
             <Button
@@ -693,34 +773,50 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
             </Button>
           </div>
 
-          {appt.appointmentType !== 'video_engagement_rings' && (appt.guestCount ?? 0) > 0 && (
+          {/* ── Invitados ── */}
+          {!isVideo && (appt.guestCount ?? 0) > 0 && (
             <div className="pt-1">
               <p className="h-eyebrow mb-2">Invitados ({appt.guestCount})</p>
               <GuestsList appointmentId={appt.id} />
             </div>
           )}
 
-          {appt.status === 'pending' && (
-            <div className="space-y-3 pt-2 border-t border-ink-line">
-              <div>
-                <label className="label-clean">Motivo de rechazo (opcional)</label>
-                <Textarea
-                  value={rejectReason}
-                  onChange={e => setRejectReason(e.target.value)}
-                  placeholder="Ej: Sin disponibilidad en esa fecha"
-                  rows={3}
-                  className="mt-1"
-                />
+          {/* ── Historiales (referencia, plegados para no saturar iPhone) ── */}
+          {appt.customerHistory && appt.customerHistory.length > 0 && (
+            <Disclosure title="Historial cliente" count={appt.customerHistory.length}>
+              <div className="divide-y divide-admin-line rounded-xl border border-admin-line bg-admin-panel">
+                {appt.customerHistory.map(item => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-xs">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink">{item.slotDatetime ? formatShortDate(item.slotDatetime) : 'Sin fecha'}</p>
+                      <p className="truncate text-ink-muted">{[item.productType, item.budgetRange].filter(Boolean).join(' · ') || item.name}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <StatusBadge status={item.status} />
+                      {item.commercialStatus && (
+                        <p className="mt-1 text-[10px] text-ink-muted">{commercialStatusLabels[item.commercialStatus]}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex gap-2">
-                <Button variant="gold" className="flex-1" loading={deciding} onClick={() => void decide('accept')}>
-                  <CheckCircle size={15} strokeWidth={1.5} /> Confirmar
-                </Button>
-                <Button variant="danger" className="flex-1" loading={deciding} onClick={() => void decide('reject')}>
-                  <XCircle size={15} strokeWidth={1.5} /> Rechazar
-                </Button>
+            </Disclosure>
+          )}
+
+          {appt.eventHistory && appt.eventHistory.length > 0 && (
+            <Disclosure title="Historial operativo" count={appt.eventHistory.length}>
+              <div className="divide-y divide-admin-line rounded-xl border border-admin-line bg-admin-panel">
+                {appt.eventHistory.map(event => (
+                  <div key={event.id} className="px-3 py-2.5 text-xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-medium text-ink">{event.summary || event.action}</p>
+                      {event.createdAt && <span className="shrink-0 text-ink-subtle">{formatShortDate(event.createdAt)}</span>}
+                    </div>
+                    <p className="mt-1 text-ink-muted">{event.actor || 'Sistema'}</p>
+                  </div>
+                ))}
               </div>
-            </div>
+            </Disclosure>
           )}
         </div>
       )}

@@ -10,7 +10,7 @@ import { TodayList, type TodayAppointment } from '@/components/admin/TodayList'
 export const dynamic  = 'force-dynamic'
 export const metadata: Metadata = { title: 'Hoy' }
 
-async function getTodayAppointments(): Promise<{ accepted: TodayAppointment[]; pending: TodayAppointment[] }> {
+async function getTodayAppointments(): Promise<{ accepted: TodayAppointment[]; pending: TodayAppointment[]; error: boolean }> {
   // Rango del día en CDMX (mismo criterio que acceptedToday del dashboard,
   // pero anclado a la zona de negocio en lugar del reloj del servidor).
   const now      = new Date()
@@ -51,16 +51,17 @@ async function getTodayAppointments(): Promise<{ accepted: TodayAppointment[]; p
     return {
       accepted: all.filter(a => a.status === 'accepted'),
       pending:  all.filter(a => a.status === 'pending'),
+      error:    false,
     }
   } catch (err) {
     // Un fallo de la query no debe tumbar la hoja del día completa.
     console.error('getTodayAppointments failed, rendering empty list:', err)
-    return { accepted: [], pending: [] }
+    return { accepted: [], pending: [], error: true }
   }
 }
 
 export default async function HoyPage() {
-  const { accepted, pending } = await getTodayAppointments()
+  const { accepted, pending, error } = await getTodayAppointments()
   const dayLabel = formatInTimeZone(new Date(), BUSINESS_TZ, "EEEE d 'de' MMMM", { locale: es })
   const dayTitle = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1)
 
@@ -68,13 +69,18 @@ export default async function HoyPage() {
     <div className="space-y-6">
       <div>
         <p className="h-eyebrow mb-2">Operación</p>
-        <h1 className="font-serif text-2xl text-ink">Hoy</h1>
-        <p className="text-sm text-ink-muted mt-1">
-          {dayTitle} · {accepted.length} confirmada{accepted.length === 1 ? '' : 's'}
-          {pending.length > 0 && ` · ${pending.length} por decidir`}
+        <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Hoy</h1>
+        <p className="mt-1 text-sm text-ink-muted">
+          <span className="text-ink">{dayTitle}</span>
+          {!error && (
+            <>
+              {' · '}{accepted.length} confirmada{accepted.length === 1 ? '' : 's'}
+              {pending.length > 0 && ` · ${pending.length} por decidir`}
+            </>
+          )}
         </p>
       </div>
-      <TodayList accepted={accepted} pending={pending} />
+      <TodayList accepted={accepted} pending={pending} error={error} />
     </div>
   )
 }

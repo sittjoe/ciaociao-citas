@@ -81,7 +81,7 @@ export function GuestsField({ value, onChange, hostEmail }: GuestsFieldProps) {
           <button
             type="button"
             onClick={addGuest}
-            className="flex items-center gap-1.5 text-xs text-champagne hover:text-champagne-deep font-medium transition-colors"
+            className="flex min-h-[44px] items-center gap-1.5 px-1 text-xs text-champagne-solid hover:text-champagne-deep font-medium transition-colors"
           >
             <UserPlus size={14} strokeWidth={1.5} />
             Agregar
@@ -107,7 +107,7 @@ export function GuestsField({ value, onChange, hostEmail }: GuestsFieldProps) {
                 <button
                   type="button"
                   onClick={() => removeGuest(i)}
-                  className="text-ink-muted hover:text-red-500 transition-colors"
+                  className="-m-2 flex h-10 w-10 items-center justify-center rounded-lg text-ink-muted transition-colors hover:text-red-500"
                   aria-label={`Quitar invitado ${i + 1}`}
                 >
                   <X size={14} strokeWidth={1.5} />
@@ -153,10 +153,10 @@ export function GuestsField({ value, onChange, hostEmail }: GuestsFieldProps) {
         <button
           type="button"
           onClick={addGuest}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
+          className="w-full flex min-h-[44px] items-center justify-center gap-2 py-3 rounded-xl
                      border-2 border-dashed border-ink-line
                      hover:border-champagne hover:bg-champagne-soft/30
-                     text-ink-muted hover:text-champagne text-sm transition-all duration-200"
+                     text-ink-muted hover:text-champagne-solid text-sm transition-all duration-200"
         >
           <UserPlus size={16} strokeWidth={1.5} />
           Agregar invitado

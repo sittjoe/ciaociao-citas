@@ -134,8 +134,9 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-4">
         <button
+          type="button"
           onClick={() => setViewMonth(m => addMonth(m, -1))}
-          className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-cream-soft transition-all duration-150"
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-ink-muted hover:text-ink hover:bg-cream-soft transition-all duration-150"
           aria-label="Mes anterior"
         >
           <ChevronLeft size={18} />
@@ -144,8 +145,9 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
           {formatKey(dateKey(viewMonth, 1), 'MMMM yyyy')}
         </span>
         <button
+          type="button"
           onClick={() => setViewMonth(m => addMonth(m, 1))}
-          className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-cream-soft transition-all duration-150"
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-ink-muted hover:text-ink hover:bg-cream-soft transition-all duration-150"
           aria-label="Mes siguiente"
         >
           <ChevronRight size={18} />

@@ -26,14 +26,18 @@ export default function CancelButton({ token }: { token: string }) {
   }
 
   if (cancelled) {
-    return <p className="text-sm text-ink-subtle text-center">Cita cancelada.</p>
+    return (
+      <p className="text-center text-sm leading-relaxed text-ink-muted">
+        Tu cita fue cancelada. Puedes agendar de nuevo cuando gustes.
+      </p>
+    )
   }
 
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className="w-full text-xs text-red-400/60 hover:text-red-500 transition-colors py-1"
+        className="flex min-h-[44px] w-full items-center justify-center rounded-lg text-xs font-medium text-ink-subtle transition-colors hover:text-red-600 focus-visible:outline-none focus-visible:shadow-focus-ring"
       >
         Cancelar esta cita
       </button>
@@ -42,10 +46,10 @@ export default function CancelButton({ token }: { token: string }) {
         open={open}
         onClose={() => setOpen(false)}
         onConfirm={cancel}
-        title="¿Cancelar cita?"
-        description="Esta acción no se puede deshacer."
+        title="¿Cancelar tu cita?"
+        description="Se liberará tu lugar y no podremos deshacer el cambio. Si prefieres otra fecha, puedes reagendarla."
         confirmLabel="Sí, cancelar"
-        cancelLabel="No, mantener"
+        cancelLabel="No, conservarla"
         variant="danger"
         loading={loading}
       />

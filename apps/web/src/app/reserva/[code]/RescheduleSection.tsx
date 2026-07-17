@@ -10,6 +10,7 @@ import { CalendarClock } from 'lucide-react'
 import { BUSINESS_TZ, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import type { AppointmentType } from '@/types'
 
 interface RescheduleSectionProps {
@@ -103,7 +104,7 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne transition-colors duration-200 hover:bg-champagne-soft"
+        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-champagne px-5 py-2.5 text-sm font-medium text-champagne-solid transition-colors duration-200 hover:bg-champagne-soft focus-visible:outline-none focus-visible:shadow-focus-ring"
       >
         <CalendarClock size={15} strokeWidth={1.5} />
         Cambiar fecha u hora
@@ -120,21 +121,39 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
         </p>
       </div>
 
-      {loadState === 'loading' && <Skeleton variant="text" rows={3} />}
-
-      {loadState === 'error' && (
-        <div className="space-y-3 py-2 text-center">
-          <p className="text-sm text-ink-muted">No pudimos cargar los horarios disponibles.</p>
-          <Button variant="outline" size="sm" onClick={() => void loadSlots()}>
-            Intentar de nuevo
-          </Button>
+      {loadState === 'loading' && (
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          <span className="sr-only">Cargando horarios disponibles</span>
+          <div className="flex gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[52px] w-[64px] rounded-xl" />
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-[44px] rounded-xl" />
+            ))}
+          </div>
         </div>
       )}
 
+      {loadState === 'error' && (
+        <EmptyState
+          className="py-6 px-2"
+          icon={<CalendarClock size={22} strokeWidth={1.25} />}
+          title="No pudimos cargar los horarios"
+          description="Vuelve a intentarlo en un momento."
+          action={{ label: 'Intentar de nuevo', onClick: () => void loadSlots() }}
+        />
+      )}
+
       {loadState === 'ready' && days.length === 0 && (
-        <p className="py-2 text-center text-sm leading-relaxed text-ink-muted">
-          Por el momento no hay otros horarios disponibles. Escríbenos y con gusto buscamos una alternativa para ti.
-        </p>
+        <EmptyState
+          className="py-6 px-2"
+          icon={<CalendarClock size={22} strokeWidth={1.25} />}
+          title="Sin horarios por ahora"
+          description="Escríbenos y con gusto buscamos una alternativa para ti."
+        />
       )}
 
       {loadState === 'ready' && days.length > 0 && (
@@ -150,7 +169,7 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
                   aria-selected={selected}
                   onClick={() => { setSelectedDate(key); setSelectedSlot(null) }}
                   className={cn(
-                    'flex min-h-[44px] shrink-0 flex-col items-center rounded-xl border px-4 py-2 transition-colors duration-200',
+                    'flex min-h-[44px] shrink-0 flex-col items-center rounded-xl border px-4 py-2 transition-colors duration-200 focus-visible:outline-none focus-visible:shadow-focus-ring',
                     selected
                       ? 'border-champagne bg-champagne-solid text-white'
                       : 'border-ink-line bg-white/60 text-ink hover:border-champagne',
@@ -167,15 +186,16 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
             })}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="group" aria-label="Horarios disponibles">
             {activeDaySlots.map(slot => {
               const selected = selectedSlot?.id === slot.id
               return (
                 <button
                   key={slot.id}
+                  aria-pressed={selected}
                   onClick={() => setSelectedSlot(slot)}
                   className={cn(
-                    'min-h-[44px] rounded-xl border py-2.5 text-sm font-medium transition-colors duration-200',
+                    'min-h-[44px] rounded-xl border py-2.5 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:shadow-focus-ring',
                     selected
                       ? 'border-champagne bg-champagne-solid text-white'
                       : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-soft',
@@ -212,7 +232,7 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
       <button
         onClick={() => { setOpen(false); setSelectedSlot(null) }}
         disabled={saving}
-        className="min-h-[44px] w-full py-1 text-xs text-ink-subtle transition-colors hover:text-ink disabled:opacity-40"
+        className="min-h-[44px] w-full rounded-lg py-1 text-xs text-ink-subtle transition-colors hover:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring disabled:opacity-40"
       >
         Conservar mi horario actual
       </button>

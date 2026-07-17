@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2, Calendar, CalendarPlus, ChevronDown, Pause, Play } from 'lucide-react'
+import { Plus, Trash2, Calendar, CalendarPlus, ChevronDown, Pause, Play, AlertTriangle } from 'lucide-react'
 import { format, addDays, startOfDay, parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
@@ -32,6 +32,7 @@ const businessDayKey = (iso: string) => formatInTimeZone(parseISO(iso), BUSINESS
 export function SlotManager() {
   const [slots,         setSlots]         = useState<SlotRow[]>([])
   const [loading,       setLoading]       = useState(true)
+  const [loadError,     setLoadError]     = useState<string | null>(null)
   const [showAdd,       setShowAdd]       = useState(false)
   const [creating,      setCreating]      = useState(false)
   const [deleting,      setDeleting]      = useState<string | null>(null)
@@ -55,6 +56,7 @@ export function SlotManager() {
   // cuando se ve "Todos" pedimos explícitamente desde un año atrás.
   const fetchSlots = useCallback(async (includePast = false) => {
     setLoading(true)
+    setLoadError(null)
     try {
       const qs = includePast
         ? `?dateFrom=${format(addDays(startOfDay(new Date()), -365), 'yyyy-MM-dd')}`
@@ -71,7 +73,9 @@ export function SlotManager() {
       const data = await res.json() as { slots: SlotRow[] }
       setSlots(data.slots ?? [])
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al cargar slots')
+      const msg = err instanceof Error ? err.message : 'Error al cargar slots'
+      setLoadError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -251,7 +255,7 @@ export function SlotManager() {
   }, [selected, fetchSlots, futureOnly])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Horario recurrente + publicación por semanas */}
       <ScheduleEditor onPublished={() => fetchSlots(!futureOnly)} />
 
@@ -263,14 +267,19 @@ export function SlotManager() {
           <p className="h-eyebrow mb-1">Disponibilidad</p>
           <h2 className="font-serif text-xl font-light text-ink">Slots disponibles</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setFutureOnly(v => !v)}
+            aria-pressed={futureOnly}
+            aria-label={futureOnly
+              ? 'Mostrando solo slots futuros. Toca para ver todos.'
+              : 'Mostrando todos los slots. Toca para ver solo futuros.'}
             className={cn(
-              'text-xs px-3 py-1.5 rounded-lg border transition-all',
+              'inline-flex h-9 items-center rounded-lg border px-3 text-xs transition-colors',
+              'focus-visible:outline-none focus-visible:shadow-focus-ring',
               futureOnly
-                ? 'bg-champagne-soft text-champagne-deep border-champagne-soft'
-                : 'text-ink-muted border-ink-line hover:border-champagne-soft',
+                ? 'border-champagne-soft bg-champagne-soft text-champagne-deep'
+                : 'border-ink-line text-ink-muted hover:border-champagne-soft',
             )}
           >
             {futureOnly ? 'Solo futuros' : 'Todos'}
@@ -278,14 +287,14 @@ export function SlotManager() {
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value as AppointmentType | '')}
-            className="input-clean h-9 min-h-0 py-1.5 text-xs sm:w-48"
+            className="input-clean h-9 min-h-0 flex-1 py-1.5 text-xs sm:w-48 sm:flex-none"
             aria-label="Filtrar slots por tipo de cita"
           >
             <option value="">Todos los tipos</option>
             <option value="showroom">{appointmentTypeLabels.showroom}</option>
             <option value="video_engagement_rings">{appointmentTypeLabels.video_engagement_rings}</option>
           </select>
-          <Button size="sm" onClick={() => setShowAdd(true)}>
+          <Button size="sm" className="shrink-0" onClick={() => setShowAdd(true)}>
             <Plus size={14} strokeWidth={1.5} /> Agregar slots
           </Button>
         </div>
@@ -315,6 +324,13 @@ export function SlotManager() {
       <div className="overflow-x-auto rounded-2xl border border-admin-line bg-admin-panel">
         {loading ? (
           <TableSkeleton rows={5} cols={4} />
+        ) : loadError ? (
+          <EmptyState
+            icon={<AlertTriangle size={28} strokeWidth={1.25} />}
+            title="No se pudieron cargar los slots"
+            description="Revisa tu conexión e inténtalo de nuevo."
+            action={{ label: 'Reintentar', onClick: () => fetchSlots(!futureOnly) }}
+          />
         ) : visibleSlots.length === 0 ? (
           <EmptyState
             title={dayFilter ? 'Sin slots ese día' : futureOnly ? 'Sin slots futuros' : 'Sin slots'}
@@ -588,6 +604,7 @@ const VALID_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 function ScheduleEditor({ onPublished }: { onPublished: () => void }) {
   const [expanded,   setExpanded]   = useState(false)
   const [loading,    setLoading]    = useState(true)
+  const [loadError,  setLoadError]  = useState(false)
   const [schedules,  setSchedules]  = useState<ScheduleDraft[]>([])
   const [source,     setSource]     = useState<'firestore' | 'default'>('firestore')
   const [saving,     setSaving]     = useState(false)
@@ -595,30 +612,30 @@ function ScheduleEditor({ onPublished }: { onPublished: () => void }) {
   const [weeks,      setWeeks]      = useState(4)
   const [timeDrafts, setTimeDrafts] = useState<Record<number, string>>({})
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/admin/slot-schedule')
-        if (res.status === 401) {
-          window.location.href = '/admin/login?from=/admin/slots'
-          return
-        }
-        const data = await res.json().catch(() => ({})) as {
-          schedules?: ScheduleDraft[]; source?: string; error?: string
-        }
-        if (!res.ok) throw new Error(data.error ?? 'Error al cargar el horario')
-        if (cancelled) return
-        setSchedules(data.schedules ?? [])
-        setSource(data.source === 'firestore' ? 'firestore' : 'default')
-      } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : 'Error al cargar el horario')
-      } finally {
-        if (!cancelled) setLoading(false)
+  const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const res = await fetch('/api/admin/slot-schedule')
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/slots'
+        return
       }
-    })()
-    return () => { cancelled = true }
+      const data = await res.json().catch(() => ({})) as {
+        schedules?: ScheduleDraft[]; source?: string; error?: string
+      }
+      if (!res.ok) throw new Error(data.error ?? 'Error al cargar el horario')
+      setSchedules(data.schedules ?? [])
+      setSource(data.source === 'firestore' ? 'firestore' : 'default')
+    } catch (err) {
+      setLoadError(true)
+      toast.error(err instanceof Error ? err.message : 'Error al cargar el horario')
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => { load() }, [load])
 
   const updateSchedule = (idx: number, patch: Partial<ScheduleDraft>) => {
     setSchedules(prev => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
@@ -737,6 +754,14 @@ function ScheduleEditor({ onPublished }: { onPublished: () => void }) {
         <div className="space-y-4 border-t border-admin-line px-4 py-4">
           {loading ? (
             <TableSkeleton rows={2} cols={3} />
+          ) : loadError ? (
+            <div className="flex flex-col items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="flex items-center gap-2 text-sm text-red-700">
+                <AlertTriangle size={15} strokeWidth={1.75} className="shrink-0" />
+                No se pudo cargar el horario recurrente.
+              </p>
+              <Button variant="outline" size="sm" onClick={load}>Reintentar</Button>
+            </div>
           ) : (
             <>
               {source === 'default' && (
@@ -872,30 +897,32 @@ function ScheduleEditor({ onPublished }: { onPublished: () => void }) {
 
 function AgendaPauseBar() {
   const [loading,    setLoading]    = useState(true)
+  const [loadError,  setLoadError]  = useState(false)
   const [paused,     setPaused]     = useState(false)
   const [saving,     setSaving]     = useState(false)
   const [confirming, setConfirming] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/admin/agenda-pause')
-        if (res.status === 401) {
-          window.location.href = '/admin/login?from=/admin/slots'
-          return
-        }
-        const data = await res.json().catch(() => ({})) as { paused?: boolean; error?: string }
-        if (!res.ok) throw new Error(data.error ?? 'Error al leer el estado de la agenda')
-        if (!cancelled) setPaused(data.paused === true)
-      } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : 'Error al leer el estado de la agenda')
-      } finally {
-        if (!cancelled) setLoading(false)
+  const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const res = await fetch('/api/admin/agenda-pause')
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/slots'
+        return
       }
-    })()
-    return () => { cancelled = true }
+      const data = await res.json().catch(() => ({})) as { paused?: boolean; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Error al leer el estado de la agenda')
+      setPaused(data.paused === true)
+    } catch (err) {
+      setLoadError(true)
+      toast.error(err instanceof Error ? err.message : 'Error al leer el estado de la agenda')
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => { load() }, [load])
 
   const applyPause = useCallback(async (next: boolean) => {
     setSaving(true)
@@ -928,36 +955,48 @@ function AgendaPauseBar() {
       <div
         className={cn(
           'flex flex-col gap-3 border-t border-admin-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
-          paused && 'bg-red-50/70',
+          paused && !loadError && 'bg-red-50/70',
         )}
       >
         <div className="flex items-center gap-2.5">
-          {paused
-            ? <Pause size={16} strokeWidth={1.75} className="shrink-0 text-red-600" />
-            : <Play size={16} strokeWidth={1.75} className="shrink-0 text-emerald-600" />}
+          {loadError
+            ? <AlertTriangle size={16} strokeWidth={1.75} className="shrink-0 text-red-600" />
+            : paused
+              ? <Pause size={16} strokeWidth={1.75} className="shrink-0 text-red-600" />
+              : <Play size={16} strokeWidth={1.75} className="shrink-0 text-emerald-600" />}
           <div>
-            <p className={cn('text-sm font-medium', paused ? 'text-red-700' : 'text-ink')}>
-              {loading ? 'Consultando agenda…' : paused ? 'Agenda pausada — las clientas no pueden reservar' : 'Agenda activa'}
+            <p className={cn('text-sm font-medium', paused || loadError ? 'text-red-700' : 'text-ink')}>
+              {loadError
+                ? 'No se pudo leer el estado de la agenda'
+                : loading ? 'Consultando agenda…' : paused ? 'Agenda pausada — las clientas no pueden reservar' : 'Agenda activa'}
             </p>
             <p className="text-xs text-ink-muted">
-              {paused
-                ? 'Los horarios publicados quedan ocultos y las nuevas reservas se rechazan. Las citas ya agendadas no se tocan.'
-                : 'Las clientas pueden reservar los horarios publicados.'}
+              {loadError
+                ? 'Reintenta para poder pausar o reanudar la agenda.'
+                : paused
+                  ? 'Los horarios publicados quedan ocultos y las nuevas reservas se rechazan. Las citas ya agendadas no se tocan.'
+                  : 'Las clientas pueden reservar los horarios publicados.'}
             </p>
           </div>
         </div>
-        <Button
-          variant={paused ? 'gold' : 'outline'}
-          size="sm"
-          loading={saving}
-          disabled={loading}
-          onClick={() => setConfirming(true)}
-          className="min-h-[44px] shrink-0"
-        >
-          {paused
-            ? <><Play size={14} strokeWidth={1.5} /> Reanudar agenda</>
-            : <><Pause size={14} strokeWidth={1.5} /> Pausar agenda</>}
-        </Button>
+        {loadError ? (
+          <Button variant="outline" size="sm" onClick={load} className="min-h-[44px] shrink-0">
+            Reintentar
+          </Button>
+        ) : (
+          <Button
+            variant={paused ? 'gold' : 'outline'}
+            size="sm"
+            loading={saving}
+            disabled={loading}
+            onClick={() => setConfirming(true)}
+            className="min-h-[44px] shrink-0"
+          >
+            {paused
+              ? <><Play size={14} strokeWidth={1.5} /> Reanudar agenda</>
+              : <><Pause size={14} strokeWidth={1.5} /> Pausar agenda</>}
+          </Button>
+        )}
       </div>
 
       <AlertDialog
@@ -1023,6 +1062,20 @@ function OccupancyStrip({ slots, dayFilter, onSelectDay }: {
             Quitar filtro de día
           </button>
         )}
+      </div>
+      {/* Leyenda del código de color — para leer la barra de un vistazo */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[11px] text-ink-muted">
+        {([
+          ['bg-emerald-400',                        'Disponible'],
+          ['bg-amber-400',                          'Pocos'],
+          ['bg-red-400',                            'Lleno'],
+          ['border border-ink-line bg-admin-surface', 'Sin slots'],
+        ] as const).map(([dot, label]) => (
+          <span key={label} className="inline-flex items-center gap-1.5">
+            <span className={cn('h-2 w-2 rounded-full', dot)} aria-hidden="true" />
+            {label}
+          </span>
+        ))}
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {days.map(d => {

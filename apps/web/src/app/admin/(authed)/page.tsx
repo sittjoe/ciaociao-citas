@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { AlertTriangle } from 'lucide-react'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { StatsCards, UpcomingList, OverdueFollowUpsList, type OverdueFollowUpItem } from '@/components/admin/StatsCards'
@@ -13,7 +14,7 @@ const EMPTY_STATS: AdminStats = {
   upcomingSlots: 0, conversion: null, decided: 0, nextAppointments: [],
 }
 
-async function getStats(): Promise<AdminStats> {
+async function getStats(): Promise<{ stats: AdminStats; error: boolean }> {
   const now        = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const todayEnd   = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
@@ -72,26 +73,29 @@ async function getStats(): Promise<AdminStats> {
     const decided       = totalAccepted + totalRejected
 
     return {
-      totalPending:    pendingSnap.data().count,
-      acceptedToday:   acceptedTodaySnap.data().count,
-      totalAccepted,
-      totalRejected,
-      upcomingSlots:   upcomingSlotsSnap.data().count,
-      conversion:      decided > 0 ? Math.round((totalAccepted / decided) * 100) : null,
-      decided,
-      nextAppointments,
+      stats: {
+        totalPending:    pendingSnap.data().count,
+        acceptedToday:   acceptedTodaySnap.data().count,
+        totalAccepted,
+        totalRejected,
+        upcomingSlots:   upcomingSlotsSnap.data().count,
+        conversion:      decided > 0 ? Math.round((totalAccepted / decided) * 100) : null,
+        decided,
+        nextAppointments,
+      },
+      error: false,
     }
   } catch (err) {
     // A metric query failing must never take down the whole dashboard.
     console.error('getStats failed, rendering empty dashboard:', err)
-    return EMPTY_STATS
+    return { stats: EMPTY_STATS, error: true }
   }
 }
 
 // Estados comerciales que ya no requieren seguimiento (ver lib/commercial).
 const CLOSED_COMMERCIAL_STATUSES: CommercialStatus[] = ['purchased', 'not_purchased']
 
-async function getOverdueFollowUps(): Promise<OverdueFollowUpItem[]> {
+async function getOverdueFollowUps(): Promise<{ items: OverdueFollowUpItem[]; error: boolean }> {
   try {
     // Rango + orderBy sobre el mismo campo único (followUpAt) usa el índice
     // automático; el estado comercial se filtra en memoria para no requerir
@@ -102,7 +106,7 @@ async function getOverdueFollowUps(): Promise<OverdueFollowUpItem[]> {
       .limit(40)
       .get()
 
-    return snap.docs
+    const items = snap.docs
       .map(doc => {
         const d = doc.data()
         return {
@@ -114,14 +118,19 @@ async function getOverdueFollowUps(): Promise<OverdueFollowUpItem[]> {
       })
       .filter(item => !CLOSED_COMMERCIAL_STATUSES.includes(item.commercialStatus ?? 'pending'))
       .slice(0, 10)
+
+    return { items, error: false }
   } catch (err) {
     console.error('getOverdueFollowUps failed, rendering empty list:', err)
-    return []
+    return { items: [], error: true }
   }
 }
 
 export default async function AdminDashboard() {
-  const [stats, overdueFollowUps] = await Promise.all([getStats(), getOverdueFollowUps()])
+  const [statsResult, followUpsResult] = await Promise.all([getStats(), getOverdueFollowUps()])
+  const { stats, error: statsError } = statsResult
+  const { items: overdueFollowUps, error: followUpsError } = followUpsResult
+  const hasError = statsError || followUpsError
   const needsAttention = stats.totalPending + stats.upcomingSlots === 0
 
   return (
@@ -132,10 +141,26 @@ export default async function AdminDashboard() {
           <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Dashboard</h1>
           <p className="text-sm text-ink-muted mt-1">Pendientes, próximos horarios y citas confirmadas.</p>
         </div>
-        <div className="rounded-xl border border-admin-line bg-admin-panel px-4 py-3 text-xs text-ink-muted">
-          {needsAttention ? 'Sin pendientes ni slots próximos' : `${stats.totalPending} pendiente${stats.totalPending === 1 ? '' : 's'} por revisar`}
+        <div className="shrink-0 self-start rounded-xl border border-admin-line bg-admin-panel px-4 py-2.5 text-left lg:self-auto lg:text-right">
+          <p className="h-eyebrow">Pendientes</p>
+          <p className="mt-0.5 font-serif text-xl font-light leading-none text-ink">
+            <span className="tabular-nums">{statsError ? '—' : stats.totalPending}</span>
+            <span className="ml-1.5 align-middle font-sans text-xs font-normal text-ink-subtle">
+              {statsError ? 'sin datos' : needsAttention ? 'al día' : 'por revisar'}
+            </span>
+          </p>
         </div>
       </div>
+
+      {hasError && (
+        <Card variant="admin" className="flex items-start gap-3 border-amber-200 bg-amber-50/60 p-4">
+          <AlertTriangle size={18} strokeWidth={1.5} className="mt-0.5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-medium text-ink">No pudimos cargar algunos datos</p>
+            <p className="text-sm text-ink-muted">Recarga la página para reintentar.</p>
+          </div>
+        </Card>
+      )}
 
       <StatsCards stats={stats} />
 
@@ -145,7 +170,7 @@ export default async function AdminDashboard() {
           <h2 className="font-serif text-lg font-light text-ink">Próximas citas</h2>
         </CardHeader>
         <CardBody className="pt-0">
-          <UpcomingList appointments={stats.nextAppointments} />
+          <UpcomingList appointments={stats.nextAppointments} error={statsError} />
         </CardBody>
       </Card>
 
@@ -157,7 +182,7 @@ export default async function AdminDashboard() {
           </h2>
         </CardHeader>
         <CardBody className="pt-0">
-          <OverdueFollowUpsList items={overdueFollowUps} />
+          <OverdueFollowUpsList items={overdueFollowUps} error={followUpsError} />
         </CardBody>
       </Card>
 

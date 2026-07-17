@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { CalendarOff, Trash2, Plus } from 'lucide-react'
+import { CalendarOff, Trash2, Plus, AlertTriangle } from 'lucide-react'
 import { parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
@@ -12,7 +12,8 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { AlertDialog } from '@/components/ui/AlertDialog'
 import { StatusBadge } from '@/components/ui/Badge'
-import { BUSINESS_TZ, formatShortDate } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { BUSINESS_TZ, cn, formatShortDate } from '@/lib/utils'
 import type { AppointmentStatus } from '@/types'
 
 interface BlockedDate { date: string; reason: string; createdBy?: string }
@@ -33,9 +34,10 @@ function formatDay(key: string): string {
 }
 
 export default function BloqueosPage() {
-  const [dates,   setDates]   = useState<BlockedDate[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving,  setSaving]  = useState(false)
+  const [dates,     setDates]     = useState<BlockedDate[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [saving,    setSaving]    = useState(false)
   const [from,    setFrom]    = useState('')
   const [to,      setTo]      = useState('')
   const [reason,  setReason]  = useState('')
@@ -55,7 +57,9 @@ export default function BloqueosPage() {
       if (!res.ok) throw new Error()
       const data = await res.json() as { blockedDates: BlockedDate[] }
       setDates(data.blockedDates)
+      setLoadError(false)
     } catch {
+      setLoadError(true)
       toast.error('Error al cargar días bloqueados')
     } finally {
       setLoading(false)
@@ -139,19 +143,6 @@ export default function BloqueosPage() {
   const affected = impact?.appointments ?? []
   const willDeleteFree = deleteFree && (impact?.freeSlots ?? 0) > 0
 
-  const impactSummary = impact
-    ? [
-        impact.freeSlots > 0
-          ? (deleteFree
-            ? `${impact.freeSlots} horario${impact.freeSlots === 1 ? ' libre se eliminará' : 's libres se eliminarán'}`
-            : `${impact.freeSlots} horario${impact.freeSlots === 1 ? ' libre se conservará' : 's libres se conservarán'}`)
-          : null,
-        affected.length > 0
-          ? `${affected.length} cita${affected.length === 1 ? ' requiere' : 's requieren'} tu atención`
-          : null,
-      ].filter(Boolean).join(' · ')
-    : ''
-
   const confirmDescription = impact
     ? [
         from === to ? formatDay(from) : `Del ${formatDay(from).toLowerCase()} al ${formatDay(to).toLowerCase()}`,
@@ -201,18 +192,54 @@ export default function BloqueosPage() {
           </div>
 
           {rangeReady && (
-            <div className="mt-4 border-t border-admin-line pt-4">
+            <div className="mt-5 border-t border-admin-line pt-5">
+              <p className="h-eyebrow mb-3 flex items-center gap-1.5">
+                <AlertTriangle size={13} strokeWidth={1.75} className="text-champagne-solid" />
+                Impacto del bloqueo
+              </p>
               {impactLoading ? (
-                <p className="text-sm text-ink-muted">Calculando impacto…</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Skeleton className="h-[76px] w-full" />
+                  <Skeleton className="h-[76px] w-full" />
+                </div>
               ) : !impact ? (
                 <p className="text-sm text-ink-muted">
                   No se pudo calcular el impacto. Puedes bloquear de todas formas; no se eliminará ningún horario.
                 </p>
+              ) : impact.freeSlots === 0 && affected.length === 0 ? (
+                <p className="text-sm text-ink-muted">
+                  Sin horarios ni citas en {from === to ? 'ese día' : 'esos días'}. El bloqueo no afecta nada existente.
+                </p>
               ) : (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-ink">
-                    {impactSummary || 'Sin horarios ni citas en esos días.'}
-                  </p>
+                <div className="space-y-4">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-xl border border-admin-line bg-admin-surface px-3.5 py-3">
+                      <p className="text-xs text-ink-muted">Horarios libres en el rango</p>
+                      <p className="mt-1 font-serif text-2xl font-light text-ink tabular-nums">{impact.freeSlots}</p>
+                      <p className="mt-0.5 text-xs text-ink-subtle">
+                        {impact.freeSlots === 0
+                          ? 'Nada que eliminar'
+                          : willDeleteFree ? 'Se eliminarán al bloquear' : 'Se conservarán'}
+                      </p>
+                    </div>
+                    <div className={cn(
+                      'rounded-xl border px-3.5 py-3',
+                      affected.length > 0 ? 'border-red-200 bg-red-50/70' : 'border-admin-line bg-admin-surface',
+                    )}>
+                      <p className={cn('text-xs', affected.length > 0 ? 'text-red-700' : 'text-ink-muted')}>
+                        Citas ya agendadas
+                      </p>
+                      <p className={cn(
+                        'mt-1 font-serif text-2xl font-light tabular-nums',
+                        affected.length > 0 ? 'text-red-700' : 'text-ink',
+                      )}>
+                        {affected.length}
+                      </p>
+                      <p className={cn('mt-0.5 text-xs', affected.length > 0 ? 'text-red-600' : 'text-ink-subtle')}>
+                        {affected.length === 0 ? 'Ninguna requiere atención' : 'Requieren reagendarse a mano'}
+                      </p>
+                    </div>
+                  </div>
 
                   {impact.freeSlots > 0 && (
                     <label className="flex min-h-[44px] cursor-pointer items-center gap-3">
@@ -273,7 +300,26 @@ export default function BloqueosPage() {
       />
 
       {loading ? (
-        <p className="text-sm text-ink-muted">Cargando…</p>
+        <Card variant="admin" className="divide-y divide-admin-line">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 px-5 py-3.5">
+              <div className="flex items-center gap-3">
+                <Skeleton variant="circle" className="h-4 w-4" />
+                <Skeleton className="h-4 w-48 rounded-lg" />
+              </div>
+              <Skeleton className="h-4 w-4 rounded-lg" />
+            </div>
+          ))}
+        </Card>
+      ) : loadError ? (
+        <Card variant="admin">
+          <EmptyState
+            icon={<AlertTriangle size={28} strokeWidth={1.25} />}
+            title="No se pudieron cargar los días bloqueados"
+            description="Revisa tu conexión e inténtalo de nuevo."
+            action={{ label: 'Reintentar', onClick: () => { setLoading(true); fetchDates() } }}
+          />
+        </Card>
       ) : upcoming.length === 0 && past.length === 0 ? (
         <Card variant="admin">
           <EmptyState title="Sin días bloqueados" description="Bloquea un rango de fechas para cerrar la agenda esos días." />

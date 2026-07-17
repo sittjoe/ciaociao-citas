@@ -208,22 +208,25 @@ export function AdminCalendar() {
   return (
     <>
       {/* Filter chips */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filtrar eventos del calendario">
         {(Object.keys(FILTER_LABELS) as FilterKey[]).map(key => {
           const active = activeFilters.has(key)
           return (
             <button
               key={key}
               onClick={() => toggleFilter(key)}
+              aria-pressed={active}
               className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all',
+                'inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-4 text-xs font-medium transition-all',
+                'focus-visible:outline-none focus-visible:shadow-focus-ring',
                 active
                   ? 'border-champagne bg-champagne-tint text-champagne-deep'
                   : 'border-admin-line bg-admin-surface text-ink-muted hover:border-champagne/50 hover:text-ink',
               )}
             >
               <span
-                className="w-2 h-2 rounded-full shrink-0"
+                className="h-2 w-2 shrink-0 rounded-full"
+                aria-hidden="true"
                 style={{
                   backgroundColor: CHIP_DOTS[key],
                   opacity: active ? 1 : 0.35,
@@ -234,6 +237,12 @@ export function AdminCalendar() {
           )
         })}
       </div>
+
+      {activeFilters.size === 0 && (
+        <p className="mb-4 rounded-xl border border-admin-line bg-admin-surface px-4 py-3 text-sm text-ink-muted">
+          Activa al menos un filtro para ver citas y horarios en el calendario.
+        </p>
+      )}
 
       {/* Calendar */}
       <div className="rounded-2xl border border-admin-line bg-admin-panel p-4 overflow-x-auto fc-admin-wrap">

@@ -46,14 +46,19 @@ function navBadgeCount(href: string, counts: NavCounts | null): number | undefin
   return undefined
 }
 
-function NavBadge({ href, count }: { href: string; count: number }) {
+function NavBadge({ href, count, active }: { href: string; count: number; active: boolean }) {
+  const isProblem = href === '/admin/problemas'
   return (
     <span
       className={cn(
         'relative z-10 ml-auto inline-flex min-w-[1.375rem] items-center justify-center rounded-full border px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none tabular-nums',
-        href === '/admin/problemas'
+        isProblem
           ? 'bg-red-50 text-red-600 border-red-200'
-          : 'bg-champagne-tint text-champagne-deep border-champagne-soft',
+          // En el ítem activo el fondo del pill ya es champagne-tint; sube el
+          // tono del badge para que no se funda con él.
+          : active
+            ? 'bg-champagne-soft text-champagne-deep border-champagne'
+            : 'bg-champagne-tint text-champagne-deep border-champagne-soft',
       )}
     >
       {count > 99 ? '99+' : count}
@@ -73,8 +78,9 @@ function NavList({ pathname, onClose, counts }: { pathname: string; onClose: () 
               key={href}
               href={href}
               onClick={onClose}
+              aria-current={active ? 'page' : undefined}
               className={cn(
-                'relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring',
+                'relative flex min-h-[2.75rem] items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:shadow-focus-ring',
                 active ? 'text-champagne-deep font-medium' : 'text-ink-muted hover:text-ink hover:bg-admin-surface',
               )}
             >
@@ -89,7 +95,7 @@ function NavList({ pathname, onClose, counts }: { pathname: string; onClose: () 
                 <Icon size={16} strokeWidth={active ? 1.75 : 1.5} />
                 {label}
               </span>
-              {typeof badge === 'number' && badge > 0 && <NavBadge href={href} count={badge} />}
+              {typeof badge === 'number' && badge > 0 && <NavBadge href={href} count={badge} active={active} />}
             </Link>
           )
         })}
@@ -108,6 +114,14 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     if (open) document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
+  }, [open])
+
+  // Evita el scroll del fondo mientras el cajón móvil está abierto.
+  useEffect(() => {
+    if (!open) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
   }, [open])
 
   // Badges del nav: al montar, al navegar y al volver a la app (visibilitychange
@@ -175,7 +189,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
           </div>
           <button
             onClick={logout}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full focus-visible:outline-none focus-visible:shadow-focus-ring"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-muted transition-colors hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:shadow-focus-ring"
           >
             <LogOut size={15} strokeWidth={1.5} /> Cerrar sesión
           </button>
@@ -187,7 +201,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
         <p className="font-serif tracking-[0.2em] uppercase text-ink">Ciao Ciao</p>
         <button
           onClick={() => setOpen(!open)}
-          className="text-ink-muted hover:text-ink focus-visible:text-ink transition-colors p-1 rounded-lg focus-visible:outline-none focus-visible:shadow-focus-ring"
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:text-ink focus-visible:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring"
           aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
           aria-expanded={open}
         >
@@ -219,6 +233,13 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
               transition={{ ease: [0.25, 1, 0.5, 1], duration: 0.32 }}
               className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-admin-panel border-r border-admin-line lg:hidden"
             >
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Cerrar menú"
+                className="absolute right-1.5 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-admin-surface hover:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring"
+              >
+                <X size={18} strokeWidth={1.5} />
+              </button>
               <Logomark />
               <NavList pathname={pathname} onClose={() => setOpen(false)} counts={counts} />
               <div className="p-3 border-t border-admin-line">
@@ -230,7 +251,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
                 </div>
                 <button
                   onClick={logout}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all w-full focus-visible:outline-none focus-visible:shadow-focus-ring"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-muted transition-colors hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:shadow-focus-ring"
                 >
                   <LogOut size={15} strokeWidth={1.5} /> Cerrar sesión
                 </button>
