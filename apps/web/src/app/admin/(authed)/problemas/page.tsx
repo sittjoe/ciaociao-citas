@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Timestamp } from 'firebase-admin/firestore'
-import { AlertTriangle, Bell, CalendarX, ClipboardCheck, MailWarning, Monitor, ShieldAlert, UserX, Wrench } from 'lucide-react'
+import { AlertTriangle, Bell, CalendarX, ClipboardCheck, MailWarning, MailX, Monitor, ShieldAlert, UserX, Wrench } from 'lucide-react'
 import { adminDb } from '@/lib/firebase-admin'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
@@ -33,8 +33,9 @@ function whatsappRescheduleUrl(phone: string, name: string): string {
 async function getProblems() {
   const now = new Date()
   const weekEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
-  const [failedEmails, calendarAppts, guestIssues, lastRuns, waitlist, upcomingSlots, upcomingVideoAppts, pastAccepted] = await Promise.all([
+  const [failedEmails, calendarAppts, guestIssues, lastRuns, waitlist, upcomingSlots, upcomingVideoAppts, pastAccepted, bounces] = await Promise.all([
     adminDb.collection('emailOutbox').where('status', '==', 'failed').limit(12).get(),
     adminDb.collection('appointments').where('calendarSyncFailed', '==', true).limit(12).get(),
     adminDb.collectionGroup('guests').where('status', 'in', ['pending', 'expired']).limit(30).get(),
@@ -62,6 +63,13 @@ async function getProblems() {
       .orderBy('slotDatetime')
       .limit(200)
       .get(),
+    // Rebotes/quejas que escribe el webhook de Resend (/api/webhooks/resend).
+    // Rango + orderBy sobre el mismo campo: índice automático, no pide compuesto.
+    adminDb.collection('emailBounces')
+      .where('at', '>=', Timestamp.fromDate(weekAgo))
+      .orderBy('at', 'desc')
+      .limit(20)
+      .get(),
   ])
 
   const apptIds = Array.from(new Set(guestIssues.docs.map(doc => String(doc.data().appointmentId ?? '')).filter(Boolean)))
@@ -69,6 +77,23 @@ async function getProblems() {
   await Promise.all(apptIds.map(async id => {
     const snap = await adminDb.collection('appointments').doc(id).get()
     if (snap.exists) apptMap.set(id, snap.data()!)
+  }))
+
+  // Para cada correo rebotado, busca si una cita activa (pendiente o aceptada,
+  // con fecha futura) usa ese correo. Igualdad por un solo campo = índice
+  // automático; status y fecha se filtran en memoria.
+  const bounceEmails = Array.from(new Set(
+    bounces.docs.map(doc => String(doc.data().email ?? '').trim().toLowerCase()).filter(Boolean),
+  ))
+  const activeApptByEmail = new Map<string, { id: string; name: string }>()
+  await Promise.all(bounceEmails.map(async email => {
+    const snap = await adminDb.collection('appointments').where('email', '==', email).limit(20).get()
+    const active = snap.docs.find(doc => {
+      const appt = doc.data()
+      const slot = appt.slotDatetime instanceof Timestamp ? appt.slotDatetime.toDate() : null
+      return (appt.status === 'pending' || appt.status === 'accepted') && slot !== null && slot >= now
+    })
+    if (active) activeApptByEmail.set(email, { id: active.id, name: String(active.data().name ?? '') })
   }))
 
   const slotsByType = upcomingSlots.docs.reduce<Record<'showroom' | 'video_engagement_rings', number>>((acc, doc) => {
@@ -108,6 +133,18 @@ async function getProblems() {
       .filter(appt => !String(appt.meetingUrl ?? '').trim()),
     attendanceUnrecorded: pastAcceptedDocs.filter(appt => appt.attended === null || appt.attended === undefined),
     noShows: pastAcceptedDocs.filter(appt => appt.attended === false),
+    emailBounces: bounces.docs.map(doc => {
+      const bounce = doc.data()
+      const email = String(bounce.email ?? '').trim().toLowerCase()
+      return {
+        id: doc.id,
+        email,
+        tipo: String(bounce.tipo ?? 'bounced'),
+        subject: String(bounce.subject ?? ''),
+        at: bounce.at instanceof Timestamp ? bounce.at.toDate().toISOString() : null,
+        activeAppt: activeApptByEmail.get(email) ?? null,
+      }
+    }),
   }
 }
 
@@ -128,6 +165,7 @@ export default async function ProblemasPage() {
     + data.guestIssues.filter(g => g.status === 'expired').length
     + data.attendanceUnrecorded.length
     + data.noShows.length
+    + data.emailBounces.length
 
   return (
     <div className="space-y-6">
@@ -304,6 +342,42 @@ export default async function ProblemasPage() {
                   {email.appointmentId && <Link className="text-xs text-champagne-solid hover:underline" href={`/admin/citas?open=${String(email.appointmentId)}`}>Abrir cita</Link>}
                 </div>
                 {email.error && <p className="mt-1 text-xs text-red-600">{String(email.error).slice(0, 180)}</p>}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+
+        <Card variant="admin">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <MailX size={18} className="text-red-500" />
+            <h2 className="font-serif text-lg text-ink">Correos rebotados (7 días)</h2>
+          </CardHeader>
+          <CardBody className="space-y-3 pt-0">
+            {data.emailBounces.length === 0 ? (
+              <p className="text-sm text-ink-muted">Ningún correo ha rebotado en los últimos 7 días.</p>
+            ) : data.emailBounces.map(bounce => (
+              <div key={bounce.id} className="rounded-xl border border-red-100 bg-red-50/60 px-3 py-2 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink truncate">{bounce.email}</p>
+                    <p className="text-xs text-ink-muted truncate">{bounce.subject || 'Sin asunto'}</p>
+                  </div>
+                  <Badge className={bounce.tipo === 'complained' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-red-50 text-red-600 border border-red-200'}>
+                    {bounce.tipo === 'complained' ? 'Queja' : 'Rebotado'}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-ink-subtle">{bounce.at ? formatShortDate(bounce.at) : 'Sin fecha'}</p>
+                {bounce.activeAppt && (
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <p className="text-xs text-red-700">Cita activa de {bounce.activeAppt.name || 'clienta'} — verifica el correo con la clienta.</p>
+                    <Link
+                      className="shrink-0 py-3 text-xs font-medium text-champagne-deep hover:underline"
+                      href={`/admin/citas?open=${bounce.activeAppt.id}`}
+                    >
+                      Abrir cita
+                    </Link>
+                  </div>
+                )}
               </div>
             ))}
           </CardBody>

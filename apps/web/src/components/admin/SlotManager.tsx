@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2, Calendar, CalendarPlus, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, Calendar, CalendarPlus, ChevronDown, Pause, Play } from 'lucide-react'
 import { format, addDays, startOfDay, parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
@@ -145,10 +145,21 @@ export function SlotManager() {
       const data = await res.json().catch(() => ({})) as { created?: number; skipped?: string[]; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error al crear slots')
       const created = data.created ?? 0
-      const skipped = data.skipped?.length ?? 0
-      toast.success(skipped > 0
-        ? `${created} slots creados, ${skipped} ya existían`
-        : `${created} slot${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''}`)
+      const skippedList = data.skipped ?? []
+      if (skippedList.length > 0) {
+        // Reporte honesto: el API salta duplicados, horas ya pasadas y fechas
+        // bloqueadas — se muestra cuáles en lugar de un conteo mudo.
+        const preview = skippedList.slice(0, 6).map(k => k.replace('T', ' · ')).join(', ')
+        const extra   = skippedList.length > 6 ? ` y ${skippedList.length - 6} más` : ''
+        const summary = `${created} slot${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''} · ${skippedList.length} omitido${skippedList.length !== 1 ? 's' : ''} (ya existían, en el pasado o en fecha bloqueada)`
+        if (created > 0) {
+          toast.warning(summary, { description: `Omitidos: ${preview}${extra}`, duration: 8000 })
+        } else {
+          toast.error('No se creó ningún slot', { description: `Omitidos: ${preview}${extra}`, duration: 8000 })
+        }
+      } else {
+        toast.success(`${created} slot${created !== 1 ? 's' : ''} creado${created !== 1 ? 's' : ''}`)
+      }
       setShowAdd(false)
       resetAddForm()
       fetchSlots(!futureOnly)
@@ -719,6 +730,9 @@ function ScheduleEditor({ onPublished }: { onPublished: () => void }) {
         </div>
       </button>
 
+      {/* Pausa global de la agenda — visible incluso con el editor colapsado */}
+      <AgendaPauseBar />
+
       {expanded && (
         <div className="space-y-4 border-t border-admin-line px-4 py-4">
           {loading ? (
@@ -849,6 +863,117 @@ function ScheduleEditor({ onPublished }: { onPublished: () => void }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Pausa global de la agenda — config/agendaPause vía /api/admin/agenda-pause
+// ---------------------------------------------------------------------------
+
+function AgendaPauseBar() {
+  const [loading,    setLoading]    = useState(true)
+  const [paused,     setPaused]     = useState(false)
+  const [saving,     setSaving]     = useState(false)
+  const [confirming, setConfirming] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/admin/agenda-pause')
+        if (res.status === 401) {
+          window.location.href = '/admin/login?from=/admin/slots'
+          return
+        }
+        const data = await res.json().catch(() => ({})) as { paused?: boolean; error?: string }
+        if (!res.ok) throw new Error(data.error ?? 'Error al leer el estado de la agenda')
+        if (!cancelled) setPaused(data.paused === true)
+      } catch (err) {
+        if (!cancelled) toast.error(err instanceof Error ? err.message : 'Error al leer el estado de la agenda')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const applyPause = useCallback(async (next: boolean) => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/agenda-pause', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paused: next }),
+      })
+      if (res.status === 401) {
+        window.location.href = '/admin/login?from=/admin/slots'
+        return
+      }
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Error al actualizar la agenda')
+      setPaused(next)
+      toast.success(next
+        ? 'Agenda pausada — las clientas no pueden reservar'
+        : 'Agenda reactivada — las clientas ya pueden reservar')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al actualizar la agenda')
+    } finally {
+      setSaving(false)
+      setConfirming(false)
+    }
+  }, [])
+
+  return (
+    <>
+      <div
+        className={cn(
+          'flex flex-col gap-3 border-t border-admin-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+          paused && 'bg-red-50/70',
+        )}
+      >
+        <div className="flex items-center gap-2.5">
+          {paused
+            ? <Pause size={16} strokeWidth={1.75} className="shrink-0 text-red-600" />
+            : <Play size={16} strokeWidth={1.75} className="shrink-0 text-emerald-600" />}
+          <div>
+            <p className={cn('text-sm font-medium', paused ? 'text-red-700' : 'text-ink')}>
+              {loading ? 'Consultando agenda…' : paused ? 'Agenda pausada — las clientas no pueden reservar' : 'Agenda activa'}
+            </p>
+            <p className="text-xs text-ink-muted">
+              {paused
+                ? 'Los horarios publicados quedan ocultos y las nuevas reservas se rechazan. Las citas ya agendadas no se tocan.'
+                : 'Las clientas pueden reservar los horarios publicados.'}
+            </p>
+          </div>
+        </div>
+        <Button
+          variant={paused ? 'gold' : 'outline'}
+          size="sm"
+          loading={saving}
+          disabled={loading}
+          onClick={() => setConfirming(true)}
+          className="min-h-[44px] shrink-0"
+        >
+          {paused
+            ? <><Play size={14} strokeWidth={1.5} /> Reanudar agenda</>
+            : <><Pause size={14} strokeWidth={1.5} /> Pausar agenda</>}
+        </Button>
+      </div>
+
+      <AlertDialog
+        open={confirming}
+        title={paused ? '¿Reanudar la agenda?' : '¿Pausar la agenda?'}
+        description={paused
+          ? 'Los horarios publicados volverán a mostrarse y las clientas podrán reservar de inmediato.'
+          : 'Las clientas dejarán de ver horarios disponibles y no podrán reservar hasta que reanudes la agenda. Las citas ya agendadas no se ven afectadas.'}
+        confirmLabel={paused ? 'Sí, reanudar' : 'Sí, pausar'}
+        cancelLabel="Cancelar"
+        variant={paused ? 'warning' : 'danger'}
+        loading={saving}
+        onConfirm={() => applyPause(!paused)}
+        onCancel={() => setConfirming(false)}
+      />
+    </>
   )
 }
 

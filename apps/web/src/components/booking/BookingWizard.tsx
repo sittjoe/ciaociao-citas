@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } fro
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format, parseISO } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Gem, Monitor, Send, ShieldCheck, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -12,7 +13,7 @@ import { motion } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { CalendarView } from './CalendarView'
-import { SlotPicker } from './SlotPicker'
+import { SlotPicker, dualTimeLabel, useDeviceTimeZone } from './SlotPicker'
 import { IDUploader } from './IDUploader'
 import { GuestsField } from './GuestsField'
 import { Button } from '@/components/ui/Button'
@@ -29,7 +30,7 @@ import {
   type BookingFormInput,
   type GuestInput,
 } from '@/lib/schemas'
-import { cn, formatDate, formatTime } from '@/lib/utils'
+import { BUSINESS_TZ, cn, formatDate, formatTime } from '@/lib/utils'
 import type { AppointmentType } from '@/types'
 
 interface Slot { id: string; datetime: string; slotType?: AppointmentType }
@@ -82,7 +83,12 @@ export function BookingWizard() {
   const [draftRestored, setDraftRestored] = useState(false)
   const direction = useRef<1 | -1>(1)
   const submitInFlight = useRef(false)
-  const restoredSlotId = useRef<string | null>(null)
+  // Slot elegido en un borrador restaurado, pendiente de revalidar contra /api/slots.
+  const restoredSlot = useRef<{ id: string; type: AppointmentType } | null>(null)
+  // Restaurar un borrador de video dispara el efecto de cambio de tipo; ese
+  // reset es para cambios manuales y arrasaría con la fecha/slot restaurados.
+  const skipTypeResetOnce = useRef(false)
+  const slotsRequestSeq = useRef(0)
   const didRestoreDraft = useRef(false)
   const previousAppointmentType = useRef<AppointmentType | null>(null)
   const idempotencyKey = useRef<string>(
@@ -110,22 +116,39 @@ export function BookingWizard() {
   const isVideo = appointmentType === 'video_engagement_rings'
   const activeSteps = isVideo ? VIDEO_STEPS : SHOWROOM_STEPS
 
-  const loadSlots = useCallback(async () => {
+  // Devuelve la lista fresca (o null si falló / llegó una respuesta más nueva),
+  // para que quien refresca — p. ej. tras un 409 — pueda decidir con datos al día.
+  const loadSlots = useCallback(async (): Promise<Slot[] | null> => {
+    const seq = ++slotsRequestSeq.current
     setLoadingSlots(true)
     setSlotsError(false)
     try {
       const res = await fetch(`/api/slots?appointmentType=${appointmentType}`)
       if (!res.ok) throw new Error('SLOTS_FAILED')
       const d = await res.json() as { slots?: Slot[] }
-      setSlots(d.slots ?? [])
+      if (seq !== slotsRequestSeq.current) return null
+      const fresh = d.slots ?? []
+      setSlots(fresh)
+      return fresh
     } catch {
+      if (seq !== slotsRequestSeq.current) return null
       setSlots([])
       setSlotsError(true)
       toast.error('Error al cargar horarios')
+      return null
     } finally {
-      setLoadingSlots(false)
+      if (seq === slotsRequestSeq.current) setLoadingSlots(false)
     }
   }, [appointmentType])
+
+  const dayHasFutureSlots = useCallback((list: Slot[], dateKey: string | null): boolean => {
+    if (!dateKey) return false
+    const nowMs = Date.now()
+    return list.some(slot => {
+      const dt = parseISO(slot.datetime)
+      return dt.getTime() > nowMs && formatInTimeZone(dt, BUSINESS_TZ, 'yyyy-MM-dd') === dateKey
+    })
+  }, [])
 
   useEffect(() => {
     void loadSlots()
@@ -157,9 +180,10 @@ export function BookingWizard() {
       setDraftRestored(true)
       setGuests(draft.guests ?? [])
       setSelectedDate(draft.selectedDate)
-      restoredSlotId.current = draft.selectedSlotId
-      idempotencyKey.current = draft.idempotencyKey || idempotencyKey.current
       const draftType = draft.values.appointmentType ?? 'showroom'
+      restoredSlot.current = draft.selectedSlotId ? { id: draft.selectedSlotId, type: draftType } : null
+      if (draftType !== 'showroom') skipTypeResetOnce.current = true
+      idempotencyKey.current = draft.idempotencyKey || idempotencyKey.current
       if (draft.step === 'upload' && draftType === 'video_engagement_rings') {
         setStep('review')
       } else if (draft.step === 'upload' || draft.step === 'review') {
@@ -174,21 +198,19 @@ export function BookingWizard() {
   }, [reset])
 
   useEffect(() => {
-    if (!restoredSlotId.current || slots.length === 0) return
-    const restored = slots.find(slot => slot.id === restoredSlotId.current)
-    if (restored) setSelectedSlot(restored)
-    restoredSlotId.current = null
-  }, [slots])
-
-  useEffect(() => {
     if (previousAppointmentType.current === null) {
       previousAppointmentType.current = appointmentType
       return
     }
     if (previousAppointmentType.current === appointmentType) return
     previousAppointmentType.current = appointmentType
+    if (skipTypeResetOnce.current) {
+      skipTypeResetOnce.current = false
+      return
+    }
     setSelectedDate(null)
     setSelectedSlot(null)
+    restoredSlot.current = null
     if (isVideo) {
       setGuests([])
       setIdFile(null)
@@ -208,6 +230,18 @@ export function BookingWizard() {
   const canGoBack = stepIndex > 0 && step !== 'done'
   const hostEmail = watch('email') ?? ''
   const watchedValues = watch()
+  const deviceTz = useDeviceTimeZone()
+
+  // En video-consulta, si el dispositivo está fuera de CDMX la revisión
+  // muestra ambas horas («4:00 pm CDMX · 3:00 pm tu hora»).
+  const reviewTimeLabel = useMemo(() => {
+    if (!selectedSlot) return ''
+    if (isVideo) {
+      const dual = dualTimeLabel(selectedSlot.datetime, deviceTz)
+      if (dual.local) return `${dual.cdmx} CDMX · ${dual.local} tu hora`
+    }
+    return formatTime(selectedSlot.datetime)
+  }, [selectedSlot, isVideo, deviceTz])
 
   useEffect(() => {
     if (step === 'done') return
@@ -230,6 +264,28 @@ export function BookingWizard() {
   }, [activeSteps, stepIndex])
 
   const goBack = useCallback(() => goTo(activeSteps[stepIndex - 1]), [activeSteps, stepIndex, goTo])
+
+  // Revalida el slot de un borrador restaurado contra la lista fresca de
+  // /api/slots: si sigue disponible se re-selecciona; si ya lo tomaron (o ya
+  // pasó), se limpia con aviso y se regresa a elegir horario.
+  useEffect(() => {
+    const pending = restoredSlot.current
+    if (!pending || loadingSlots || slotsError) return
+    // Espera a que los slots correspondan al tipo de cita del borrador.
+    if (pending.type !== appointmentType) return
+    restoredSlot.current = null
+    const nowMs = Date.now()
+    const found = slots.find(slot => slot.id === pending.id && parseISO(slot.datetime).getTime() > nowMs)
+    if (found) {
+      setSelectedSlot(found)
+      return
+    }
+    setSelectedSlot(null)
+    toast.error('El horario que tenías elegido ya no está disponible — elige otro.')
+    if (step === 'form' || step === 'upload' || step === 'review') {
+      goTo(dayHasFutureSlots(slots, selectedDate) ? 'slots' : 'calendar')
+    }
+  }, [slots, loadingSlots, slotsError, appointmentType, step, selectedDate, goTo, dayHasFutureSlots])
 
   const onSubmit = useCallback(async (data: BookingFormInput) => {
     if (submitInFlight.current) return
@@ -266,15 +322,22 @@ export function BookingWizard() {
       try { json = text ? JSON.parse(text) : {} } catch { /* non-JSON */ }
 
       if (!res.ok) {
-        const msg = res.status === 409
-          ? 'Este horario ya fue tomado. Por favor selecciona otro.'
+        const errText = typeof json.error === 'string' ? json.error : null
+        // El 409 de idempotencia («ya se está procesando») no significa slot
+        // ocupado: ahí no hay que tirar la selección ni refrescar horarios.
+        const slotTaken = res.status === 409 && !(errText?.includes('procesando'))
+        const msg = slotTaken
+          ? 'Ese horario acaba de ocuparse — elige otro.'
           : res.status === 429
           ? 'Recibimos demasiados intentos. Tus datos siguen guardados; intenta otra vez en una hora.'
-          : typeof json.error === 'string' ? json.error
-          : `Error al enviar solicitud (${res.status})`
+          : errText ?? `Error al enviar solicitud (${res.status})`
         toast.error(msg)
         setSubmitNotice(msg)
-        if (res.status === 409) { goTo('calendar'); setSelectedSlot(null) }
+        if (slotTaken) {
+          setSelectedSlot(null)
+          const fresh = await loadSlots()
+          goTo(fresh && dayHasFutureSlots(fresh, selectedDate) ? 'slots' : 'calendar')
+        }
         return
       }
       if (!json.confirmationCode) { toast.error('Respuesta inesperada del servidor'); return }
@@ -291,7 +354,7 @@ export function BookingWizard() {
       submitInFlight.current = false
       setSubmitting(false)
     }
-  }, [selectedSlot, idFile, guests, goTo, isVideo, appointmentType])
+  }, [selectedSlot, idFile, guests, goTo, isVideo, appointmentType, loadSlots, dayHasFutureSlots, selectedDate])
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -481,6 +544,7 @@ export function BookingWizard() {
                 selectedDate={selectedDate}
                 selectedSlotId={selectedSlot?.id ?? null}
                 onSelectSlot={id => setSelectedSlot(slots.find(s => s.id === id) ?? null)}
+                appointmentType={appointmentType}
               />
               {selectedSlot && (
                 <Button className="w-full" onClick={() => goTo('form')}>Continuar</Button>
@@ -784,7 +848,7 @@ export function BookingWizard() {
                   {([
                     ['Tipo',          appointmentTypeLabels[appointmentType]],
                     ['Fecha',         formatDate(selectedSlot.datetime)],
-                    ['Hora',          formatTime(selectedSlot.datetime)],
+                    ['Hora',          reviewTimeLabel],
                     ['Nombre',        getValues('name')],
                     ['Email',         getValues('email')],
                     ['Teléfono',      getValues('phone')],

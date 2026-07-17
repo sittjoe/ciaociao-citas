@@ -10,7 +10,7 @@ import type { EventInput, EventSourceFuncArg } from '@fullcalendar/core'
 import { formatInTimeZone } from 'date-fns-tz'
 import { toast } from 'sonner'
 import { BUSINESS_TZ, cn, toBusinessWallTime } from '@/lib/utils'
-import { AppointmentDetailModal } from './AppointmentDetailModal'
+import { AppointmentDetail } from './AppointmentDetail'
 
 // FullCalendar has no timezone plugin loaded, so a named `timeZone` runs in
 // "UTC-coercion" mode: it renders the UTC fields of whatever it receives.
@@ -277,10 +277,10 @@ export function AdminCalendar() {
         />
       </div>
 
-      <AppointmentDetailModal
+      <AppointmentDetail
         appointmentId={selectedId}
         onClose={() => setSelectedId(null)}
-        onChanged={handleChanged}
+        onUpdated={handleChanged}
       />
 
       {/* FullCalendar overrides — scoped to .fc-admin-wrap, using design tokens */}

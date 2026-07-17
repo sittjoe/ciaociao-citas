@@ -33,12 +33,41 @@ function Logomark() {
   )
 }
 
-function NavList({ pathname, onClose }: { pathname: string; onClose: () => void }) {
+interface NavCounts {
+  pendientes: number
+  problemas: number
+}
+
+/** Badge numérico del nav para el href dado (undefined = sin badge). */
+function navBadgeCount(href: string, counts: NavCounts | null): number | undefined {
+  if (!counts) return undefined
+  if (href === '/admin/citas')     return counts.pendientes
+  if (href === '/admin/problemas') return counts.problemas
+  return undefined
+}
+
+function NavBadge({ href, count }: { href: string; count: number }) {
+  return (
+    <span
+      className={cn(
+        'relative z-10 ml-auto inline-flex min-w-[1.375rem] items-center justify-center rounded-full border px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none tabular-nums',
+        href === '/admin/problemas'
+          ? 'bg-red-50 text-red-600 border-red-200'
+          : 'bg-champagne-tint text-champagne-deep border-champagne-soft',
+      )}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
+function NavList({ pathname, onClose, counts }: { pathname: string; onClose: () => void; counts: NavCounts | null }) {
   return (
     <LayoutGroup>
       <nav className="flex-1 overflow-y-auto p-2.5 space-y-0.5">
         {navItems.map(({ href, label, Icon }) => {
           const active = pathname === href
+          const badge  = navBadgeCount(href, counts)
           return (
             <Link
               key={href}
@@ -60,6 +89,7 @@ function NavList({ pathname, onClose }: { pathname: string; onClose: () => void 
                 <Icon size={16} strokeWidth={active ? 1.75 : 1.5} />
                 {label}
               </span>
+              {typeof badge === 'number' && badge > 0 && <NavBadge href={href} count={badge} />}
             </Link>
           )
         })}
@@ -72,12 +102,42 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
   const pathname = usePathname()
   const router   = useRouter()
   const [open, setOpen] = useState(false)
+  const [counts, setCounts] = useState<NavCounts | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     if (open) document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
+
+  // Badges del nav: al montar, al navegar y al volver a la app (visibilitychange
+  // — el admin usa el panel desde iPhone y lo deja en segundo plano). Silencioso
+  // a propósito: si falla, simplemente no se pintan badges.
+  useEffect(() => {
+    let cancelled = false
+    const fetchCounts = async () => {
+      try {
+        const res = await fetch('/api/admin/nav-counts')
+        if (!res.ok) return
+        const data = await res.json() as Partial<NavCounts>
+        if (!cancelled) {
+          setCounts({
+            pendientes: Number(data.pendientes ?? 0),
+            problemas:  Number(data.problemas ?? 0),
+          })
+        }
+      } catch {
+        // Sin badge es mejor que un toast de error en cada refresco.
+      }
+    }
+    fetchCounts()
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchCounts() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [pathname])
 
   const logout = async () => {
     await fetch('/api/admin/session', { method: 'DELETE' })
@@ -105,7 +165,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col w-56 bg-admin-panel border-r border-admin-line fixed inset-y-0 left-0">
         <Logomark />
-        <NavList pathname={pathname} onClose={() => {}} />
+        <NavList pathname={pathname} onClose={() => {}} counts={counts} />
         <div className="p-3 border-t border-admin-line">
           <div className="flex items-center gap-2.5 px-3 pb-2.5">
             <span className="w-7 h-7 rounded-full bg-champagne-soft border border-champagne-soft/60 flex items-center justify-center text-[0.65rem] font-semibold text-champagne-deep shrink-0">
@@ -160,7 +220,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
               className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-admin-panel border-r border-admin-line lg:hidden"
             >
               <Logomark />
-              <NavList pathname={pathname} onClose={() => setOpen(false)} />
+              <NavList pathname={pathname} onClose={() => setOpen(false)} counts={counts} />
               <div className="p-3 border-t border-admin-line">
                 <div className="flex items-center gap-2.5 px-3 pb-2.5">
                   <span className="w-7 h-7 rounded-full bg-champagne-soft flex items-center justify-center text-[0.65rem] font-semibold text-champagne-deep shrink-0">

@@ -275,6 +275,11 @@ export async function sendDailyTeamDigest(params: {
   today: DigestTodayRow[]
   unconfirmed: DigestUnconfirmedRow[]
   pending: DigestPendingRow[]
+  /**
+   * Alerta de pocos horarios: cantidad de slots libres de los próximos 7 días
+   * cuando queda poca oferta (el caller decide el umbral). null/undefined = sin alerta.
+   */
+  lowSlots?: number | null
 }): Promise<{ sent: boolean; recipients: number }> {
   const adminRecipients = await getActiveAdminEmails()
   if (adminRecipients.length === 0) {
@@ -283,13 +288,28 @@ export async function sendDailyTeamDigest(params: {
   }
 
   const { today, unconfirmed, pending } = params
+  const lowSlots = typeof params.lowSlots === 'number' ? params.lowSlots : null
   const subjectParts = [
     `${today.length} ${today.length === 1 ? 'cita' : 'citas'} hoy`,
     ...(unconfirmed.length > 0 ? [`${unconfirmed.length} sin confirmar`] : []),
     ...(pending.length > 0 ? [`${pending.length} por decidir`] : []),
+    ...(lowSlots !== null ? [lowSlots === 1 ? 'queda 1 horario' : `quedan ${lowSlots} horarios`] : []),
   ]
 
+  // Línea destacada de pocos horarios — arriba de todo, es lo más accionable.
+  const lowSlotsAlert = lowSlots !== null
+    ? `<div class="card" style="border:1px solid #E5C26B;background:#FFF9EC;padding:20px 28px;">
+        <p style="margin:0;font-size:14px;line-height:1.55;color:#8A6D1D;font-weight:600;">
+          ${lowSlots === 1
+            ? 'Queda 1 horario publicado para los próximos 7 días — publica más desde Slots.'
+            : `Quedan ${lowSlots} horarios publicados para los próximos 7 días — publica más desde Slots.`}
+        </p>
+        <p style="margin:10px 0 0;"><a href="${SITE}/admin/slots" style="font-size:12px;color:#9A7E50;text-decoration:none;font-weight:600;">Abrir Slots &rarr;</a></p>
+      </div>`
+    : ''
+
   const sections = [
+    lowSlotsAlert,
     digestSection('Citas de hoy', digestTodayRows(today)),
     ...(unconfirmed.length > 0
       ? [digestSection('Próximos 2 días · aceptadas sin confirmación de la clienta', digestUnconfirmedRows(unconfirmed))]

@@ -6,11 +6,19 @@ import { fromZonedTime } from 'date-fns-tz'
 import { BUSINESS_TZ } from '@/lib/utils'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { getBlockedDateSet, businessDateKey } from '@/lib/blocked-dates'
+import { getAgendaPause } from '@/lib/agenda-pause'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
+    // Agenda pausada por el equipo: no se ofrece ningún horario (fail-open:
+    // si la lectura de la pausa falla, la agenda sigue operando normal).
+    const pause = await getAgendaPause()
+    if (pause.paused) {
+      return NextResponse.json({ slots: [], paused: true })
+    }
+
     await releaseExpiredHolds()
 
     const { searchParams } = new URL(request.url)

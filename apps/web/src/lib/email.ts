@@ -970,24 +970,66 @@ export async function sendSlotsReminderEmail(stats: {
   return { sent: true as const, recipients: adminRecipients.length }
 }
 
-export async function sendReservationRecovery(appt: Appointment) {
-  await sendTracked({
-    kind: 'reservation_recovery',
-    appointmentId: appt.id,
-    from: `Ciao Ciao Joyería <${FROM}>`,
-    to: appt.email,
-    subject: 'Tu link de cita en Ciao Ciao',
-    html: baseTemplate(`
+/**
+ * Recuperación de reserva: UN solo correo con todas las citas vigentes
+ * (pendientes o confirmadas, con fecha futura) de la persona. Si no tiene
+ * ninguna vigente, se envía un aviso amable en su lugar — nunca un correo
+ * por cada cita del historial.
+ */
+export async function sendReservationRecovery(params: {
+  to: string
+  appointments: Appointment[]
+  /** Nombre para el saludo cuando no hay citas vigentes que lo aporten. */
+  name?: string
+}) {
+  const { to, appointments } = params
+  const name = params.name?.trim() || appointments[0]?.name || ''
+  const greeting = name ? `Hola ${escapeHtml(name)}, ` : ''
+
+  if (appointments.length === 0) {
+    await sendTracked({
+      kind: 'reservation_recovery',
+      from: `Ciao Ciao Joyería <${FROM}>`,
+      to,
+      subject: 'Tu consulta de citas en Ciao Ciao',
+      html: baseTemplate(`
+        <div class="card">
+          <p class="title">Sin citas vigentes</p>
+          <p class="copy">${greeting}recibimos tu solicitud para consultar tu reserva. Por el momento no encontramos citas próximas activas asociadas a tus datos. Será un placer recibirte cuando lo desees.</p>
+        </div>
+        <p style="text-align:center"><a class="btn" href="${SITE}">Agendar una cita</a></p>
+      `),
+    })
+    return
+  }
+
+  const plural = appointments.length > 1
+  const cards = appointments.map(appt => `
       <div class="card">
-        <p class="title">Link de tu cita</p>
-        <p class="copy">Hola ${escapeHtml(appt.name)}, aquí puedes consultar el estado de tu cita y hacer cambios disponibles.</p>
         ${details([
+          ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
           ['Fecha', formatDate(appt.slotDatetime)],
           ['Hora', formatTime(appt.slotDatetime)],
+          ['Estado', appt.status === 'accepted' ? 'Confirmada' : 'Pendiente de revisión'],
           ['Código', appt.confirmationCode],
         ])}
+        <p style="text-align:center;margin:16px 0 0;"><a class="btn" style="margin-top:0;" href="${SITE}/reserva/${encodeURIComponent(appt.confirmationCode)}">Ver estado de esta cita</a></p>
+      </div>`).join('')
+
+  await sendTracked({
+    kind: 'reservation_recovery',
+    appointmentId: appointments[0].id,
+    from: `Ciao Ciao Joyería <${FROM}>`,
+    to,
+    subject: plural ? 'Tus citas vigentes en Ciao Ciao' : 'Tu cita en Ciao Ciao',
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">${plural ? 'Tus citas vigentes' : 'Tu cita'}</p>
+        <p class="copy">${greeting}${plural
+          ? `encontramos ${appointments.length} citas vigentes a tu nombre. Aquí puedes consultar el estado de cada una y hacer los cambios disponibles.`
+          : 'aquí puedes consultar el estado de tu cita y hacer los cambios disponibles.'}</p>
       </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver mi cita</a></p>
+      ${cards}
     `),
   })
 }

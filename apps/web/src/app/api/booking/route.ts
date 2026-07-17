@@ -11,6 +11,7 @@ import { createSlotLock } from '@/lib/slot-locks'
 import { logAppointmentEvent } from '@/lib/appointment-events'
 import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
 import { getBlockedDateSet, businessDateKey } from '@/lib/blocked-dates'
+import { getAgendaPause } from '@/lib/agenda-pause'
 import type { Appointment, Guest } from '@/types'
 import { randomUUID, randomBytes } from 'crypto'
 
@@ -40,6 +41,17 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Demasiadas solicitudes. Intenta de nuevo en una hora.' },
         { status: 429, headers: { 'Retry-After': '3600' } },
+      )
+    }
+
+    // Agenda pausada por el equipo: no se aceptan nuevas reservas. Mismo
+    // criterio fail-open que blocked-dates — un error leyendo la pausa nunca
+    // bloquea una reserva legítima.
+    const pause = await getAgendaPause()
+    if (pause.paused) {
+      return NextResponse.json(
+        { error: 'Por el momento nuestra agenda está en pausa. Escríbenos a hola@ciaociao.mx y con gusto te avisamos en cuanto se reabra.' },
+        { status: 409 },
       )
     }
 

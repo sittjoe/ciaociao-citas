@@ -311,8 +311,36 @@ export async function GET(request: Request) {
     const horizonEnd    = fromZonedTime(`${horizonKey}T00:00:00`, BUSINESS_TZ)
 
     // ——— 1. Digest matutino al equipo ———
-    const digest: { sent: boolean; recipients: number; skipped: string | null } = { sent: false, recipients: 0, skipped: null }
+    const digest: { sent: boolean; recipients: number; skipped: string | null; lowSlots: number | null } =
+      { sent: false, recipients: 0, skipped: null, lowSlots: null }
     try {
+      // Alerta de pocos horarios: slots libres reservables de los próximos
+      // 7 días (disponibles, futuros y fuera de fechas bloqueadas — mismos
+      // criterios que el /api/slots público). Si quedan <8, el digest lo
+      // destaca; y cuenta como contenido, porque una agenda vacía sin citas
+      // es justo el día en que más importa avisar.
+      let lowSlots: number | null = null
+      try {
+        const weekAhead = new Date(now.getTime() + 7 * 86_400_000)
+        const [freeSlotsSnap, blockedForAlert] = await Promise.all([
+          adminDb
+            .collection('slots')
+            .where('available', '==', true)
+            .where('datetime', '>=', Timestamp.fromDate(now))
+            .where('datetime', '<', Timestamp.fromDate(weekAhead))
+            .limit(200)
+            .get(),
+          getBlockedDateSet(),
+        ])
+        const freeCount = freeSlotsSnap.docs.filter(doc => {
+          const dt = doc.data().datetime
+          return dt instanceof Timestamp && !blockedForAlert.has(businessDateKey(dt.toDate()))
+        }).length
+        if (freeCount < 8) lowSlots = freeCount
+      } catch (err) {
+        errors.push(`Conteo de slots libres para el digest failed: ${err}`)
+      }
+      digest.lowSlots = lowSlots
       // Una sola query (misma forma e índice que admin/hoy: status in + rango
       // de slotDatetime + orderBy); el split por sección se hace en memoria.
       const digestSnap = await adminDb
@@ -353,7 +381,7 @@ export async function GET(request: Request) {
         }
       }
 
-      if (today.length + unconfirmed.length + pending.length === 0) {
+      if (today.length + unconfirmed.length + pending.length === 0 && lowSlots === null) {
         digest.skipped = 'sin_contenido'
       } else {
         // Documento de control por día: create() falla si ya existe, así una
@@ -362,7 +390,7 @@ export async function GET(request: Request) {
         try {
           await controlRef.create({
             status: 'sending',
-            counts: { today: today.length, unconfirmed: unconfirmed.length, pending: pending.length },
+            counts: { today: today.length, unconfirmed: unconfirmed.length, pending: pending.length, lowSlots },
             createdAt: FieldValue.serverTimestamp(),
           })
         } catch (err) {
@@ -375,7 +403,7 @@ export async function GET(request: Request) {
         if (!digest.skipped) {
           const dayLabelRaw = formatInTimeZone(now, BUSINESS_TZ, "EEEE d 'de' MMMM", { locale: es })
           const dayLabel = dayLabelRaw.charAt(0).toUpperCase() + dayLabelRaw.slice(1)
-          const result = await sendDailyTeamDigest({ dayLabel, dateKey: todayKey, today, unconfirmed, pending })
+          const result = await sendDailyTeamDigest({ dayLabel, dateKey: todayKey, today, unconfirmed, pending, lowSlots })
           digest.sent = result.sent
           digest.recipients = result.recipients
           await controlRef.update({

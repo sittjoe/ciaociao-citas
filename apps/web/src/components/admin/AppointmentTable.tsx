@@ -11,50 +11,19 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, ExternalLink, FileText, MailCheck, MailQuestion, MessageCircle, Save } from 'lucide-react'
+import { CheckCircle, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, Users, FileText, MailCheck, MailQuestion, MessageCircle } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
 import { TableSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Textarea } from '@/components/ui/Input'
-import { GuestsList } from './GuestsList'
+import { AppointmentDetail, type SerialAppointment } from './AppointmentDetail'
 import { formatInTimeZone } from 'date-fns-tz'
 import { formatShortDate, csvRow, cn, BUSINESS_TZ } from '@/lib/utils'
 import { appointmentTypeLabels, commercialStatusLabels, engagementBriefRows, formatWhatsAppUrl } from '@/lib/commercial'
 import { appointmentTypeOptions, budgetRangeOptions, commercialStatusOptions, productTypeOptions } from '@/lib/schemas'
-import type { Appointment, AppointmentStatus, AppointmentType, CommercialPriority, CommercialStatus } from '@/types'
+import type { AppointmentStatus, AppointmentType, CommercialPriority, CommercialStatus } from '@/types'
 
-type CustomerHistoryItem = {
-  id: string
-  name: string
-  status: AppointmentStatus
-  appointmentType?: AppointmentType
-  slotDatetime: string | null
-  productType?: string
-  budgetRange?: string
-  commercialStatus?: CommercialStatus
-}
-
-type AppointmentEventItem = {
-  id: string
-  action: string
-  actor: string
-  summary: string
-  createdAt: string | null
-}
-
-type SerialAppt = Omit<Appointment, 'slotDatetime' | 'createdAt' | 'updatedAt' | 'decidedAt' | 'clientConfirmedAt' | 'followUpAt'> & {
-  slotDatetime: string
-  createdAt: string
-  updatedAt?: string
-  decidedAt?: string | null
-  clientConfirmedAt?: string | null
-  followUpAt?: string | null
-  commercialPriority?: CommercialPriority
-  customerHistory?: CustomerHistoryItem[]
-  eventHistory?: AppointmentEventItem[]
-}
+type SerialAppt = SerialAppointment
 
 const col = createColumnHelper<SerialAppt>()
 
@@ -199,19 +168,10 @@ export function AppointmentTable() {
   const [noShowOnly, setNoShowOnly] = useState(false)
   const [followUpDueOnly, setFollowUpDueOnly] = useState(false)
   const [sorting,     setSorting]       = useState<SortingState>([])
-  const [selected,    setSelected]      = useState<SerialAppt | null>(null)
+  const [openId,      setOpenId]        = useState<string | null>(null)
+  const [openInitial, setOpenInitial]   = useState<SerialAppt | null>(null)
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set())
   const [batchActing, setBatchActing]   = useState(false)
-  const [deciding,    setDeciding]      = useState(false)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [savingCommercial, setSavingCommercial] = useState(false)
-  const [rejectReason,setRejectReason]  = useState('')
-  const [commercialStatus, setCommercialStatus] = useState<CommercialStatus>('pending')
-  const [internalNote, setInternalNote] = useState('')
-  const [followUpAt, setFollowUpAt] = useState('')
-  const [meetingUrl, setMeetingUrl] = useState('')
-  const [meetingProvider, setMeetingProvider] = useState('')
-  const [meetingInstructions, setMeetingInstructions] = useState('')
 
   // Debounce the search box so we don't fire one request per keystroke
   useEffect(() => {
@@ -298,169 +258,36 @@ export function AppointmentTable() {
     }
   }, [selectedIds])
 
-  useEffect(() => {
-    if (!selected) return
-    setRejectReason('')   // never carry a rejection reason from a previous appointment
-    setCommercialStatus(selected.commercialStatus ?? 'pending')
-    setInternalNote(selected.internalNote ?? '')
-    setFollowUpAt(selected.followUpAt ? selected.followUpAt.slice(0, 16) : '')
-    setMeetingUrl(selected.meetingUrl ?? '')
-    setMeetingProvider(selected.meetingProvider ?? '')
-    setMeetingInstructions(selected.meetingInstructions ?? '')
-  }, [selected])
-
-  const openAppointment = useCallback(async (appt: SerialAppt) => {
-    setSelected(appt)
+  // El modal compartido (AppointmentDetail) carga el detalle completo por su
+  // cuenta; aquí solo se pasa la fila como pintura inicial instantánea.
+  const openAppointment = useCallback((appt: SerialAppt) => {
+    setOpenInitial(appt)
+    setOpenId(appt.id)
     syncOpenParam(appt.id)
-    setDetailLoading(true)
-    try {
-      const res = await fetch(`/api/admin/appointments/${appt.id}`)
-      if (res.status === 401) {
-        window.location.href = '/admin/login?from=/admin/citas'
-        return
-      }
-      if (!res.ok) throw new Error()
-      const detail = await res.json() as SerialAppt
-      setSelected(prev => prev && prev.id === appt.id ? { ...prev, ...detail } : prev)
-    } catch {
-      toast.error('No se pudo cargar el historial del cliente')
-    } finally {
-      setDetailLoading(false)
-    }
+  }, [])
+
+  const closeAppointment = useCallback(() => {
+    setOpenId(null)
+    setOpenInitial(null)
+    syncOpenParam(null)
+  }, [])
+
+  // Parche optimista tras acciones del modal: conserva filtros, orden y scroll
+  // en lugar de recargar toda la tabla.
+  const handleUpdated = useCallback((id: string, patch: Partial<SerialAppt>) => {
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a))
   }, [])
 
   // Deep-link: ?open=<id> abre el detalle de esa cita al montar la tabla.
-  // Solo se tiene el id, así que se carga el detalle completo directamente.
+  // Solo se tiene el id; el modal compartido carga el detalle completo.
   useEffect(() => {
     if (deepLinkHandled.current) return
     deepLinkHandled.current = true
-    const openId = searchParams.get('open')
-    if (!openId) return
-    void (async () => {
-      setDetailLoading(true)
-      try {
-        const res = await fetch(`/api/admin/appointments/${openId}`)
-        if (res.status === 401) {
-          window.location.href = '/admin/login?from=/admin/citas'
-          return
-        }
-        if (!res.ok) throw new Error()
-        const detail = await res.json() as SerialAppt
-        setSelected(detail)
-      } catch {
-        toast.error('No se encontró la cita del enlace')
-        syncOpenParam(null)
-      } finally {
-        setDetailLoading(false)
-      }
-    })()
+    const linkedId = searchParams.get('open')
+    if (!linkedId) return
+    setOpenInitial(null)
+    setOpenId(linkedId)
   }, [searchParams])
-
-  const markAttendance = useCallback(async (attended: boolean) => {
-    if (!selected) return
-    setDeciding(true)
-    try {
-      const res = await fetch(`/api/admin/appointments/${selected.id}/attend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attended }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(err.error ?? 'Error')
-      }
-      toast.success(attended ? 'Marcada como asistió' : 'Marcada como no asistió')
-      setSelected(prev => prev ? { ...prev, attended } : prev)
-      setAppointments(prev => prev.map(a => a.id === selected.id ? { ...a, attended } : a))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al registrar asistencia')
-    } finally {
-      setDeciding(false)
-    }
-  }, [selected])
-
-  const decide = useCallback(async (action: 'accept' | 'reject') => {
-    if (!selected) return
-    if (
-      action === 'accept' &&
-      selected.appointmentType === 'video_engagement_rings' &&
-      !meetingUrl.trim()
-    ) {
-      const ok = window.confirm('Esta video consulta no tiene link guardado. Puedes aceptarla, pero el cliente recibirá que el enlace está pendiente. ¿Aceptar de todos modos?')
-      if (!ok) return
-    }
-    setDeciding(true)
-    try {
-      const res = await fetch(`/api/admin/appointments/${selected.id}/decision`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          reason: rejectReason || undefined,
-          meetingUrl,
-          meetingProvider,
-          meetingInstructions,
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json() as { error?: string }
-        throw new Error(err.error ?? 'Error')
-      }
-      toast.success(action === 'accept' ? 'Cita confirmada' : 'Cita rechazada')
-      // Optimistic in-place update: keep the operator's filters, sort and scroll
-      // position instead of reloading the whole table.
-      const newStatus: AppointmentStatus = action === 'accept' ? 'accepted' : 'rejected'
-      setAppointments(prev => prev.map(a =>
-        a.id === selected.id ? { ...a, status: newStatus, clientConfirmed: false } : a))
-      setSelected(null)
-      syncOpenParam(null)
-      setRejectReason('')
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al procesar')
-    } finally {
-      setDeciding(false)
-    }
-  }, [selected, rejectReason, meetingUrl, meetingProvider, meetingInstructions, fetchAppointments])
-
-  const saveCommercial = useCallback(async () => {
-    if (!selected) return
-    setSavingCommercial(true)
-    try {
-      const followUpIso = followUpAt ? new Date(followUpAt).toISOString() : ''
-      const res = await fetch(`/api/admin/appointments/${selected.id}/commercial`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          commercialStatus,
-          internalNote,
-          followUpAt: followUpIso,
-          meetingUrl,
-          meetingProvider,
-          meetingInstructions,
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json() as { error?: string }
-        throw new Error(err.error ?? 'Error')
-      }
-      toast.success('Seguimiento actualizado')
-      const patch = {
-        commercialStatus,
-        internalNote,
-        followUpAt: followUpIso || null,
-        meetingUrl,
-        meetingProvider,
-        meetingInstructions,
-      }
-      setSelected(prev => prev ? { ...prev, ...patch } : prev)
-      // Optimistic in-place update — preserve filters and table position
-      setAppointments(prev => prev.map(a => a.id === selected.id ? { ...a, ...patch } : a))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar seguimiento')
-    } finally {
-      setSavingCommercial(false)
-    }
-  }, [selected, commercialStatus, internalNote, followUpAt, meetingUrl, meetingProvider, meetingInstructions, fetchAppointments])
 
   const exportCSV = useCallback(() => {
     const BOM  = '﻿'
@@ -765,7 +592,7 @@ export function AppointmentTable() {
                       // an inner control (the ID/WhatsApp links or Gestionar button).
                       if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
                         e.preventDefault()
-                        void openAppointment(appt)
+                        openAppointment(appt)
                       }
                     }}
                     className={cn(
@@ -821,7 +648,7 @@ export function AppointmentTable() {
                           </a>
                         )}
                         <button
-                          onClick={() => void openAppointment(appt)}
+                          onClick={() => openAppointment(appt)}
                           className={cn(
                             'rounded-lg px-2.5 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:shadow-focus-ring',
                             appt.status === 'pending'
@@ -851,314 +678,13 @@ export function AppointmentTable() {
         </div>
       )}
 
-      {/* Detail modal */}
-      <Modal
-        open={!!selected}
-        onClose={() => { setSelected(null); setRejectReason(''); syncOpenParam(null) }}
-        title="Detalle de cita"
-        size="md"
-      >
-        {selected && (
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="h-eyebrow mb-1">Solicitud</p>
-                <h3 className="font-serif text-2xl font-light text-ink">{selected.name}</h3>
-                {detailLoading && <p className="mt-1 text-xs text-ink-muted">Cargando historial...</p>}
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <StatusBadge status={selected.status} />
-                <span className={cn(
-                  'inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                  selected.commercialPriority === 'high' && 'border-red-200 bg-red-50 text-red-600',
-                  selected.commercialPriority === 'medium' && 'border-amber-200 bg-amber-50 text-amber-700',
-                  (!selected.commercialPriority || selected.commercialPriority === 'normal') && 'border-admin-line bg-admin-surface text-ink-muted',
-                )}>
-                  {selected.commercialPriority === 'high' ? 'Prioridad alta' : selected.commercialPriority === 'medium' ? 'Prioridad media' : 'Prioridad normal'}
-                </span>
-              </div>
-            </div>
-
-            <dl className="divide-y divide-admin-line rounded-2xl border border-admin-line bg-admin-surface/60 px-4 text-sm">
-              {[
-                ['Código',    selected.confirmationCode],
-                ['Tipo',      appointmentTypeLabels[selected.appointmentType ?? 'showroom']],
-                ['Nombre',    selected.name],
-                ['Email',     selected.email],
-                ['Teléfono',  selected.phone],
-                ['Fecha',     formatShortDate(selected.slotDatetime)],
-                ...(selected.productType ? [['Producto', selected.productType]] : []),
-                ...(selected.budgetRange ? [['Presupuesto', selected.budgetRange]] : []),
-                ...(selected.lookingFor ? [['Busca', selected.lookingFor]] : []),
-                ...engagementBriefRows(selected.engagementBrief),
-                ...(selected.meetingUrl ? [['Link videollamada', selected.meetingUrl]] : []),
-                ...(selected.meetingInstructions ? [['Instrucciones video', selected.meetingInstructions]] : []),
-                ['Seguimiento', selected.commercialStatus ? commercialStatusLabels[selected.commercialStatus] : 'Pendiente'],
-                ...(selected.followUpAt ? [['Follow-up', formatShortDate(selected.followUpAt)]] : []),
-                ['Calendar',  selected.googleCalendarEventId
-                  ? 'Sincronizado'
-                  : (selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed
-                    ? 'Error de sincronización'
-                    : 'Pendiente'],
-                ...(selected.decidedBy ? [['Aprobado por', selected.decidedBy]] : []),
-                ...(selected.decidedAt ? [['Fecha decisión', formatShortDate(selected.decidedAt)]] : []),
-                ...(selected.status === 'accepted'
-                  ? [['Confirmación cliente', selected.clientConfirmed
-                      ? (selected.clientConfirmedAt ? `Sí — ${formatShortDate(selected.clientConfirmedAt)}` : 'Sí')
-                      : 'Pendiente']]
-                  : []),
-                ...(selected.adminNote ? [['Nota admin', selected.adminNote]] : []),
-                ...(selected.notes ? [['Notas cliente', selected.notes]] : []),
-                ...(selected.internalNote ? [['Notas internas', selected.internalNote]] : []),
-              ].map(([label, value]) => (
-                <div key={label as string} className="flex justify-between py-2.5 gap-4">
-                  <dt className="text-ink-muted shrink-0">{label}</dt>
-                  <dd className="text-ink text-right">{value as string}</dd>
-                </div>
-              ))}
-              <div className="flex justify-between py-2.5 gap-4">
-                <dt className="text-ink-muted">Estado</dt>
-                <dd><StatusBadge status={selected.status} /></dd>
-              </div>
-            </dl>
-
-            <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="h-eyebrow mb-1">Seguimiento comercial</p>
-                  <p className="text-xs text-ink-muted">Uso interno del equipo. No se muestra al cliente.</p>
-                </div>
-                {selected.phone && (
-                  <a
-                    href={formatWhatsAppUrl(selected.phone, selected.name)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`Escribir a ${selected.name} por WhatsApp`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                  >
-                    <MessageCircle size={13} strokeWidth={1.5} />
-                    WhatsApp
-                  </a>
-                )}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="label-clean">Estado</label>
-                  <select
-                    value={commercialStatus}
-                    onChange={e => setCommercialStatus(e.target.value as CommercialStatus)}
-                    className="input-clean mt-1"
-                  >
-                    {commercialStatusOptions.map(option => (
-                      <option key={option} value={option}>{commercialStatusLabels[option]}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label-clean">Fecha de follow-up</label>
-                  <input
-                    type="datetime-local"
-                    value={followUpAt}
-                    onChange={e => setFollowUpAt(e.target.value)}
-                    className="input-clean mt-1"
-                  />
-                </div>
-              </div>
-              <div className="mt-3">
-                <label className="label-clean">Notas internas</label>
-                <Textarea
-                  value={internalNote}
-                  onChange={e => setInternalNote(e.target.value)}
-                  placeholder="Preparación, resultado, siguiente paso o contexto comercial."
-                  rows={3}
-                  className="mt-1"
-                />
-              </div>
-              {selected.appointmentType === 'video_engagement_rings' && (
-                <div className="mt-3 rounded-xl border border-champagne-soft bg-champagne-tint/50 p-3">
-                  <p className="h-eyebrow mb-3">Videollamada</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="label-clean">Proveedor</label>
-                      <input
-                        value={meetingProvider}
-                        onChange={e => setMeetingProvider(e.target.value)}
-                        placeholder="Google Meet, Zoom..."
-                        className="input-clean mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="label-clean">Link</label>
-                      <input
-                        value={meetingUrl}
-                        onChange={e => setMeetingUrl(e.target.value)}
-                        placeholder="https://meet.google.com/..."
-                        className="input-clean mt-1"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <label className="label-clean">Instrucciones</label>
-                    <Textarea
-                      value={meetingInstructions}
-                      onChange={e => setMeetingInstructions(e.target.value)}
-                      placeholder="Ej: entra 5 minutos antes y ten referencias a la mano."
-                      rows={2}
-                      className="mt-1"
-                    />
-                  </div>
-                  {!meetingUrl && selected.status === 'accepted' && (
-                    <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Esta video cita ya está aceptada pero todavía no tiene link.
-                    </p>
-                  )}
-                </div>
-              )}
-              <Button size="sm" className="mt-3" loading={savingCommercial} onClick={() => void saveCommercial()}>
-                <Save size={14} strokeWidth={1.5} />
-                Guardar seguimiento
-              </Button>
-            </div>
-
-            {/* Attendance — only for confirmed appointments */}
-            {selected.status === 'accepted' && (
-              <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
-                <div className="mb-3">
-                  <p className="h-eyebrow mb-1">Asistencia</p>
-                  <p className="text-xs text-ink-muted">
-                    {selected.attended === true ? 'Registrada como asistió.'
-                      : selected.attended === false ? 'Registrada como no se presentó.'
-                      : 'Marca si el cliente acudió a su cita. Los no-shows se excluyen de la conversión.'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant={selected.attended === true ? 'gold' : 'outline'}
-                    size="sm" className="flex-1" loading={deciding}
-                    onClick={() => void markAttendance(true)}
-                  >
-                    <CheckCircle size={14} strokeWidth={1.5} /> Asistió
-                  </Button>
-                  <Button
-                    variant={selected.attended === false ? 'danger' : 'ghost'}
-                    size="sm" className="flex-1" loading={deciding}
-                    onClick={() => void markAttendance(false)}
-                  >
-                    <XCircle size={14} strokeWidth={1.5} /> No asistió
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {selected.customerHistory && selected.customerHistory.length > 0 && (
-              <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
-                <p className="h-eyebrow mb-3">Historial cliente</p>
-                <div className="space-y-2">
-                  {selected.customerHistory.map(item => (
-                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-panel px-3 py-2 text-xs">
-                      <div>
-                        <p className="font-medium text-ink">{item.slotDatetime ? formatShortDate(item.slotDatetime) : 'Sin fecha'}</p>
-                        <p className="text-ink-muted">{[item.productType, item.budgetRange].filter(Boolean).join(' · ') || item.name}</p>
-                      </div>
-                      <div className="text-right">
-                        <StatusBadge status={item.status} />
-                        {item.commercialStatus && (
-                          <p className="mt-1 text-[10px] text-ink-muted">{commercialStatusLabels[item.commercialStatus]}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {selected.eventHistory && selected.eventHistory.length > 0 && (
-              <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
-                <p className="h-eyebrow mb-3">Historial operativo</p>
-                <div className="space-y-2">
-                  {selected.eventHistory.map(event => (
-                    <div key={event.id} className="rounded-xl border border-admin-line bg-admin-panel px-3 py-2 text-xs">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="font-medium text-ink">{event.summary || event.action}</p>
-                        {event.createdAt && <span className="shrink-0 text-ink-subtle">{formatShortDate(event.createdAt)}</span>}
-                      </div>
-                      <p className="mt-1 text-ink-muted">{event.actor || 'Sistema'}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {(selected as SerialAppt & { calendarSyncFailed?: boolean }).calendarSyncFailed && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                La cita quedó confirmada, pero Google Calendar no pudo crear el evento. Revisa diagnósticos y vuelve a intentarlo manualmente si hace falta.
-              </div>
-            )}
-
-            {selected.appointmentType !== 'video_engagement_rings' ? (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText size={16} strokeWidth={1.5} className="text-champagne-solid shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">Identificación titular</p>
-                  <p className="text-xs text-ink-muted truncate">
-                    {selected.identificationUrl ? 'Archivo protegido' : 'Sin archivo'}
-                  </p>
-                </div>
-              </div>
-              {selected.identificationUrl && (
-                <a
-                  href={`/api/admin/id-url?path=${encodeURIComponent(selected.identificationUrl)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-champagne px-3 py-1.5 text-xs font-medium text-champagne-solid hover:bg-champagne-soft transition-colors"
-                >
-                  <ExternalLink size={13} strokeWidth={1.5} />
-                  Ver
-                </a>
-              )}
-            </div>
-            ) : (
-              <div className="rounded-xl border border-admin-line bg-admin-surface px-3 py-2.5 text-sm">
-                <p className="font-medium text-ink">Consulta por video</p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  {selected.meetingUrl ? 'El link ya está guardado para emails, calendario y página de estado.' : 'Agrega el link de videollamada en seguimiento comercial.'}
-                </p>
-              </div>
-            )}
-
-            {selected.appointmentType !== 'video_engagement_rings' && (selected.guestCount ?? 0) > 0 && (
-              <div className="pt-1">
-                <p className="h-eyebrow mb-2">Invitados ({selected.guestCount})</p>
-                <GuestsList appointmentId={selected.id} />
-              </div>
-            )}
-
-            {selected.status === 'pending' && (
-              <div className="space-y-3 pt-2 border-t border-ink-line">
-                <div>
-                  <label className="label-clean">Motivo de rechazo (opcional)</label>
-                  <Textarea
-                    value={rejectReason}
-                    onChange={e => setRejectReason(e.target.value)}
-                    placeholder="Ej: Sin disponibilidad en esa fecha"
-                    rows={3}
-                    className="mt-1"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="gold" className="flex-1" loading={deciding} onClick={() => decide('accept')}>
-                    <CheckCircle size={15} strokeWidth={1.5} /> Confirmar
-                  </Button>
-                  <Button variant="danger" className="flex-1" loading={deciding} onClick={() => decide('reject')}>
-                    <XCircle size={15} strokeWidth={1.5} /> Rechazar
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+      {/* Detail modal — componente compartido con el calendario */}
+      <AppointmentDetail
+        appointmentId={openId}
+        initialData={openInitial}
+        onClose={closeAppointment}
+        onUpdated={handleUpdated}
+      />
     </div>
   )
 }

@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server'
+import { Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '@/lib/firebase-admin'
 import { sendReservationRecovery } from '@/lib/email'
 import { mapAppointmentForEmail } from '@/lib/appointment-email'
 import { phoneDigits } from '@/lib/utils'
 import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
+import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
+
+function slotMillis(data: FirebaseFirestore.DocumentData): number | null {
+  const dt = data.slotDatetime
+  return dt instanceof Timestamp ? dt.toMillis() : null
+}
+
+/** Vigente = pendiente o confirmada, con horario en el futuro. */
+function isVigente(data: FirebaseFirestore.DocumentData, nowMs: number): boolean {
+  const status = String(data.status ?? '')
+  if (status !== 'pending' && status !== 'accepted') return false
+  const ms = slotMillis(data)
+  return ms !== null && ms > nowMs
+}
 
 export async function POST(request: Request) {
   try {
@@ -50,10 +65,46 @@ export async function POST(request: Request) {
       }
     }
 
-    for (const doc of docs) {
-      await sendReservationRecovery(mapAppointmentForEmail(doc.id, doc.data())).catch(err => {
-        console.error('Recovery email failed:', err)
-      })
+    // UN solo correo con las citas vigentes (pending/accepted futuras), no uno
+    // por cada cita del historial. El estado vigente/pasado se filtra en
+    // memoria para no exigir índices compuestos nuevos.
+    if (docs.length > 0) {
+      const nowMs = Date.now()
+      const vigentes = docs.filter(doc => isVigente(doc.data(), nowMs))
+
+      if (vigentes.length > 0) {
+        // Búsquedas por teléfono pueden mezclar correos distintos: cada correo
+        // recibe únicamente sus propias citas.
+        const byEmail = new Map<string, Appointment[]>()
+        for (const doc of vigentes) {
+          const appt = mapAppointmentForEmail(doc.id, doc.data())
+          const to = String(appt.email ?? '').trim().toLowerCase()
+          if (!to) continue
+          const list = byEmail.get(to) ?? []
+          list.push(appt)
+          byEmail.set(to, list)
+        }
+        for (const [to, appointments] of byEmail) {
+          appointments.sort((a, b) => a.slotDatetime.getTime() - b.slotDatetime.getTime())
+          await sendReservationRecovery({ to, appointments }).catch(err => {
+            console.error('Recovery email failed:', err)
+          })
+        }
+      } else {
+        // Hay historial pero ninguna cita vigente: un aviso amable al correo
+        // de la cita más reciente. La respuesta pública no revela nada.
+        const latest = docs.reduce((best, doc) => {
+          const at = slotMillis(doc.data()) ?? 0
+          const bestAt = slotMillis(best.data()) ?? 0
+          return at > bestAt ? doc : best
+        })
+        const to = String(latest.data().email ?? '').trim().toLowerCase()
+        if (to) {
+          await sendReservationRecovery({ to, appointments: [], name: String(latest.data().name ?? '') }).catch(err => {
+            console.error('Recovery email failed:', err)
+          })
+        }
+      }
     }
 
     return NextResponse.json({
