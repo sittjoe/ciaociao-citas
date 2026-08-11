@@ -122,6 +122,29 @@ export const bookingPayloadSchema = bookingFormSchema.extend({
 
 export type BookingPayloadInput = z.infer<typeof bookingPayloadSchema>
 
+/* Cita creada A MANO por el equipo, para la clienta frecuente que cierra por WhatsApp.
+   Solo pide lo mínimo —nombre, teléfono y correo— porque el acuerdo ya se hizo en el chat:
+   sin identificación (el flujo público sí la exige) y sin el brief de preferencias.
+   El horario llega de una de dos formas, nunca las dos:
+     · slotId  → un horario ya publicado y libre;
+     · date+time (hora de pared de CDMX, igual que /api/admin/slots) → cualquier hora, y el
+       servidor crea ese horario sobre la marcha.
+   La conversión a UTC se hace en el SERVIDOR con BUSINESS_TZ: si el navegador del equipo
+   estuviera en otro huso, mandar un ISO ya convertido agendaría a la hora equivocada. */
+export const manualAppointmentSchema = bookingFormSchema
+  .pick({ appointmentType: true, name: true, email: true, phone: true, notes: true })
+  .extend({
+    slotId: z.string().min(1).max(128).optional().or(z.literal('')),
+    date:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida').optional().or(z.literal('')),
+    time:   z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida').optional().or(z.literal('')),
+  })
+  .refine(v => Boolean(v.slotId) !== Boolean(v.date && v.time), {
+    message: 'Elige un horario publicado o escribe una fecha y hora, no las dos',
+    path: ['slotId'],
+  })
+
+export type ManualAppointmentInput = z.infer<typeof manualAppointmentSchema>
+
 export const adminLoginSchema = z.object({
   email: z.string().email('Email inválido').max(200),
   password: z.string().min(1, 'Contraseña requerida').max(200),

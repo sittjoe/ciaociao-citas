@@ -5,6 +5,8 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { getCommercialPriority, normalizeAppointmentType } from '@/lib/commercial'
 import { BUSINESS_TZ } from '@/lib/utils'
+import { manualAppointmentSchema } from '@/lib/schemas'
+import { createManualAppointment } from '@/lib/manual-appointment'
 
 export const dynamic = 'force-dynamic'
 
@@ -188,4 +190,54 @@ export async function GET(request: Request) {
     console.error('GET /api/admin/appointments', err)
     return NextResponse.json({ error: 'Error al obtener citas' }, { status: 500 })
   }
+}
+
+/* Alta MANUAL de una cita, para la clienta frecuente que cierra por WhatsApp: nombre,
+   teléfono y correo, sin identificación ni el brief del formulario público. Nace aceptada
+   y dispara el mismo correo de confirmación y los mismos recordatorios que una cita
+   aceptada por el flujo normal. La lógica vive en lib/manual-appointment.ts. */
+export async function POST(request: Request) {
+  const admin = await requireAdminSession()
+  if (!admin) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Solicitud inválida' }, { status: 400 })
+  }
+
+  const parsed = manualAppointmentSchema.safeParse(body)
+  if (!parsed.success) {
+    const primero = parsed.error.issues[0]
+    return NextResponse.json(
+      { error: primero?.message ?? 'Datos inválidos', issues: parsed.error.flatten() },
+      { status: 422 },
+    )
+  }
+
+  const d = parsed.data
+  const result = await createManualAppointment({
+    adminEmail:      admin.email,
+    appointmentType: d.appointmentType,
+    name:            d.name,
+    email:           d.email,
+    phone:           d.phone,
+    notes:           d.notes || '',
+    slotId:          d.slotId || undefined,
+    date:            d.date  || undefined,
+    time:            d.time  || undefined,
+  })
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
+  }
+  return NextResponse.json({
+    ok: true,
+    id: result.id,
+    confirmationCode: result.confirmationCode,
+    slotDatetime: result.slotDatetime.toISOString(),
+    ...(result.blockedDateWarning ? { blockedDateWarning: result.blockedDateWarning } : {}),
+    ...(result.calendarSyncFailed ? { calendarSyncFailed: true } : {}),
+  })
 }

@@ -11,12 +11,13 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { AlertTriangle, CheckCircle, ChevronRight, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, SlidersHorizontal, Users, FileText, MailCheck, MailQuestion, MessageCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ChevronRight, XCircle, Download, ChevronDown, ChevronUp, ChevronsUpDown, Search, SlidersHorizontal, Users, FileText, MailCheck, MailQuestion, MessageCircle, CalendarPlus } from 'lucide-react'
 import { Badge, StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { AppointmentDetail, type SerialAppointment } from './AppointmentDetail'
+import { NewAppointmentModal } from './NewAppointmentModal'
 import { formatInTimeZone } from 'date-fns-tz'
 import { formatShortDate, cn, BUSINESS_TZ } from '@/lib/utils'
 import { appointmentTypeLabels, commercialStatusLabels, engagementBriefRows, formatWhatsAppUrl } from '@/lib/commercial'
@@ -165,6 +166,7 @@ export function AppointmentTable() {
   const [loading,     setLoading]       = useState(true)
   const [error,       setError]         = useState(false)
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
+  const [nuevaAbierta, setNuevaAbierta] = useState(false)
   const [search,      setSearch]        = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [dateFrom,    setDateFrom]      = useState('')
@@ -395,6 +397,19 @@ export function AppointmentTable() {
 
   return (
     <div className="space-y-4">
+      {/* Alta manual: la clienta frecuente que cierra por WhatsApp no pasa por el
+          formulario público, pero sí necesita su correo de confirmación. */}
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setNuevaAbierta(true)} className="min-h-[44px]">
+          <CalendarPlus size={15} strokeWidth={1.5} /> Nueva cita
+        </Button>
+      </div>
+      <NewAppointmentModal
+        open={nuevaAbierta}
+        onClose={() => setNuevaAbierta(false)}
+        onCreated={() => fetchAppointments(true)}
+      />
+
       {/* Quick filter chips — un tap, scrolleable en móvil */}
       <div
         role="group"
