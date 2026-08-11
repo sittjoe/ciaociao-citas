@@ -58,8 +58,13 @@ export async function createManualAppointment(opts: {
   /** Hora de pared de CDMX. Excluyente con slotId. */
   date?: string
   time?: string
+  /** Solo para video consulta: el enlace se guarda al crear, no después (ver schemas.ts). */
+  meetingUrl?: string
+  meetingInstructions?: string
 }): Promise<ManualAppointmentOutcome> {
-  const { adminEmail, appointmentType, name, email, phone, notes, slotId, date, time } = opts
+  const { adminEmail, appointmentType, name, email, phone, notes, slotId, date, time,
+          meetingUrl, meetingInstructions } = opts
+  const esVideo = appointmentType === 'video_engagement_rings'
 
   // Un hold vencido de una reserva pública abandonada no debe estorbar al equipo.
   await releaseExpiredHolds().catch(() => {})
@@ -82,6 +87,11 @@ export async function createManualAppointment(opts: {
       /* ---------- TODAS LAS LECTURAS PRIMERO ----------
          Firestore prohíbe leer después de escribir dentro de una transacción, y esa
          regla ya tumbó /api/slots en producción una vez. No mover nada de aquí abajo. */
+      // Firestore reintenta las transacciones solo: todo lo que este cuerpo escriba
+      // en variables de FUERA tiene que recalcularse desde cero en cada intento, o el
+      // segundo intento arrastra la conclusión del primero.
+      blockedDateWarning = undefined
+
       const usaHorarioPublicado = Boolean(slotId)
       let slotRef: FirebaseFirestore.DocumentReference
       // ¿el horario ya existe como documento, o hay que crearlo?
@@ -102,21 +112,34 @@ export async function createManualAppointment(opts: {
         if (isNaN(dt.getTime())) throw new Error('BAD_DATETIME')
         slotDatetime = dt
 
-        /* Si ya hay un horario publicado a esa misma hora, se REUSA en vez de crear otro.
-           Creando uno nuevo a ciegas quedaban dos documentos para el mismo minuto: el
-           público seguiría viendo el viejo como libre, llenaría todo el formulario y hasta
-           el final chocaría con el candado. Mejor ocuparlo desde ya. */
-        const mismaHora = await tx.get(
-          adminDb.collection('slots')
-            .where('datetime', '==', Timestamp.fromDate(dt))
-            .limit(1),
-        )
-        if (mismaHora.empty) {
-          slotRef = adminDb.collection('slots').doc()
-          horarioNuevo = true
+        /* El id del horario es el epoch ms de su datetime. NO es cosmético: el generador
+           semanal (lib/slot-generator, detrás del botón «Publicar semanas») deduplica
+           SOLO por id, no por una consulta de datetime. Con un id aleatorio, la siguiente
+           publicación creaba un SEGUNDO documento para ese mismo minuto marcado libre: el
+           público lo veía disponible, llenaba todo el formulario, subía su identificación
+           y hasta el final chocaba — y el duplicado se quedaba ahí para la siguiente. */
+        const canonicalRef  = adminDb.collection('slots').doc(String(dt.getTime()))
+        const canonicalSnap = await tx.get(canonicalRef)
+
+        if (canonicalSnap.exists) {
+          slotRef = canonicalRef
+          if (!canonicalSnap.data()!.available) throw new Error('SLOT_UNAVAILABLE')
         } else {
-          slotRef = mismaHora.docs[0].ref
-          if (!mismaHora.docs[0].data().available) throw new Error('SLOT_UNAVAILABLE')
+          /* Si ya hay un horario a esa misma hora con otro id (los creados por esta
+             misma función antes del fix), se REUSA en vez de crear otro. Creando uno
+             nuevo a ciegas quedaban dos documentos para el mismo minuto. */
+          const mismaHora = await tx.get(
+            adminDb.collection('slots')
+              .where('datetime', '==', Timestamp.fromDate(dt))
+              .limit(1),
+          )
+          if (mismaHora.empty) {
+            slotRef = canonicalRef
+            horarioNuevo = true
+          } else {
+            slotRef = mismaHora.docs[0].ref
+            if (!mismaHora.docs[0].data().available) throw new Error('SLOT_UNAVAILABLE')
+          }
         }
       }
       slotRefId = slotRef.id
@@ -173,6 +196,10 @@ export async function createManualAppointment(opts: {
         budgetRange:  '',
         lookingFor:   '',
         whatsapp:     true,          // por definición: la clienta escribió por WhatsApp
+        ...(esVideo ? {
+          meetingUrl:          (meetingUrl ?? '').trim() || null,
+          meetingInstructions: sanitize(meetingInstructions ?? ''),
+        } : {}),
         identificationUrl: null,     // a propósito: se omite en el alta manual
         status:            'accepted',
         confirmationCode,
@@ -199,7 +226,9 @@ export async function createManualAppointment(opts: {
     if (msg === 'SLOT_TAKEN')         return { ok: false, status: 409, error: 'Ya hay una cita a esa hora.' }
     // El candado por minuto (tx.create) truena con ALREADY_EXISTS cuando otra cita
     // ganó la carrera; para quien opera es lo mismo que "ya hay una cita a esa hora".
-    if (/ALREADY_EXISTS|already exists/i.test(msg)) {
+    // Se mira el CÓDIGO gRPC (6 = ALREADY_EXISTS) además del texto, igual que
+    // /api/booking: el mensaje cambia entre versiones del SDK, el código no.
+    if ((err as { code?: unknown })?.code === 6 || /ALREADY_EXISTS|already exists/i.test(msg)) {
       return { ok: false, status: 409, error: 'Ya hay una cita a esa hora.' }
     }
     console.error('createManualAppointment', err)
@@ -220,6 +249,10 @@ export async function createManualAppointment(opts: {
     reminder24Sent: false,
     reminder2Sent: false,
     createdAt: Timestamp.now(),
+    ...(esVideo ? {
+      meetingUrl:          (meetingUrl ?? '').trim() || null,
+      meetingInstructions: sanitize(meetingInstructions ?? ''),
+    } : {}),
   }, 'accepted')
 
   /* Todo lo que sigue es "mejor esfuerzo": la cita YA existe y es válida. Si el correo o

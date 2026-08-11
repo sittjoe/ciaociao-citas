@@ -136,7 +136,19 @@ export const manualAppointmentSchema = bookingFormSchema
   .extend({
     slotId: z.string().min(1).max(128).optional().or(z.literal('')),
     date:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida').optional().or(z.literal('')),
-    time:   z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida').optional().or(z.literal('')),
+    /* Hora 00:00–23:59 de verdad (misma regla que lib/slot-schedule). Con `\d{2}:\d{2}`
+       se colaba «24:00», que NO truena: fromZonedTime la lee como las 00:00 de ESE MISMO
+       día y la cita quedaba 24 horas antes de lo escrito, sin un solo aviso. */
+    time:   z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida').optional().or(z.literal('')),
+    /* Enlace de la videollamada. Se pide AQUÍ, al crear, no después: los recordatorios de
+       24h y 2h se programan en Resend en este instante y el texto queda congelado dentro.
+       Si se agrega el link más tarde desde Seguimiento, esos correos ya salieron con
+       «pendiente por enviar» y no se reprograman. Mismas reglas que appointmentDecisionSchema. */
+    meetingUrl: z.string().url('URL inválida').max(500)
+      .refine(v => { try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:' } catch { return false } },
+        'La URL debe empezar con http:// o https://')
+      .optional().or(z.literal('')),
+    meetingInstructions: z.string().max(700, 'Máximo 700 caracteres').optional().or(z.literal('')),
   })
   .refine(v => Boolean(v.slotId) !== Boolean(v.date && v.time), {
     message: 'Elige un horario publicado o escribe una fecha y hora, no las dos',

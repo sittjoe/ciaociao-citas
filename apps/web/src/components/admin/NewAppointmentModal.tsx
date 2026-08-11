@@ -38,6 +38,7 @@ export function NewAppointmentModal({ open, onClose, onCreated }: Props) {
   const [telefono, setTelefono] = useState('')
   const [correo, setCorreo]   = useState('')
   const [nota, setNota]       = useState('')
+  const [enlace, setEnlace]   = useState('')
 
   // Modo del horario: uno de los publicados, o una hora escrita a mano.
   const [modo, setModo]       = useState<'publicado' | 'libre'>('publicado')
@@ -47,10 +48,15 @@ export function NewAppointmentModal({ open, onClose, onCreated }: Props) {
 
   const [slots, setSlots]     = useState<SlotLibre[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
+  /** La lista de horarios ya terminó de cargar al menos una vez (no es lo mismo que
+      «no está cargando»: al abrir, ambas cosas son falsas y la lista está vacía). */
+  const [slotsCargados, setSlotsCargados] = useState(false)
+  /** Se incrementa para forzar una recarga de la lista (p. ej. tras un choque). */
+  const [recarga, setRecarga] = useState(0)
   const [guardando, setGuardando] = useState(false)
 
   const limpiar = useCallback(() => {
-    setNombre(''); setTelefono(''); setCorreo(''); setNota('')
+    setNombre(''); setTelefono(''); setCorreo(''); setNota(''); setEnlace('')
     setSlotId(''); setFecha(''); setHora(''); setModo('publicado'); setTipo('showroom')
   }, [])
 
@@ -60,6 +66,7 @@ export function NewAppointmentModal({ open, onClose, onCreated }: Props) {
     if (!open) return
     let vigente = true
     setCargandoSlots(true)
+    setSlotsCargados(false)
     fetch('/api/admin/slots', { credentials: 'include' })
       .then(r => r.ok ? r.json() : Promise.reject(new Error('slots')))
       .then((d: { slots?: SlotLibre[] }) => {
@@ -69,15 +76,20 @@ export function NewAppointmentModal({ open, onClose, onCreated }: Props) {
         setSlotId(prev => (libres.some(s => s.id === prev) ? prev : ''))
       })
       .catch(() => { if (vigente) setSlots([]) })
-      .finally(() => { if (vigente) setCargandoSlots(false) })
+      .finally(() => { if (vigente) { setCargandoSlots(false); setSlotsCargados(true) } })
     return () => { vigente = false }
-  }, [open, tipo])
+  }, [open, tipo, recarga])
 
   // Si no hay ningún horario publicado libre, no tiene caso mostrar una lista vacía:
-  // se pasa solo al modo de hora escrita a mano.
+  // se pasa solo al modo de hora escrita a mano. Se espera a que la carga TERMINE:
+  // mirando solo `!cargandoSlots` esto corría en el mismo commit que dispara el fetch
+  // —lista vacía todavía— y el modal se abría SIEMPRE en «Otra hora», aun con agenda
+  // publicada llena, empujando cada alta al camino que crea horarios nuevos.
   useEffect(() => {
-    if (open && !cargandoSlots && slots.length === 0) setModo('libre')
-  }, [open, cargandoSlots, slots.length])
+    if (open && slotsCargados && slots.length === 0) setModo('libre')
+  }, [open, slotsCargados, slots.length])
+
+  const esVideo = tipo === 'video_engagement_rings'
 
   const cerrar = () => { if (!guardando) { limpiar(); onClose() } }
 
@@ -100,12 +112,20 @@ export function NewAppointmentModal({ open, onClose, onCreated }: Props) {
           email: correo.trim(),
           phone: telefono.trim(),
           notes: nota.trim(),
+          ...(esVideo && enlace.trim() ? { meetingUrl: enlace.trim() } : {}),
           ...(modo === 'publicado' ? { slotId } : { date: fecha, time: hora }),
         }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(data?.error ?? 'No se pudo crear la cita')
+        // 404/409 = la lista de horarios que se ve ya no es la que hay en la agenda
+        // (alguien reservó o borró ese horario mientras se llenaba el formulario).
+        // Se suelta la selección muerta y se recarga, o se reintentaría igual.
+        if ((res.status === 409 || res.status === 404) && modo === 'publicado') {
+          setSlotId('')
+          setRecarga(n => n + 1)
+        }
         return
       }
       toast.success(`Cita confirmada · código ${data.confirmationCode}. Ya le llegó su correo.`)
@@ -254,6 +274,25 @@ export function NewAppointmentModal({ open, onClose, onCreated }: Props) {
             </div>
           )}
         </fieldset>
+
+        {/* El enlace se pide AL CREAR, no después: los recordatorios de 24h y 2h se
+            programan en este instante y su texto queda congelado. Si se agrega más tarde,
+            esos correos ya salieron diciendo «pendiente por enviar». */}
+        {esVideo && (
+          <div>
+            <label htmlFor="na-enlace" className="label-clean">Enlace de la videollamada</label>
+            <input
+              id="na-enlace" type="url" value={enlace} onChange={e => setEnlace(e.target.value)}
+              maxLength={500} inputMode="url" autoComplete="off"
+              placeholder="https://meet.google.com/..."
+              className="input-clean mt-1"
+            />
+            <p className="mt-1 text-xs text-ink-subtle">
+              Si lo dejas vacío, sus recordatorios de 24 y 2 horas antes dirán «pendiente por
+              enviar» aunque después agregues el enlace: esos correos se programan ahora.
+            </p>
+          </div>
+        )}
 
         <div>
           <label htmlFor="na-nota" className="label-clean">Nota (opcional)</label>

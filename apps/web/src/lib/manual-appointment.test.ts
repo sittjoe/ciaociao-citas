@@ -63,6 +63,21 @@ describe('manualAppointmentSchema: el horario llega de una forma o de la otra, n
     expect(manualAppointmentSchema.safeParse({ ...base, slotId: 'x', notes: '' }).success).toBe(true)
     expect(manualAppointmentSchema.safeParse({ ...base, slotId: 'x', notes: 'a'.repeat(501) }).success).toBe(false)
   })
+
+  /* «24:00» pasaba el filtro y NO truena al convertirse: fromZonedTime la lee como las
+     00:00 de ESE MISMO día, así que la cita quedaba 24 horas antes de lo escrito y nadie
+     se enteraba hasta que la clienta llegara el día equivocado. Debe rechazarse de raíz. */
+  it('rechaza horas que no existen en un reloj de 24 horas', () => {
+    for (const time of ['24:00', '25:30', '10:60', '99:99', '7:30', '073:0']) {
+      expect(manualAppointmentSchema.safeParse({ ...base, date: '2026-12-24', time }).success).toBe(false)
+    }
+  })
+
+  it('acepta los bordes reales del reloj', () => {
+    for (const time of ['00:00', '09:05', '13:00', '23:59']) {
+      expect(manualAppointmentSchema.safeParse({ ...base, date: '2026-12-24', time }).success).toBe(true)
+    }
+  })
 })
 
 describe('la hora escrita se interpreta en el huso de la casa, no en el del navegador', () => {
@@ -73,9 +88,22 @@ describe('la hora escrita se interpreta en el huso de la casa, no en el del nave
   })
 
   it('ida y vuelta: lo que el equipo escribe es lo que la clienta ve en su correo', () => {
-    for (const [fecha, hora] of [['2026-12-24', '17:30'], ['2026-06-15', '09:00'], ['2026-01-02', '23:45']]) {
+    // Bordes: medianoche, último minuto del día, cambio de año, y las fechas en que
+    // EEUU mueve su reloj (México ya no lo mueve desde 2022, así que no debe pasar nada).
+    for (const [fecha, hora] of [
+      ['2026-12-24', '17:30'], ['2026-06-15', '09:00'], ['2026-01-02', '23:45'],
+      ['2026-08-11', '00:00'], ['2026-12-31', '23:59'], ['2027-01-01', '00:00'],
+      ['2026-03-08', '02:30'], ['2026-11-01', '01:30'], ['2026-04-05', '02:30'],
+    ]) {
       const dt = fromZonedTime(`${fecha}T${hora}:00`, BUSINESS_TZ)
+      expect(Number.isNaN(dt.getTime())).toBe(false)
       expect(formatInTimeZone(dt, BUSINESS_TZ, 'yyyy-MM-dd HH:mm')).toBe(`${fecha} ${hora}`)
     }
+  })
+
+  it('una fecha que no existe se detecta, no se agenda en silencio', () => {
+    // El servidor lo traduce a BAD_DATETIME → 422 «Fecha u hora inválida».
+    expect(Number.isNaN(fromZonedTime('2026-02-30T10:00:00', BUSINESS_TZ).getTime())).toBe(true)
+    expect(Number.isNaN(fromZonedTime('2026-13-01T10:00:00', BUSINESS_TZ).getTime())).toBe(true)
   })
 })

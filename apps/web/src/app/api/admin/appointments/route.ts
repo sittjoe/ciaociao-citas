@@ -227,6 +227,8 @@ export async function POST(request: Request) {
     slotId:          d.slotId || undefined,
     date:            d.date  || undefined,
     time:            d.time  || undefined,
+    meetingUrl:          d.meetingUrl || undefined,
+    meetingInstructions: d.meetingInstructions || undefined,
   })
 
   if (!result.ok) {
