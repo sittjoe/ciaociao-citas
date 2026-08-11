@@ -3,6 +3,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { deleteAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendCancellationEmail, cancelScheduledReminderEmails } from '@/lib/email'
+import { liberarSlotDeCita } from '@/lib/slot-release'
 import { releaseSlotLock } from '@/lib/slot-locks'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
@@ -93,11 +94,7 @@ export async function POST(
         scheduledEmails: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       })
-      tx.update(slotRef, {
-        available: true,
-        heldUntil: null,
-        bookedBy:  null,
-      })
+      liberarSlotDeCita(tx, slotRef, freshData)
       releaseSlotLock(tx, freshData.slotDatetime as Timestamp)
     })
 

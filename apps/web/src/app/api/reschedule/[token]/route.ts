@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendRescheduleNotice, sendCalendarError, syncScheduledReminderEmails, cancelScheduledReminderEmails } from '@/lib/email'
 import { createSlotLock, releaseSlotLock, slotLockRef } from '@/lib/slot-locks'
+import { liberarSlotDeCita } from '@/lib/slot-release'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
 import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
@@ -110,11 +111,13 @@ export async function POST(
       releaseSlotLock(tx, oldDatetime)
       createSlotLock(tx, newDatetimeTs, doc.id)
       if (oldSlotSnap.exists) {
-        tx.update(oldSlotRef, { available: true, bookedBy: null, heldUntil: null })
+        liberarSlotDeCita(tx, oldSlotRef, apptData)
       }
       tx.update(newSlotRef, { available: false, bookedBy: doc.id, heldUntil: null })
 
       tx.update(apptRef, {
+        // Ver la nota del reagendado del admin: el horario nuevo es publicado.
+        slotCreatedManually: false,
         slotId:       newSlotId,
         slotDatetime: newDatetimeTs,
         updatedAt:    FieldValue.serverTimestamp(),

@@ -212,6 +212,10 @@ export async function createManualAppointment(opts: {
         decidedBy:         adminEmail,
         decidedAt:         FieldValue.serverTimestamp(),
         createdVia:        'manual_admin',
+        /* Este horario no existía: lo creó esta alta. Al cancelar hay que BORRARLO, no
+           devolverlo al calendario público (ver lib/slot-release.ts). Si la cita usó un
+           horario ya publicado, la marca va en false y el horario se libera normal. */
+        slotCreatedManually: horarioNuevo,
         createdAt:         FieldValue.serverTimestamp(),
         updatedAt:         FieldValue.serverTimestamp(),
       })

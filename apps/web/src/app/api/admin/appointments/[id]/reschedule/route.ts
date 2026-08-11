@@ -1,6 +1,7 @@
 import { NextResponse, after } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { liberarSlotDeCita } from '@/lib/slot-release'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { rescheduleSchema } from '@/lib/schemas'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
@@ -66,12 +67,15 @@ export async function POST(
       // Swap slots
       releaseSlotLock(tx, oldDatetime)
       createSlotLock(tx, newSlotData.datetime as Timestamp, id)
-      tx.update(oldSlotRef, { available: true, bookedBy: null, heldUntil: null })
+      liberarSlotDeCita(tx, oldSlotRef, apptData)
       tx.update(newSlotRef, { available: false, bookedBy: id, heldUntil: null })
 
       // Update appointment
       previousScheduledEmails = apptData.scheduledEmails ?? null
       tx.update(apptRef, {
+        // El horario nuevo sale de la agenda publicada: la marca del alta manual se apaga,
+        // o una cancelacion posterior borraria un horario legitimo (ver lib/slot-release.ts).
+        slotCreatedManually: false,
         slotId:       newSlotId,
         slotDatetime: newSlotData.datetime,
         updatedAt:    FieldValue.serverTimestamp(),
