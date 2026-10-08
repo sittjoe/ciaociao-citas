@@ -5,32 +5,34 @@ import { es } from 'date-fns/locale'
 import { adminDb } from '@/lib/firebase-admin'
 import { BUSINESS_TZ } from '@/lib/utils'
 import { normalizeAppointmentType } from '@/lib/commercial'
-import { TodayList, type TodayAppointment } from '@/components/admin/TodayList'
+import { nextDayKeys } from '@/lib/agenda'
+import { AgendaBoard, type AgendaAppointment } from '@/components/admin/AgendaBoard'
+import { PendingInbox } from '@/components/admin/PendingInbox'
 
 export const dynamic  = 'force-dynamic'
-export const metadata: Metadata = { title: 'Hoy' }
+export const metadata: Metadata = { title: 'Agenda' }
 
-async function getTodayAppointments(): Promise<{ accepted: TodayAppointment[]; pending: TodayAppointment[]; error: boolean }> {
-  // Rango del día en CDMX (mismo criterio que acceptedToday del dashboard,
-  // pero anclado a la zona de negocio en lugar del reloj del servidor).
-  const now      = new Date()
-  const todayKey = formatInTimeZone(now, BUSINESS_TZ, 'yyyy-MM-dd')
-  const dayStart = fromZonedTime(`${todayKey}T00:00:00`, BUSINESS_TZ)
-  const nextKey  = formatInTimeZone(new Date(dayStart.getTime() + 36 * 60 * 60 * 1000), BUSINESS_TZ, 'yyyy-MM-dd')
-  const dayEnd   = fromZonedTime(`${nextKey}T00:00:00`, BUSINESS_TZ)
+const AGENDA_DAYS = 7
+
+async function getWeekAppointments(dayKeys: string[]): Promise<{ items: AgendaAppointment[]; error: boolean }> {
+  // Rango en días de CDMX (no del reloj del servidor): de hoy 00:00 al
+  // inicio del día siguiente al último de la tira.
+  const rangeStart = fromZonedTime(`${dayKeys[0]}T00:00:00`, BUSINESS_TZ)
+  const [afterLast] = nextDayKeys(dayKeys[dayKeys.length - 1], 2).slice(1)
+  const rangeEnd = fromZonedTime(`${afterLast}T00:00:00`, BUSINESS_TZ)
 
   try {
-    // Misma forma de query que el dashboard (status in + rango de slotDatetime
-    // + orderBy): reusa el índice compuesto ya desplegado. El split
-    // aceptadas/pendientes se hace en memoria para no requerir índices nuevos.
+    // Misma forma de query que antes (status in + rango de slotDatetime +
+    // orderBy): reusa el índice compuesto ya desplegado, solo con un rango
+    // más amplio.
     const snap = await adminDb.collection('appointments')
       .where('status', 'in', ['pending', 'accepted'])
-      .where('slotDatetime', '>=', Timestamp.fromDate(dayStart))
-      .where('slotDatetime', '<',  Timestamp.fromDate(dayEnd))
+      .where('slotDatetime', '>=', Timestamp.fromDate(rangeStart))
+      .where('slotDatetime', '<',  Timestamp.fromDate(rangeEnd))
       .orderBy('slotDatetime')
       .get()
 
-    const all = snap.docs.map(doc => {
+    const items = snap.docs.map(doc => {
       const d = doc.data()
       return {
         id:                doc.id,
@@ -45,42 +47,44 @@ async function getTodayAppointments(): Promise<{ accepted: TodayAppointment[]; p
         guestsAllVerified: d.guestsAllVerified === true,
         hasMeetingUrl:     Boolean(String(d.meetingUrl ?? '').trim()),
         attended:          typeof d.attended === 'boolean' ? d.attended : null,
-      } satisfies TodayAppointment
+        productType:       String(d.productType ?? ''),
+        budgetRange:       String(d.budgetRange ?? ''),
+      } satisfies AgendaAppointment
     })
-
-    return {
-      accepted: all.filter(a => a.status === 'accepted'),
-      pending:  all.filter(a => a.status === 'pending'),
-      error:    false,
-    }
+    return { items, error: false }
   } catch (err) {
-    // Un fallo de la query no debe tumbar la hoja del día completa.
-    console.error('getTodayAppointments failed, rendering empty list:', err)
-    return { accepted: [], pending: [], error: true }
+    // Un fallo de la query no debe tumbar la agenda completa.
+    console.error('getWeekAppointments failed, rendering empty agenda:', err)
+    return { items: [], error: true }
   }
 }
 
-export default async function HoyPage() {
-  const { accepted, pending, error } = await getTodayAppointments()
-  const dayLabel = formatInTimeZone(new Date(), BUSINESS_TZ, "EEEE d 'de' MMMM", { locale: es })
-  const dayTitle = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1)
+export default async function AgendaPage() {
+  const now = new Date()
+  const todayKey = formatInTimeZone(now, BUSINESS_TZ, 'yyyy-MM-dd')
+  const dayKeys = nextDayKeys(todayKey, AGENDA_DAYS)
+  const { items, error } = await getWeekAppointments(dayKeys)
+  const dayLabel = formatInTimeZone(now, BUSINESS_TZ, "EEEE d 'de' MMMM", { locale: es })
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="h-eyebrow mb-2">Operación</p>
-        <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Hoy</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          <span className="text-ink">{dayTitle}</span>
-          {!error && (
-            <>
-              {' · '}{accepted.length} confirmada{accepted.length === 1 ? '' : 's'}
-              {pending.length > 0 && ` · ${pending.length} por decidir`}
-            </>
-          )}
-        </p>
+    <div className="space-y-8">
+      <header>
+        <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Agenda</h1>
+        <p className="mt-1 text-sm text-ink-muted">{dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1)} · próximos {AGENDA_DAYS} días</p>
+      </header>
+
+      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] xl:items-start">
+        <AgendaBoard
+          appointments={items}
+          dayKeys={dayKeys}
+          todayKey={todayKey}
+          serverNowMs={now.getTime()}
+          error={error}
+        />
+        <div className="order-first xl:order-none xl:sticky xl:top-8">
+          <PendingInbox serverNowMs={now.getTime()} />
+        </div>
       </div>
-      <TodayList accepted={accepted} pending={pending} error={error} />
     </div>
   )
 }

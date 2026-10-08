@@ -1,39 +1,32 @@
-import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 
-// Esqueleto de la hoja del día: refleja el encabezado y dos tarjetas de cita
-// mientras el servidor trae las citas de hoy.
-export default function HoyLoading() {
+// Esqueleto de la Agenda: encabezado, tira de la semana y dos citas en la
+// línea de tiempo, con la bandeja al lado (arriba en móvil).
+export default function AgendaLoading() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="space-y-2">
-        <Skeleton className="h-3 w-20 rounded-full" />
-        <Skeleton className="h-8 w-28 rounded-lg" />
-        <Skeleton className="h-4 w-64 rounded-lg" />
+        <Skeleton className="h-8 w-32 rounded-lg" />
+        <Skeleton className="h-4 w-56 rounded-lg" />
       </div>
-
-      <section className="space-y-3">
-        <Skeleton className="h-3 w-24 rounded-full" />
-        {[0, 1].map(i => (
-          <Card key={i} variant="admin" className="space-y-3 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-2">
-                <Skeleton className="h-6 w-20 rounded-lg" />
-                <Skeleton className="h-4 w-32 rounded-lg" />
-              </div>
-              <Skeleton className="h-5 w-16 rounded-full" />
+      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
+        <div className="space-y-5">
+          <div className="flex gap-1.5">
+            {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-16 flex-1 rounded-xl" />)}
+          </div>
+          <Skeleton className="h-7 w-24 rounded-lg" />
+          {[0, 1].map(i => (
+            <div key={i} className="grid grid-cols-[4.5rem_1fr] gap-3">
+              <Skeleton className="ml-auto mt-3 h-6 w-14 rounded-lg" />
+              <Skeleton className="h-[124px] rounded-2xl" />
             </div>
-            <div className="flex gap-1.5">
-              <Skeleton className="h-6 w-28 rounded-full" />
-              <Skeleton className="h-6 w-24 rounded-full" />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Skeleton className="h-11 flex-1 rounded-xl" />
-              <Skeleton className="h-11 flex-1 rounded-xl" />
-            </div>
-          </Card>
-        ))}
-      </section>
+          ))}
+        </div>
+        <div className="order-first space-y-3 xl:order-none">
+          <Skeleton className="h-7 w-36 rounded-lg" />
+          <Skeleton className="h-[132px] rounded-2xl" />
+        </div>
+      </div>
     </div>
   )
 }

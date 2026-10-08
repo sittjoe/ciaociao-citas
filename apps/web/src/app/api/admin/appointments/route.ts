@@ -178,6 +178,9 @@ export async function GET(request: Request) {
         attended:         d.attended ?? null,
         attendedAt:       d.attendedAt ? (d.attendedAt as Timestamp)?.toDate().toISOString() : null,
         createdAt:        (d.createdAt as Timestamp)?.toDate().toISOString(),
+        // Aviso al equipo de una solicitud >20 min sin atender (lib/holds.ts).
+        // Campo opcional: las citas viejas no lo tienen y llegan como null.
+        pendingAlertSentAt: d.pendingAlertSentAt ? (d.pendingAlertSentAt as Timestamp)?.toDate().toISOString() : null,
         updatedAt:        (d.updatedAt as Timestamp)?.toDate().toISOString(),
         identificationUrl: d.identificationUrl,
         guestCount:          d.guestCount ?? 0,
