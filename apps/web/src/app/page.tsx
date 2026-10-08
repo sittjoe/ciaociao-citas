@@ -42,7 +42,7 @@ export default function HomePage() {
                   <LightSweep delay={0.4 + i * 0.09} />
                   <item.Icon size={18} strokeWidth={1.5} className="mt-0.5 text-champagne" />
                   <div>
-                  <p className="text-[0.6rem] font-semibold uppercase tracking-eyebrow text-champagne">
+                  <p className="text-[0.6rem] font-semibold uppercase tracking-eyebrow text-champagne-deep">
                     {item.eyebrow}
                   </p>
                   <p className="mt-2 text-sm leading-6 text-ink-muted">{item.copy}</p>
@@ -59,7 +59,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl lg:grid lg:grid-cols-[340px_1fr] lg:gap-20 lg:items-start">
 
             <DepthReveal className="text-center lg:text-left mb-10 lg:mb-0 lg:sticky lg:top-20">
-              <p className="mb-3 text-[0.6rem] font-semibold uppercase tracking-display-eyebrow text-champagne">
+              <p className="mb-3 text-[0.6rem] font-semibold uppercase tracking-display-eyebrow text-champagne-deep">
                 Reserva en minutos
               </p>
               <h2 className="font-serif font-light text-4xl tracking-tight text-ink sm:text-5xl mb-6">

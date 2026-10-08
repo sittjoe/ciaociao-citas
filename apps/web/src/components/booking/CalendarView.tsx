@@ -190,7 +190,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
               className={cn(
                 'cal-day-3d relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-colors duration-150',
                 isPast && 'opacity-30 cursor-not-allowed',
-                !isPast && !hasSlots && 'text-ink-subtle cursor-not-allowed',
+                !isPast && !hasSlots && 'text-ink-subtle/60 cursor-not-allowed',
                 !isPast && hasSlots && !isSel && [
                   'text-ink cursor-pointer',
                   'hover:bg-champagne-tint',

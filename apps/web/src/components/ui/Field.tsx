@@ -46,7 +46,7 @@ export function Field({ label, error, hint, required, children, className }: Fie
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2 }}
-            className="text-xs text-red-500"
+            className="text-xs text-red-700"
           >
             {error}
           </motion.p>

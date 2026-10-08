@@ -17,7 +17,7 @@ const config: Config = {
         ink: {
           DEFAULT: 'oklch(0.18 0.009 73 / <alpha-value>)',
           muted:   'oklch(0.47 0.014 73 / <alpha-value>)',
-          subtle:  'oklch(0.68 0.011 73 / <alpha-value>)',
+          subtle:  'oklch(0.54 0.011 73 / <alpha-value>)', // ≥4.5:1 sobre porcelain, cream y champagne-tint,
           line:    'oklch(0.88 0.026 80 / <alpha-value>)',
         },
         cream: {

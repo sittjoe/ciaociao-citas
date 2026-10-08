@@ -71,7 +71,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="font-serif text-3xl tracking-widest text-ink"><TitleReveal text="CIAO CIAO" /></h1>
-          <p className="mt-1.5 text-[11px] tracking-[3px] uppercase text-champagne">Joyería fina · Showroom privado</p>
+          <p className="mt-1.5 text-[11px] tracking-[3px] uppercase text-champagne-deep">Joyería fina · Showroom privado</p>
         </div>
 
         {(result.state === 'confirmed' || result.state === 'already') && (
@@ -115,7 +115,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
           <Card variant="soft" className="p-6 text-center">
             <p className="font-serif text-xl text-ink mb-2">No es posible confirmar</p>
             <p className="text-sm text-ink-muted mb-5">{result.reason}</p>
-            <a href="/" className="text-sm font-medium text-champagne hover:text-champagne-deep transition-colors">
+            <a href="/" className="text-sm font-medium text-champagne-deep hover:text-ink transition-colors">
               Agendar nueva cita →
             </a>
           </Card>
@@ -131,7 +131,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
                 ? 'Este enlace no es válido o ya expiró.'
                 : 'Ocurrió un error. Por favor intenta de nuevo o contáctanos.'}
             </p>
-            <a href="/" className="text-sm font-medium text-champagne hover:text-champagne-deep transition-colors">
+            <a href="/" className="text-sm font-medium text-champagne-deep hover:text-ink transition-colors">
               Ir al inicio →
             </a>
           </Card>

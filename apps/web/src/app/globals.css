@@ -17,7 +17,7 @@
   --showroom-stone: oklch(0.89 0.024 78);
   --ink:            oklch(0.18 0.009 73);
   --ink-muted:      oklch(0.47 0.014 73);
-  --ink-subtle:     oklch(0.68 0.011 73);
+  --ink-subtle:     oklch(0.54 0.011 73); /* ≥4.5:1 sobre porcelain, cream y champagne-tint */
   --ink-line:       oklch(0.88 0.026 80);
   --champagne:      oklch(0.66 0.083 80);
   /* solid: lightest champagne that passes WCAG 4.5:1 under white text */
