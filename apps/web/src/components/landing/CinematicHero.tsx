@@ -51,13 +51,13 @@ export function CinematicHero() {
             />
             <a
               href="#booking"
-              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-eyebrow text-porcelain/78 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
+              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
             >
               Reservar
             </a>
             <a
               href="/reserva"
-              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-eyebrow text-porcelain/78 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
+              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
             >
               Ver mi reserva
             </a>

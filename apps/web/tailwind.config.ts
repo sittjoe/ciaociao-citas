@@ -1,38 +1,40 @@
 import type { Config } from 'tailwindcss'
 
+// Los colores llevan <alpha-value> para que los modificadores de opacidad
+// (bg-champagne/40, border-ink-line/80…) generen CSS; sin él Tailwind los omite.
 const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
         champagne: {
-          DEFAULT: 'oklch(0.66 0.083 80)',
-          solid:   'oklch(0.49 0.068 78)',
-          deep:    'oklch(0.45 0.062 77)',
-          soft:    'oklch(0.90 0.041 82)',
-          tint:    'oklch(0.97 0.018 82)',
+          DEFAULT: 'oklch(0.66 0.083 80 / <alpha-value>)',
+          solid:   'oklch(0.49 0.068 78 / <alpha-value>)',
+          deep:    'oklch(0.45 0.062 77 / <alpha-value>)',
+          soft:    'oklch(0.90 0.041 82 / <alpha-value>)',
+          tint:    'oklch(0.97 0.018 82 / <alpha-value>)',
         },
         ink: {
-          DEFAULT: 'oklch(0.18 0.009 73)',
-          muted:   'oklch(0.47 0.014 73)',
-          subtle:  'oklch(0.68 0.011 73)',
-          line:    'oklch(0.88 0.026 80)',
+          DEFAULT: 'oklch(0.18 0.009 73 / <alpha-value>)',
+          muted:   'oklch(0.47 0.014 73 / <alpha-value>)',
+          subtle:  'oklch(0.68 0.011 73 / <alpha-value>)',
+          line:    'oklch(0.88 0.026 80 / <alpha-value>)',
         },
         cream: {
-          DEFAULT: 'oklch(0.982 0.008 86)',
-          soft:    'oklch(0.95 0.014 84)',
+          DEFAULT: 'oklch(0.982 0.008 86 / <alpha-value>)',
+          soft:    'oklch(0.95 0.014 84 / <alpha-value>)',
         },
-        vellum: '#F7F2E8',
-        porcelain: 'oklch(0.992 0.006 86)',
+        vellum: 'rgb(247 242 232 / <alpha-value>)', // #F7F2E8
+        porcelain: 'oklch(0.992 0.006 86 / <alpha-value>)',
         showroom: {
-          ink: 'oklch(0.145 0.017 66)',
-          velvet: 'oklch(0.34 0.038 52)',
-          stone: 'oklch(0.89 0.024 78)',
+          ink: 'oklch(0.145 0.017 66 / <alpha-value>)',
+          velvet: 'oklch(0.34 0.038 52 / <alpha-value>)',
+          stone: 'oklch(0.89 0.024 78 / <alpha-value>)',
         },
         admin: {
-          surface: 'oklch(0.977 0.006 82)',
-          panel:   'oklch(0.991 0.004 82)',
-          line:    'oklch(0.89 0.018 78)',
+          surface: 'oklch(0.977 0.006 82 / <alpha-value>)',
+          panel:   'oklch(0.991 0.004 82 / <alpha-value>)',
+          line:    'oklch(0.89 0.018 78 / <alpha-value>)',
         },
       },
       fontFamily: {

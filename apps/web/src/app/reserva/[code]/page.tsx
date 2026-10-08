@@ -164,7 +164,7 @@ export default async function ReservaPage({ params }: PageProps) {
           aria-hidden
           fill
           sizes="100vw"
-          className="object-cover opacity-18"
+          className="object-cover opacity-[0.18]"
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.78),oklch(0.982_0.008_86/0.96))]" />
 
