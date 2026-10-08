@@ -689,7 +689,10 @@ interface ScheduleOutcome {
   attempted: { h24: boolean; h2: boolean }
 }
 
-async function scheduleReminders(appt: Appointment): Promise<ScheduleOutcome> {
+async function scheduleReminders(
+  appt: Appointment,
+  skip: { h24?: boolean; h2?: boolean } = {},
+): Promise<ScheduleOutcome> {
   const out: ScheduleOutcome = { ids: {}, attempted: { h24: false, h2: false } }
   if (!isEmailConfigured()) return out
 
@@ -700,7 +703,7 @@ async function scheduleReminders(appt: Appointment): Promise<ScheduleOutcome> {
 
   // «Mañana»: 24 h antes, pero nunca en horario silencioso (22:00–08:00 CDMX).
   const send24 = scheduled24SendAt(appt.slotDatetime)
-  if (msUntil > 24 * HOUR_MS && send24.getTime() - now > MIN_SCHEDULE_LEAD_MS) {
+  if (!skip.h24 && msUntil > 24 * HOUR_MS && send24.getTime() - now > MIN_SCHEDULE_LEAD_MS) {
     out.attempted.h24 = true
     const { subject, html } = scheduledReminder24Content(appt)
     const id = await scheduleTracked({
@@ -715,7 +718,7 @@ async function scheduleReminders(appt: Appointment): Promise<ScheduleOutcome> {
     if (id) out.ids.h24 = id
   }
 
-  if (msUntil - 2 * HOUR_MS > MIN_SCHEDULE_LEAD_MS) {
+  if (!skip.h2 && msUntil - 2 * HOUR_MS > MIN_SCHEDULE_LEAD_MS) {
     out.attempted.h2 = true
     const { subject, html } = scheduledReminder2Content(appt)
     const id = await scheduleTracked({
@@ -859,7 +862,15 @@ export async function syncScheduledReminderEmails(
   previousIds?: unknown,
 ): Promise<ScheduledReminderEmailIds> {
   await cancelScheduledReminderEmails(previousIds, { appointmentId: appt.id })
-  const { ids: scheduled, attempted } = await scheduleReminders(appt)
+  // Un recordatorio con su marca en true y SIN id programado previo ya lo mandó
+  // el cron (p.ej. cita a >30 días al aceptarse): re-sincronizar por un cambio
+  // de link no debe programar un segundo «mañana». Al reprogramar, las rutas
+  // reinician las marcas a false, así que ahí sí se programa.
+  const prev = (previousIds && typeof previousIds === 'object' ? previousIds : {}) as Record<string, unknown>
+  const { ids: scheduled, attempted } = await scheduleReminders(appt, {
+    h24: appt.reminder24Sent === true && !prev.h24,
+    h2: appt.reminder2Sent === true && !prev.h2,
+  })
   const hadPrevious = Boolean(previousIds && typeof previousIds === 'object'
     && Object.values(previousIds as Record<string, unknown>).some(Boolean))
   if (!scheduled.h24 && !scheduled.h2 && !attempted.h24 && !attempted.h2 && !hadPrevious) return scheduled
