@@ -14,7 +14,7 @@ import { CalendarDays, CalendarPlus, Gem, Monitor } from 'lucide-react'
 import type { AppointmentStatus, GuestStatus } from '@/types'
 import CancelButton from './CancelButton'
 import RescheduleSection from './RescheduleSection'
-import LocationCard, { getShowroomAddress } from './LocationCard'
+import LocationCard, { getShowroomAddress, getShowroomMapsUrl } from './LocationCard'
 import GuestsPanel, { type GuestSummary } from './GuestsPanel'
 import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
 import ReservaGate from './ReservaGate'
@@ -201,7 +201,7 @@ export default async function ReservaPage({ params, searchParams }: PageProps) {
   const isUpcoming       = appt.slotDatetime.getTime() > Date.now()
   const showActions      = appt.status === 'accepted' && isUpcoming
   const showroomAddress  = getShowroomAddress()
-  const showroomMapsUrl  = (process.env.NEXT_PUBLIC_SHOWROOM_MAPS_URL ?? process.env.SHOWROOM_MAPS_URL ?? '').trim()
+  const showroomMapsUrl  = getShowroomMapsUrl()
 
   // La clienta puede mover su cita hasta 12 horas antes del horario actual
   // (misma regla que valida /api/reschedule/[token]).
