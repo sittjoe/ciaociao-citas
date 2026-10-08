@@ -9,7 +9,7 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Gem, Monitor, Send, ShieldCheck, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { motion } from '@/components/motion'
+import { AnimatePresence, motion } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -63,10 +63,16 @@ const DRAFT_KEY = 'ciaociao-booking-draft-v1'
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const SUPPORT_EMAIL = 'hola@ciaociao.mx'
 
+// Transición entre pasos (DESIGN.md: 380ms, ease-quart). Al avanzar el paso
+// nuevo sube desde abajo y el anterior sale hacia arriba; al retroceder, al
+// revés. Con prefers-reduced-motion, MotionConfig reducedMotion="user" anula
+// el desplazamiento y queda solo el fundido.
+const EASE_QUART: [number, number, number, number] = [0.25, 1, 0.5, 1]
+const STEP_SHIFT_PX = 16
 const stepVariants = {
-  initial: (dir: number) => ({ opacity: 0, x: dir * 36 }),
-  animate: { opacity: 1, x: 0, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
-  exit:    (dir: number) => ({ opacity: 0, x: dir * -36, transition: { duration: 0.18 } }),
+  initial: (dir: number) => ({ opacity: 0, y: dir * STEP_SHIFT_PX }),
+  animate: { opacity: 1, y: 0, transition: { duration: 0.38, ease: EASE_QUART } },
+  exit:    (dir: number) => ({ opacity: 0, y: dir * -STEP_SHIFT_PX, transition: { duration: 0.38, ease: EASE_QUART } }),
 }
 
 export function BookingWizard() {
@@ -423,14 +429,21 @@ export function BookingWizard() {
                 disabled={i > stepIndex}
                 aria-current={i === stepIndex ? 'step' : undefined}
                 className={cn(
-                  'rounded-xl border px-3 py-2 text-left transition-colors',
+                  'relative rounded-xl border px-3 py-2 text-left transition-colors',
                   i < stepIndex && 'border-champagne-soft bg-champagne-tint text-champagne-deep',
-                  i === stepIndex && 'border-champagne bg-porcelain text-ink shadow-soft',
+                  i === stepIndex && 'border-transparent text-ink',
                   i > stepIndex && 'border-ink-line bg-porcelain/70 text-ink-subtle',
                 )}
               >
-                <span className="block text-11 font-semibold uppercase tracking-eyebrow">{i + 1}</span>
-                <span className="block truncate text-xs font-medium">{STEP_LABELS[s]}</span>
+                {i === stepIndex && (
+                  <motion.span
+                    layoutId="progress-active-desktop"
+                    className="absolute -inset-px rounded-xl border border-champagne bg-porcelain shadow-soft"
+                    transition={{ duration: 0.38, ease: EASE_QUART }}
+                  />
+                )}
+                <span className="relative block text-11 font-semibold uppercase tracking-eyebrow">{i + 1}</span>
+                <span className="relative block truncate text-xs font-medium">{STEP_LABELS[s]}</span>
               </button>
             ))}
           </div>
@@ -438,13 +451,22 @@ export function BookingWizard() {
             {activeSteps.slice(0, -1).map((s, i) => (
               <div
                 key={s}
+                data-progress-segment
                 className={cn(
-                  'h-0.5 flex-1 rounded-full transition-all duration-500',
-                  i < stepIndex     ? 'bg-champagne'
-                  : i === stepIndex ? 'bg-champagne/40'
-                  :                   'bg-ink-line',
+                  'relative h-1 flex-1 rounded-full transition-colors duration-500 ease-expo',
+                  i < stepIndex ? 'bg-champagne/50' : 'bg-ink-line',
                 )}
-              />
+              >
+                {/* El segmento activo se desliza al siguiente (layoutId). */}
+                {i === stepIndex && (
+                  <motion.span
+                    data-progress-fill
+                    layoutId="progress-active"
+                    className="absolute inset-0 rounded-full bg-champagne-solid"
+                    transition={{ duration: 0.38, ease: EASE_QUART }}
+                  />
+                )}
+              </div>
             ))}
           </div>
           <p className="text-11 text-ink-muted text-right tracking-eyebrow uppercase font-semibold">
@@ -464,12 +486,14 @@ export function BookingWizard() {
         </button>
       )}
 
+      <AnimatePresence mode="wait" initial={false} custom={direction.current}>
       <motion.div
         key={step}
         custom={direction.current}
         variants={stepVariants}
         initial="initial"
         animate="animate"
+        exit="exit"
       >
           {/* STEP: Type */}
           {step === 'type' && (
@@ -1038,6 +1062,7 @@ export function BookingWizard() {
             </Card>
           )}
       </motion.div>
+      </AnimatePresence>
     </div>
   )
 }
