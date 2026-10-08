@@ -805,7 +805,7 @@ export function BookingWizard() {
                   </div>
                 )}
 
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <label className="flex min-h-[44px] items-center gap-2.5 cursor-pointer select-none">
                   <input
                     {...register('whatsapp')}
                     type="checkbox"
@@ -1026,12 +1026,12 @@ function CalendarSkeleton() {
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-9 w-9" />
       </div>
-      <div className="mb-2 grid grid-cols-7 gap-1.5">
+      <div className="-mx-2.5 mb-2 grid grid-cols-7 gap-1 sm:mx-0 sm:gap-1.5">
         {Array.from({ length: 7 }).map((_, i) => (
           <Skeleton key={i} className="mx-auto h-3 w-3.5" />
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="-mx-2.5 grid grid-cols-7 gap-1 sm:mx-0 sm:gap-1.5">
         {Array.from({ length: 35 }).map((_, i) => (
           <Skeleton key={i} className="aspect-square" />
         ))}

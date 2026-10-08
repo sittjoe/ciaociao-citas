@@ -90,7 +90,7 @@ export default function HomePage() {
           Ciao Ciao Joyería · Showroom Privado
         </p>
         <p>
-          <a href="mailto:hola@ciaociao.mx" className="text-ink-muted hover:text-champagne-deep transition-colors duration-200">
+          <a href="mailto:hola@ciaociao.mx" className="inline-flex min-h-[44px] items-center px-3 text-ink-muted hover:text-champagne-deep transition-colors duration-200">
             hola@ciaociao.mx
           </a>
         </p>

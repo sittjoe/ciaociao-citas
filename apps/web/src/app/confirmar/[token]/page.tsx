@@ -115,7 +115,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
           <Card variant="soft" className="p-6 text-center">
             <p className="font-serif text-xl text-ink mb-2">No es posible confirmar</p>
             <p className="text-sm text-ink-muted mb-5">{result.reason}</p>
-            <a href="/" className="text-sm font-medium text-champagne-deep hover:text-ink transition-colors">
+            <a href="/" className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-champagne-deep hover:text-ink transition-colors">
               Agendar nueva cita →
             </a>
           </Card>
@@ -131,7 +131,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
                 ? 'Este enlace no es válido o ya expiró.'
                 : 'Ocurrió un error. Por favor intenta de nuevo o contáctanos.'}
             </p>
-            <a href="/" className="text-sm font-medium text-champagne-deep hover:text-ink transition-colors">
+            <a href="/" className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-champagne-deep hover:text-ink transition-colors">
               Ir al inicio →
             </a>
           </Card>
