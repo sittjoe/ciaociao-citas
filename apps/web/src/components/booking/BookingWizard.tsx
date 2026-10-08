@@ -32,7 +32,7 @@ import {
   type BookingFormInput,
   type GuestInput,
 } from '@/lib/schemas'
-import { BUSINESS_TZ, cn, formatDate, formatTime } from '@/lib/utils'
+import { BUSINESS_TZ, cn, formatDate, formatTime12 } from '@/lib/utils'
 import type { AppointmentType } from '@/types'
 
 interface Slot { id: string; datetime: string; slotType?: AppointmentType }
@@ -250,7 +250,7 @@ export function BookingWizard() {
       const dual = dualTimeLabel(selectedSlot.datetime, deviceTz)
       if (dual.local) return `${dual.cdmx} CDMX · ${dual.local} tu hora`
     }
-    return formatTime(selectedSlot.datetime)
+    return formatTime12(selectedSlot.datetime)
   }, [selectedSlot, isVideo, deviceTz])
 
   useEffect(() => {

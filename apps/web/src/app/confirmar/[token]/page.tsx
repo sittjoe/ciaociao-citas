@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { formatDate, formatTime } from '@/lib/utils'
+import { formatDate, formatTime12 } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Gem } from 'lucide-react'
 import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
@@ -35,7 +35,7 @@ async function resolveToken(token: string): Promise<ConfirmResult> {
     const name    = data.name as string
     const code    = data.confirmationCode as string
     const dateStr = formatDate((data.slotDatetime as Timestamp).toDate())
-    const timeStr = formatTime((data.slotDatetime as Timestamp).toDate())
+    const timeStr = formatTime12((data.slotDatetime as Timestamp).toDate())
 
     if (data.status !== 'accepted') {
       const reason =

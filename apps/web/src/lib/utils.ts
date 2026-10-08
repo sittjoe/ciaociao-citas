@@ -22,6 +22,19 @@ export function formatTime(date: Date | string): string {
   return formatInTimeZone(toDate(date), BUSINESS_TZ, 'HH:mm', { locale: es })
 }
 
+/**
+ * «1:00 pm» — reloj de 12 h que ve la clienta. Siempre en una zona explícita
+ * (CDMX por defecto), nunca la del navegador ni la del servidor. es-MX produce
+ * «p. m.» con espacios finos según el motor; se normaliza a «pm».
+ */
+export function formatTime12(date: Date | string, timeZone: string = BUSINESS_TZ): string {
+  return new Intl.DateTimeFormat('es-MX', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone })
+    .format(toDate(date))
+    .replace(/[\u00a0\u202f]/g, ' ')
+    .replace(/\s*p\.?\s*m\.?$/i, ' pm')
+    .replace(/\s*a\.?\s*m\.?$/i, ' am')
+}
+
 export function formatShortDate(date: Date | string): string {
   const d = toDate(date)
   const time = formatInTimeZone(d, BUSINESS_TZ, 'HH:mm')

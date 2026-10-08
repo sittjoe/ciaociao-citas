@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { motion, LayoutGroup } from '@/components/motion'
-import { BUSINESS_TZ, cn } from '@/lib/utils'
+import { BUSINESS_TZ, cn, formatTime12 } from '@/lib/utils'
 import type { AppointmentType } from '@/types'
 
 /**
@@ -21,15 +21,6 @@ export function useDeviceTimeZone(): string | null {
     }
   }, [])
   return tz
-}
-
-/** «4:00 pm» — 12h con Intl, normalizado (es-MX produce «p. m.»). */
-function formatTime12(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('es-MX', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone })
-    .format(date)
-    .replace(/[\u00a0\u202f]/g, " ")
-    .replace(/\s*p\.?\s*m\.?$/i, ' pm')
-    .replace(/\s*a\.?\s*m\.?$/i, ' am')
 }
 
 /**
@@ -96,7 +87,7 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot, 
           const selected = selectedSlotId === slot.id
           const ariaLabel = isVideo && dual
             ? `${dual.cdmx} en Ciudad de México${dual.local ? `, ${dual.local} en tu zona horaria` : ''}`
-            : `${formatInTimeZone(parseISO(slot.datetime), BUSINESS_TZ, 'HH:mm')} horas, hora de Ciudad de México`
+            : `${formatTime12(slot.datetime)}, hora de Ciudad de México`
           return (
             <button
               key={slot.id}
@@ -130,7 +121,7 @@ export function SlotPicker({ slots, selectedDate, selectedSlotId, onSelectSlot, 
                 </span>
               ) : (
                 <span className="relative z-10">
-                  {formatInTimeZone(parseISO(slot.datetime), BUSINESS_TZ, 'HH:mm')}
+                  {formatTime12(slot.datetime)}
                 </span>
               )}
             </button>
