@@ -74,7 +74,7 @@ export function GuestsField({ value, onChange, hostEmail }: GuestsFieldProps) {
             Invitados <span className="text-ink-muted font-normal">(opcional)</span>
           </p>
           <p className="text-xs text-ink-muted mt-0.5">
-            Hasta {MAX_GUESTS}. Solo personas verificadas pueden ingresar.
+            Hasta {MAX_GUESTS}. Cada invitado verifica su identificación antes de la cita.
           </p>
         </div>
         {value.length > 0 && value.length < MAX_GUESTS && (
@@ -93,11 +93,12 @@ export function GuestsField({ value, onChange, hostEmail }: GuestsFieldProps) {
         {value.map((guest, i) => (
           <motion.div
             key={guestIds[i] ?? i}
-            initial={{ opacity: 0, height: 0, marginTop: 0 }}
-            animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
-            exit={{ opacity: 0, height: 0, marginTop: 0 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            style={{ overflow: 'hidden' }}
+            // Solo transform y opacidad (nunca height): la fila entra desde arriba.
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-3"
           >
             <div className="p-3 bg-cream-soft border border-ink-line rounded-xl space-y-2.5">
               <div className="flex items-center justify-between mb-1">

@@ -1,15 +1,14 @@
 'use client'
 
-import Image from 'next/image'
 import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format, parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
-import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Gem, Monitor, Send, ShieldCheck, UserPlus } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronLeft, ShieldCheck, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { AnimatePresence, motion } from '@/components/motion'
+import { AnimatePresence, LayoutGroup, motion } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -18,7 +17,10 @@ import { CalendarView } from './CalendarView'
 import { SlotPicker, dualTimeLabel, useDeviceTimeZone } from './SlotPicker'
 import { IDUploader } from './IDUploader'
 import { GuestsField } from './GuestsField'
+import { InvitationCard } from './InvitationCard'
 import { Button } from '@/components/ui/Button'
+import { HousePicture } from '@/components/brand/Picture'
+import { CHOOSE_EXPERIENCE_EVENT } from '@/components/landing/ChooseExperience'
 import {
   bookingFormSchema,
   appointmentTypeLabels,
@@ -51,7 +53,7 @@ interface BookingDraft {
 const SHOWROOM_STEPS: Step[] = ['type', 'calendar', 'slots', 'form', 'upload', 'review', 'done']
 const VIDEO_STEPS: Step[] = ['type', 'calendar', 'slots', 'form', 'review', 'done']
 const STEP_LABELS: Record<Step, string> = {
-  type: 'Tipo',
+  type: 'Experiencia',
   calendar: 'Fecha',
   slots: 'Horario',
   form: 'Datos',
@@ -330,6 +332,23 @@ export function BookingWizard() {
     }, TYPE_ADVANCE_MS)
   }, [setValue, goTo])
 
+  // La narrativa de la portada («Reservar en el showroom» / «Reservar
+  // videollamada») preselecciona la experiencia. Solo actúa mientras la
+  // clienta no ha pasado del horario: nunca le borra datos ya escritos.
+  useEffect(() => {
+    const onChoose = (event: Event) => {
+      const type = (event as CustomEvent<AppointmentType>).detail
+      if (type !== 'showroom' && type !== 'video_engagement_rings') return
+      if (step === 'type') { chooseType(type); return }
+      if ((step === 'calendar' || step === 'slots') && type !== appointmentType) {
+        setValue('appointmentType', type)
+        goTo('calendar')
+      }
+    }
+    window.addEventListener(CHOOSE_EXPERIENCE_EVENT, onChoose)
+    return () => window.removeEventListener(CHOOSE_EXPERIENCE_EVENT, onChoose)
+  }, [step, appointmentType, chooseType, setValue, goTo])
+
   // Revalida el slot de un borrador restaurado contra la lista fresca de
   // /api/slots: si sigue disponible se re-selecciona; si ya lo tomaron (o ya
   // pasó), se limpia con aviso y se regresa a elegir horario.
@@ -346,7 +365,7 @@ export function BookingWizard() {
       return
     }
     setSelectedSlot(null)
-    toast.error('El horario que tenías elegido ya no está disponible — elige otro.')
+    toast.error('El horario que tenías elegido ya no está disponible. Elige otro, por favor.')
     if (step === 'form' || step === 'upload' || step === 'review') {
       goTo(dayHasFutureSlots(slots, selectedDate) ? 'slots' : 'calendar')
     }
@@ -392,7 +411,7 @@ export function BookingWizard() {
         // ocupado: ahí no hay que tirar la selección ni refrescar horarios.
         const slotTaken = res.status === 409 && !(errText?.includes('procesando'))
         const msg = slotTaken
-          ? 'Ese horario acaba de ocuparse — elige otro.'
+          ? 'Alguien acaba de reservar ese horario. Elige otro, por favor.'
           : res.status === 429
           ? 'Recibimos demasiados intentos. Tus datos siguen guardados; intenta otra vez en una hora.'
           : errText ?? `Error al enviar solicitud (${res.status})`
@@ -542,69 +561,75 @@ export function BookingWizard() {
       >
           {/* STEP: Type */}
           {step === 'type' && (
-            <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
-              <div>
-                <h2 className="font-serif font-light text-2xl text-ink">Elige tu experiencia</h2>
-              </div>
+            <Card variant="atelier" className="space-y-5 p-4 sm:p-6">
+              <h2 className="px-1 pt-1 font-serif text-[1.75rem] font-light leading-tight text-ink">¿Cómo quieres vernos?</h2>
 
-              <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de cita">
+              <LayoutGroup id="experiencia">
+              <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Experiencia">
                 {([
                   {
                     type: 'showroom' as const,
-                    Icon: Gem,
-                    title: appointmentTypeLabels.showroom,
-                    copy: 'Visita privada al showroom para ver piezas en persona. Requiere identificación oficial.',
+                    image: 'showroom-privado' as const,
+                    title: 'En el showroom',
+                    copy: 'Ves y pruebas en persona. Pedimos identificación oficial.',
                   },
                   {
                     type: 'video_engagement_rings' as const,
-                    Icon: Monitor,
-                    title: appointmentTypeLabels.video_engagement_rings,
-                    copy: 'Llamada guiada para elegir anillo de compromiso, presupuesto, tiempos y estilo.',
+                    image: 'video-consulta' as const,
+                    title: 'Por videollamada',
+                    copy: 'Llamada guiada para elegir anillo de compromiso.',
                   },
-                ]).map(option => (
+                ]).map(option => {
+                  const checked = appointmentType === option.type
+                  return (
                   <button
                     key={option.type}
                     type="button"
                     role="radio"
-                    aria-checked={appointmentType === option.type}
+                    aria-checked={checked}
                     onClick={() => chooseType(option.type)}
-                    className={cn(
-                      'relative rounded-2xl border p-4 text-left transition-all duration-150 ease-expo',
-                      appointmentType === option.type
-                        ? 'border-champagne bg-champagne-tint shadow-soft'
-                        : 'border-ink-line bg-porcelain hover:border-champagne-soft',
-                    )}
+                    className="group relative overflow-hidden rounded-[1.1rem] border border-ink-line bg-porcelain p-2 text-left transition-colors duration-150 ease-expo hover:border-champagne-soft"
                   >
-                    <option.Icon size={20} strokeWidth={1.5} className="text-champagne" />
-                    {advancingType === option.type && (
+                    {/* El aro de la elección se desliza de una tarjeta a otra. */}
+                    {checked && (
                       <motion.span
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                        className="absolute right-4 top-4 text-champagne-solid"
-                        aria-hidden="true"
-                      >
-                        <CheckCircle2 size={18} strokeWidth={1.5} />
-                      </motion.span>
+                        layoutId="experience-ring"
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 rounded-[1.1rem] border-[1.5px] border-champagne-solid"
+                        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                      />
                     )}
-                    <span className="mt-3 block font-serif text-xl font-light text-ink">{option.title}</span>
-                    <span className="mt-2 block text-sm leading-6 text-ink-muted">{option.copy}</span>
+                    <span className="block overflow-hidden rounded-[0.8rem]">
+                      <HousePicture
+                        name={option.image}
+                        alt=""
+                        sizes="(min-width: 640px) 300px, 90vw"
+                        className="aspect-[16/10]"
+                        imgClassName="transition-transform duration-700 ease-expo group-hover:scale-[1.03]"
+                      />
+                    </span>
+                    <span className="flex items-start justify-between gap-3 px-2 pb-2 pt-3.5">
+                      <span>
+                        <span className="block font-serif text-[1.4rem] font-normal leading-tight text-ink">{option.title}</span>
+                        <span className="mt-1 block text-sm leading-6 text-ink-muted">{option.copy}</span>
+                      </span>
+                      {advancingType === option.type && (
+                        <motion.span
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                          className="mt-1 shrink-0 text-champagne-solid"
+                          aria-hidden="true"
+                        >
+                          <CheckCircle2 size={20} strokeWidth={1.5} />
+                        </motion.span>
+                      )}
+                    </span>
                   </button>
-                ))}
+                  )
+                })}
               </div>
-
-              {isVideo && advancingType === null && (
-                <div className="overflow-hidden rounded-2xl border border-ink-line">
-                  <Image
-                    src="/video-engagement-consultation.webp"
-                    alt="Consulta por video para elegir un anillo de compromiso"
-                    width={900}
-                    height={520}
-                    className="h-48 w-full object-cover"
-                  />
-                </div>
-              )}
-
+              </LayoutGroup>
             </Card>
           )}
 
@@ -613,17 +638,20 @@ export function BookingWizard() {
             <Card variant="atelier" className="p-5 sm:p-7">
               {!showWaitlist && (
               <div className="mb-5 flex items-end justify-between gap-4">
-                <div>
-                  <h2 className="font-serif font-light text-2xl text-ink">Selecciona una fecha</h2>
-                </div>
-                <span className="hidden text-xs text-ink-muted sm:block">
-                  {isVideo ? 'Horarios de videollamada' : 'Horarios CDMX'}
+                <h2 className="font-serif text-[1.75rem] font-light leading-tight text-ink">Elige el día</h2>
+                <span className="pb-1 text-xs text-ink-muted">
+                  {isVideo ? 'Videollamada · hora CDMX' : 'Showroom · hora CDMX'}
                 </span>
               </div>
               )}
               {loadingSlots ? (
                 <div role="status" aria-live="polite">
-                  <span className="sr-only">Cargando horarios disponibles…</span>
+                  <p className="mb-4 flex items-center gap-3 text-sm text-ink-muted">
+                    <span aria-hidden className="relative block h-px w-10 overflow-hidden bg-ink-line">
+                      <span className="absolute inset-y-0 left-0 w-1/2 motion-reduce:hidden animate-[agenda-line_1.4s_cubic-bezier(0.16,1,0.3,1)_infinite] bg-champagne" />
+                    </span>
+                    Consultando la agenda de la casa
+                  </p>
                   <CalendarSkeleton />
                 </div>
               ) : slotsError ? (
@@ -653,9 +681,10 @@ export function BookingWizard() {
 
           {/* STEP: Slot picker */}
           {step === 'slots' && selectedDate && (
-            <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
+            <Card variant="atelier" className="space-y-6 p-5 sm:p-7">
               <div>
-                <h2 className="font-serif font-light text-2xl text-ink">
+                <p className="text-sm text-ink-muted">Horarios disponibles el</p>
+                <h2 className="mt-0.5 font-serif text-[1.9rem] font-light leading-tight text-ink">
                   {(() => {
                     // Only the first letter: Tailwind `capitalize` produced "Viernes 12 De Junio"
                     const label = format(parseISO(selectedDate), "EEEE d 'de' MMMM", { locale: es })
@@ -670,9 +699,23 @@ export function BookingWizard() {
                 onSelectSlot={id => setSelectedSlot(slots.find(s => s.id === id) ?? null)}
                 appointmentType={appointmentType}
               />
-              {selectedSlot && (
-                <Button className="w-full" onClick={() => goTo('form')}>Continuar</Button>
-              )}
+              <AnimatePresence initial={false}>
+                {selectedSlot && (
+                  <motion.div
+                    key="slot-hold"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    className="space-y-3 border-t border-ink-line pt-5"
+                  >
+                    <p className="text-sm leading-6 text-ink-muted" aria-live="polite">
+                      Elegiste las <span className="font-medium text-ink">{formatTime12(selectedSlot.datetime)}</span>. Lo apartamos para ti en cuanto envíes tu solicitud.
+                    </p>
+                    <Button className="w-full" onClick={() => goTo('form')}>Continuar con mis datos</Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </Card>
           )}
 
@@ -723,7 +766,7 @@ export function BookingWizard() {
             >
               <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
                 <div>
-                  <h2 className="font-serif font-light text-2xl text-ink">Tus datos</h2>
+                  <h2 className="font-serif text-[1.75rem] font-light leading-tight text-ink">Tus datos</h2>
                 </div>
 
                 <Field label="Nombre completo" required error={errors.name?.message}>
@@ -739,7 +782,7 @@ export function BookingWizard() {
                   )}
                 </Field>
 
-                <Field label="Email" required error={errors.email?.message}>
+                <Field label="Correo" required error={errors.email?.message}>
                   {(id, ariaProps) => (
                     <input
                       id={id}
@@ -767,21 +810,18 @@ export function BookingWizard() {
                   )}
                 </Field>
 
-                <Field label="Notas adicionales" error={errors.notes?.message}>
-                  {(id, ariaProps) => (
-                    <textarea
-                      id={id}
-                      {...ariaProps}
-                      {...register('notes')}
-                      className="input-clean resize-none"
-                      rows={3}
-                      placeholder={isVideo ? '¿Hay algo que quieras contarnos antes de la videollamada?' : '¿Hay algo que quieras contarnos antes de tu visita?'}
-                    />
-                  )}
-                </Field>
+
+                <div className="border-t border-ink-line pt-5">
+                  <h3 className="font-serif text-[1.35rem] font-normal leading-tight text-ink">
+                    {isVideo ? 'Para preparar tu llamada' : 'Para preparar tu charola'}
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-ink-muted">
+                    Con esto elegimos las piezas antes de vernos. Todo es opcional.
+                  </p>
+                </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Tipo de producto que buscas" error={errors.productType?.message}>
+                  <Field label="¿Qué tipo de pieza?" error={errors.productType?.message}>
                     {(id, ariaProps) => (
                       <select
                         id={id}
@@ -817,7 +857,7 @@ export function BookingWizard() {
                   </Field>
                 </div>
 
-                <Field label="Cuéntanos qué estás buscando" error={errors.lookingFor?.message}>
+                <Field label="¿Qué te gustaría ver?" error={errors.lookingFor?.message}>
                   {(id, ariaProps) => (
                     <textarea
                       id={id}
@@ -830,16 +870,29 @@ export function BookingWizard() {
                   )}
                 </Field>
 
+                <Field label="Algo más que debamos saber" error={errors.notes?.message}>
+                  {(id, ariaProps) => (
+                    <textarea
+                      id={id}
+                      {...ariaProps}
+                      {...register('notes')}
+                      className="input-clean resize-none"
+                      rows={2}
+                      placeholder={isVideo ? 'Opcional. Por ejemplo, si llamarás desde otro país.' : 'Opcional. Por ejemplo, si es una sorpresa.'}
+                    />
+                  )}
+                </Field>
+
                 {isVideo && (
                   <div className="space-y-4 rounded-2xl border border-champagne-soft bg-champagne-tint/45 p-4">
                     <div>
-                      <p className="h-eyebrow mb-1">Brief de compromiso</p>
+                      <p className="font-serif text-[1.2rem] text-ink">Sobre el anillo</p>
                       <p className="text-xs leading-5 text-ink-muted">
                         Estas respuestas ayudan al asesor a llegar con opciones concretas a la llamada.
                       </p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <Field label="Timeline de propuesta">
+                      <Field label="¿Para cuándo es la propuesta?">
                         {(id, ariaProps) => (
                           <select id={id} {...ariaProps} {...register('engagementBrief.proposalTimeline')} className="input-clean">
                             <option value="">Seleccionar</option>
@@ -879,7 +932,7 @@ export function BookingWizard() {
                           </select>
                         )}
                       </Field>
-                      <Field label="Links de referencia">
+                      <Field label="Enlaces de referencia">
                         {(id, ariaProps) => (
                           <input
                             id={id}
@@ -913,7 +966,7 @@ export function BookingWizard() {
                     className="w-4 h-4 rounded border-ink-line accent-champagne"
                   />
                   <span className="text-sm text-ink-muted">
-                    Deseo recibir recordatorios por WhatsApp
+                    Quiero recibir recordatorios por WhatsApp
                   </span>
                 </label>
 
@@ -936,14 +989,14 @@ export function BookingWizard() {
           {step === 'upload' && (
             <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
               <div>
-                <h2 className="font-serif font-light text-2xl text-ink">Identificación oficial</h2>
-                <p className="text-sm text-ink-muted mt-1">
-                  Requerida para confirmar tu visita al showroom privado.
+                <h2 className="font-serif text-[1.75rem] font-light leading-tight text-ink">Tu identificación</h2>
+                <p className="mt-1.5 text-sm leading-6 text-ink-muted">
+                  La pedimos a toda persona que entra al showroom privado; así cuidamos a quienes nos visitan y a las piezas. Solo la revisa el equipo de Ciao Ciao.
                 </p>
               </div>
               <IDUploader value={idFile} onChange={setIdFile} />
               {needsIdAgain && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                <p className="rounded-xl border border-champagne-soft bg-champagne-tint px-3 py-2 text-xs leading-5 text-champagne-deep">
                   Recuperamos tu avance. Por seguridad, vuelve a subir tu identificación.
                 </p>
               )}
@@ -974,21 +1027,25 @@ export function BookingWizard() {
             >
               <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
                 <div>
-                  <h2 className="font-serif font-light text-2xl text-ink">Confirmar solicitud</h2>
+                  <h2 className="font-serif text-[1.75rem] font-light leading-tight text-ink">Revisa tu solicitud</h2>
+                  <p className="mt-1.5 text-sm leading-6 text-ink-muted">Así la recibirá el equipo. Puedes volver para cambiar lo que quieras.</p>
+                </div>
+
+                {/* La fecha es la protagonista, como en la tarjeta final. */}
+                <div className="rounded-2xl bg-[var(--paper-deep)] px-5 py-4">
+                  <p className="font-serif text-[1.6rem] font-light leading-tight text-ink">{formatDate(selectedSlot.datetime)}</p>
+                  <p className="mt-1 text-sm text-ink-muted">{reviewTimeLabel} · {SHORT_TYPE_LABELS[appointmentType]}</p>
                 </div>
 
                 <div className="divide-y divide-ink-line">
                   {([
-                    ['Tipo',          appointmentTypeLabels[appointmentType]],
-                    ['Fecha',         formatDate(selectedSlot.datetime)],
-                    ['Hora',          reviewTimeLabel],
                     ['Nombre',        getValues('name')],
                     ['Email',         getValues('email')],
                     ['Teléfono',      getValues('phone')],
-                    ...(getValues('notes') ? [['Notas', getValues('notes')!]] : []),
-                    ...(getValues('productType') ? [['Producto', getValues('productType')!]] : []),
+                    ...(getValues('productType') ? [['Pieza', getValues('productType')!]] : []),
                     ...(getValues('budgetRange') ? [['Presupuesto', getValues('budgetRange')!]] : []),
-                    ...(getValues('lookingFor') ? [['Busca', getValues('lookingFor')!]] : []),
+                    ...(getValues('lookingFor') ? [['Quieres ver', getValues('lookingFor')!]] : []),
+                    ...(getValues('notes') ? [['Nota', getValues('notes')!]] : []),
                     ...(!isVideo ? [['Identificación', idFile?.name ?? '']] : []),
                   ] as [string, string][]).map(([label, value]) => (
                     <div key={label} className="flex justify-between py-2.5 text-sm">
@@ -998,9 +1055,9 @@ export function BookingWizard() {
                   ))}
                   {isVideo && getValues('engagementBrief') && (
                     <div className="py-2.5 text-sm">
-                      <p className="text-ink-muted mb-1.5">Brief de anillo</p>
+                      <p className="text-ink-muted mb-1.5">Sobre el anillo</p>
                       {([
-                        ['Timeline', getValues('engagementBrief.proposalTimeline') ?? ''],
+                        ['Propuesta', getValues('engagementBrief.proposalTimeline') ?? ''],
                         ['Etapa', getValues('engagementBrief.ringStage') ?? ''],
                         ['Metal', getValues('engagementBrief.metalPreference') ?? ''],
                         ['Piedra', getValues('engagementBrief.stonePreference') ?? ''],
@@ -1016,7 +1073,7 @@ export function BookingWizard() {
                     <div className="py-2.5 text-sm">
                       <p className="text-ink-muted mb-1.5">Invitados ({guests.length})</p>
                       {guests.map((g, i) => (
-                        <p key={i} className="text-ink text-right break-words">· {g.name} — {g.email}</p>
+                        <p key={i} className="text-ink text-right break-words">{g.name} <span className="text-ink-muted">({g.email})</span></p>
                       ))}
                     </div>
                   )}
@@ -1026,8 +1083,8 @@ export function BookingWizard() {
                   <div className="rounded-xl border border-ink-line bg-cream-soft p-3.5">
                     <p className="text-xs text-ink leading-relaxed mb-2">
                       {guests.length === 0
-                        ? '¿Vendrás acompañado? Aún puedes agregar invitados antes de confirmar.'
-                        : `Tienes ${guests.length} invitado${guests.length > 1 ? 's' : ''}. ¿Deseas agregar ${3 - guests.length === 1 ? 'uno más' : 'más'}?`}
+                        ? '¿Vienes con alguien? Aún puedes agregar hasta tres invitados.'
+                        : `Tienes ${guests.length} invitado${guests.length > 1 ? 's' : ''}. Puedes agregar ${3 - guests.length === 1 ? 'uno más' : 'más'}.`}
                     </p>
                     <button
                       type="button"
@@ -1041,17 +1098,17 @@ export function BookingWizard() {
                 )}
 
                 {!isVideo && guests.length > 0 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex gap-2.5">
-                    <AlertTriangle size={15} strokeWidth={1.5} className="text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-900 leading-relaxed">
-                      Cada invitado recibirá un email para subir su identificación oficial.{' '}
-                      <strong className="font-semibold">Los invitados que no completen la verificación no podrán ingresar al showroom.</strong>
+                  <div className="flex gap-2.5 rounded-xl border border-champagne-soft bg-champagne-tint p-3.5">
+                    <ShieldCheck size={15} strokeWidth={1.5} className="mt-0.5 shrink-0 text-champagne-deep" />
+                    <p className="text-xs leading-relaxed text-ink">
+                      Cada invitado recibirá un correo para verificar su identificación oficial.{' '}
+                      <strong className="font-semibold">Para entrar al showroom, cada invitado debe completarla a más tardar 24 horas antes.</strong>
                     </p>
                   </div>
                 )}
 
                 <p className="text-xs text-ink-muted leading-relaxed">
-                  Al confirmar, tu solicitud será revisada por nuestro equipo y recibirás un email con la confirmación o actualización.
+                  El equipo revisa cada solicitud personalmente y te escribe por correo, normalmente en menos de 24 horas.
                 </p>
 
                 {submitNotice && (
@@ -1061,53 +1118,23 @@ export function BookingWizard() {
                 )}
 
                 <Button type="submit" loading={submitting} className="w-full">
-                  <Send size={15} strokeWidth={1.5} /> Enviar solicitud
+                  Solicitar mi cita
                 </Button>
               </Card>
             </form>
           )}
 
           {/* STEP: Done */}
-          {step === 'done' && (
-            <Card variant="atelier" className="text-center space-y-6 px-6 py-9">
-              <div className="flex justify-center">
-                <motion.div
-                  initial={{ scale: 0.92, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
-                  className="w-16 h-16 rounded-full bg-champagne-tint border border-champagne-soft flex items-center justify-center"
-                >
-                  <CheckCircle2 size={32} strokeWidth={1.5} className="text-champagne" />
-                </motion.div>
-              </div>
-
-              <div className="space-y-2">
-                <h2 className="font-serif font-light text-3xl text-ink">Solicitud recibida</h2>
-                <p className="text-sm text-ink-muted leading-relaxed max-w-xs mx-auto">
-                  Tu cita aún está pendiente de revisión. Te notificaremos a la brevedad por email.
-                </p>
-              </div>
-
-              <div className="bg-vellum border border-ink-line rounded-2xl py-5 px-8 inline-block mx-auto">
-                <p className="h-eyebrow mb-2">Código de referencia</p>
-                <p className="font-serif text-3xl font-normal tracking-display-eyebrow text-champagne-deep tabular-nums pl-[0.32em] sm:text-4xl">{confirmCode}</p>
-              </div>
-
-              <div className="space-y-2.5">
-                <a
-                  href={confirmPath || `/reserva/${confirmCode}`}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 py-3 px-5 rounded-xl
-                             border border-champagne text-champagne-solid text-sm font-medium
-                             hover:bg-champagne-soft transition-colors duration-200"
-                >
-                  <ExternalLink size={15} strokeWidth={1.5} />
-                  Ver estado de tu cita
-                </a>
-                <p className="text-xs text-ink-subtle">
-                  También recibirás un email con esta información.
-                </p>
-              </div>
-            </Card>
+          {step === 'done' && selectedSlot && (
+            <InvitationCard
+              name={getValues('name')}
+              email={getValues('email')}
+              datetime={selectedSlot.datetime}
+              appointmentType={appointmentType}
+              timeLabel={reviewTimeLabel}
+              code={confirmCode}
+              reservaHref={confirmPath || `/reserva/${confirmCode}`}
+            />
           )}
       </motion.div>
       </AnimatePresence>
@@ -1232,7 +1259,7 @@ function WaitlistForm({ appointmentType, productType = '' }: { appointmentType: 
         </Field>
       </div>
 
-      <Field label="Email" required>
+      <Field label="Correo" required>
         {(id, ariaProps) => (
           <input
             id={id}
