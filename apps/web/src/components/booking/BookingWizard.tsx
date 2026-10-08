@@ -295,7 +295,9 @@ export function BookingWizard() {
 
   // Al cambiar de paso, lleva a la clienta al inicio del asistente: sin esto
   // queda a media página (p. ej. tras tocar un día al fondo del calendario).
-  useEffect(() => {
+  // Corre cuando el paso nuevo empieza a entrar (onAnimationStart): antes, el
+  // paso saliente — quizá más corto — limitaría el scroll máximo del documento.
+  const scrollToWizardIfPending = useCallback(() => {
     if (!scrollOnStepChange.current) return
     scrollOnStepChange.current = false
     const el = rootRef.current
@@ -304,7 +306,7 @@ export function BookingWizard() {
     if (Math.abs(el.getBoundingClientRect().top - marginTop) < 4) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     el.scrollIntoView({ behavior: reduce ? 'instant' : 'smooth', block: 'start' })
-  }, [step])
+  }, [])
 
   const goBack = useCallback(() => goTo(activeSteps[stepIndex - 1]), [activeSteps, stepIndex, goTo])
 
@@ -508,9 +510,9 @@ export function BookingWizard() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.38, ease: EASE_QUART }}
-            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-ink-line/80 bg-porcelain/70 py-2 pl-4 pr-2"
+            className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-ink-line/80 bg-porcelain/70 py-2 pl-4 pr-1"
           >
-            <p data-booking-summary className="min-w-0 font-serif text-xl font-light leading-tight text-ink sm:text-2xl">
+            <p data-booking-summary className="min-w-0 font-serif text-lg font-light leading-tight text-ink sm:text-2xl">
               <span className="sr-only">Tu elección: </span>{choiceSummary}
             </p>
             <Button
@@ -533,6 +535,7 @@ export function BookingWizard() {
         initial="initial"
         animate="animate"
         exit="exit"
+        onAnimationStart={definition => { if (definition === 'animate') scrollToWizardIfPending() }}
       >
           {/* STEP: Type */}
           {step === 'type' && (
@@ -674,6 +677,9 @@ export function BookingWizard() {
           {step === 'form' && (
             <form
               className="space-y-4"
+              // La validación la hace zod con mensajes propios; la burbuja nativa
+              // del navegador (type=email) la saltaba y dejaba el foco a medias.
+              noValidate
               onSubmit={async e => {
                 e.preventDefault()
                 // shouldFocus enfoca el primer campo con error en orden del
