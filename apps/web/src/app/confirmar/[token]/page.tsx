@@ -4,10 +4,14 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { formatDate, formatTime12 } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Gem } from 'lucide-react'
+import { reservaPath } from '@/lib/reserva-access'
 import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
 
 export const dynamic = 'force-dynamic'
-export const metadata: Metadata = { title: 'Confirmar cita — Ciao Ciao' }
+export const metadata: Metadata = {
+  title:  'Confirmar cita — Ciao Ciao',
+  robots: { index: false, follow: false },
+}
 
 interface PageProps { params: Promise<{ token: string }> }
 
@@ -102,7 +106,7 @@ export default async function ConfirmarPage({ params }: PageProps) {
               ))}
             </div>
             <a
-              href={`/reserva/${result.code}`}
+              href={reservaPath(result.code)}
               className="flex w-full items-center justify-center rounded-xl bg-champagne-solid px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-champagne-deep"
             >
               Ver detalles de mi cita

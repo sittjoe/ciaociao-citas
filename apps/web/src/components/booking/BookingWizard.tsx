@@ -92,6 +92,7 @@ export function BookingWizard() {
   const [guests,       setGuests]      = useState<GuestInput[]>([])
   const [submitting,   setSubmitting]  = useState(false)
   const [confirmCode,  setConfirmCode] = useState('')
+  const [confirmPath,  setConfirmPath] = useState('')
   const [submitNotice, setSubmitNotice]= useState<string | null>(null)
   const [needsIdAgain, setNeedsIdAgain]= useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
@@ -382,7 +383,7 @@ export function BookingWizard() {
     try {
       const res  = await fetch('/api/booking', { method: 'POST', body: fd })
       const text = await res.text()
-      let json: { confirmationCode?: string; error?: unknown } = {}
+      let json: { confirmationCode?: string; reservaPath?: string; error?: unknown } = {}
       try { json = text ? JSON.parse(text) : {} } catch { /* non-JSON */ }
 
       if (!res.ok) {
@@ -406,6 +407,8 @@ export function BookingWizard() {
       }
       if (!json.confirmationCode) { toast.error('Respuesta inesperada del servidor'); return }
       setConfirmCode(json.confirmationCode)
+      // Solo rutas internas: el servidor devuelve /reserva/CODE?t=… firmado.
+      setConfirmPath(typeof json.reservaPath === 'string' && json.reservaPath.startsWith('/reserva/') ? json.reservaPath : '')
       localStorage.removeItem(DRAFT_KEY)
       idempotencyKey.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
       direction.current = 1
@@ -1092,7 +1095,7 @@ export function BookingWizard() {
 
               <div className="space-y-2.5">
                 <a
-                  href={`/reserva/${confirmCode}`}
+                  href={confirmPath || `/reserva/${confirmCode}`}
                   className="flex min-h-[44px] w-full items-center justify-center gap-2 py-3 px-5 rounded-xl
                              border border-champagne text-champagne-solid text-sm font-medium
                              hover:bg-champagne-soft transition-colors duration-200"

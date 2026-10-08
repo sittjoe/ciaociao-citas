@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { z } from 'zod'
 import { bookingPayloadSchema, guestInputSchema } from '@/lib/schemas'
 import { generateCode, phoneDigits, sanitize } from '@/lib/utils'
+import { reservaPath } from '@/lib/reserva-access'
 import { isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
 import { releaseExpiredHolds } from '@/lib/holds'
@@ -152,7 +153,11 @@ export async function POST(request: Request) {
         existingData?.status === 'completed' &&
         typeof existingData.confirmationCode === 'string'
       ) {
-        return NextResponse.json({ confirmationCode: existingData.confirmationCode, reused: true }, { status: 200 })
+        return NextResponse.json({
+          confirmationCode: existingData.confirmationCode,
+          reservaPath: reservaPath(existingData.confirmationCode),
+          reused: true,
+        }, { status: 200 })
       }
       const createdAtMs = Number(existingData?.createdAtMs ?? 0)
       if (existingData?.status === 'processing' && Date.now() - createdAtMs < IDEMPOTENCY_TTL_MS) {
@@ -397,7 +402,8 @@ export async function POST(request: Request) {
       }
     })
 
-    return NextResponse.json({ confirmationCode }, { status: 201 })
+    // Enlace firmado: quien acaba de reservar entra directo a su cita.
+    return NextResponse.json({ confirmationCode, reservaPath: reservaPath(confirmationCode) }, { status: 201 })
   } catch (err: unknown) {
     if (uploadedFileRef) {
       await uploadedFileRef.delete().catch(deleteErr => {

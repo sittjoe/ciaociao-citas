@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { formatInTimeZone } from 'date-fns-tz'
@@ -16,11 +17,62 @@ import RescheduleSection from './RescheduleSection'
 import LocationCard, { getShowroomAddress } from './LocationCard'
 import GuestsPanel, { type GuestSummary } from './GuestsPanel'
 import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
+import ReservaGate from './ReservaGate'
+import {
+  normalizeReservaCode,
+  reservaCookieName,
+  verifyReservaCookie,
+  verifyReservaLinkToken,
+} from '@/lib/reserva-access'
 
 export const dynamic  = 'force-dynamic'
-export const metadata: Metadata = { title: 'Estado de tu cita' }
+export const metadata: Metadata = {
+  title:  'Estado de tu cita',
+  robots: { index: false, follow: false, nocache: true },
+}
 
-interface PageProps { params: Promise<{ code: string }> }
+interface PageProps {
+  params:       Promise<{ code: string }>
+  searchParams: Promise<{ t?: string | string[] }>
+}
+
+/**
+ * Sin credencial no se consulta Firestore ni se dice si el código existe:
+ * solo la puerta del correo, en el mismo marco visual que la página.
+ */
+function GateView({ code }: { code: string }) {
+  return (
+    <main className="min-h-screen bg-cream">
+      <section className="relative min-h-screen overflow-hidden px-4 py-10 sm:px-8 sm:py-16">
+        <Image
+          src="/atelier-vivo-hero.webp"
+          alt=""
+          aria-hidden
+          fill
+          sizes="100vw"
+          className="object-cover opacity-[0.18]"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.78),oklch(0.982_0.008_86/0.96))]" />
+        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
+          <header>
+            <p className="mb-4 text-11 font-semibold uppercase tracking-display-eyebrow text-champagne-solid">
+              Ciao Ciao · Showroom privado
+            </p>
+            <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">
+              <TitleReveal text="Estado de tu cita" />
+            </h1>
+            <p className="mt-6 max-w-md text-sm leading-7 text-ink-muted">
+              Los detalles de tu cita son solo para ti. Confirma tu correo una vez y este dispositivo la recordará por 30 días.
+            </p>
+          </header>
+          <DepthReveal delay={0.35}>
+            <ReservaGate code={code} />
+          </DepthReveal>
+        </div>
+      </section>
+    </main>
+  )
+}
 
 // Estilos de acción compartidos. Son anclas (<a>), no <Button> (que renderiza
 // <button>), pero conservan la jerarquía del sistema: dorado sólido = acción
@@ -89,12 +141,26 @@ function googleCalendarUrl(appt: {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
-export default async function ReservaPage({ params }: PageProps) {
-  const { code } = await params
+export default async function ReservaPage({ params, searchParams }: PageProps) {
+  const { code: rawCode } = await params
+  const { t } = await searchParams
+  const code = normalizeReservaCode(rawCode)
+  if (!code) notFound()
+
+  // Enlace firmado: /entrar emite la cookie y vuelve a la URL limpia.
+  const token = Array.isArray(t) ? t[0] : t
+  if (token && verifyReservaLinkToken(code, token)) {
+    redirect(`/api/reserva/${code}/entrar?t=${encodeURIComponent(token)}`)
+  }
+
+  const cookieStore = await cookies()
+  if (!verifyReservaCookie(code, cookieStore.get(reservaCookieName(code))?.value)) {
+    return <GateView code={code} />
+  }
 
   const snap = await adminDb
     .collection('appointments')
-    .where('confirmationCode', '==', code.toUpperCase())
+    .where('confirmationCode', '==', code)
     .limit(1)
     .get()
 
