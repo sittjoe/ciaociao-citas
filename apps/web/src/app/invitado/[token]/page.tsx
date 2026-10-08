@@ -163,7 +163,7 @@ export default function InvitadoPage() {
                 <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
                   <ShieldCheck size={28} strokeWidth={1.5} className="text-emerald-500" />
                 </div>
-                <h2 className="font-serif font-light text-xl text-ink">Ya estás verificado</h2>
+                <h2 className="font-serif font-light text-xl text-ink">Tu identidad ya está verificada</h2>
                 <p className="text-sm text-ink-muted">
                   Tu identidad fue verificada exitosamente. Te esperamos el {appt?.dateStr} a las {appt?.timeStr}.
                 </p>

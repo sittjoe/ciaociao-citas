@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
-import { Mail, KeyRound } from 'lucide-react'
+import { Mail } from 'lucide-react'
+import { HouseSeal, Wordmark } from '@/components/brand/Wordmark'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { getClientAuth } from '@/lib/firebase-client'
 import { adminLoginSchema, type AdminLoginInput } from '@/lib/schemas'
@@ -56,21 +57,16 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4 bg-cream">
+    <main className="paper-grain flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="font-serif text-3xl text-ink tracking-widest uppercase">Ciao Ciao</h1>
-          <p className="text-xs text-ink-muted tracking-[0.4em] uppercase mt-2 font-semibold">Panel de Administración</p>
+        <div className="mb-8 flex flex-col items-center text-center">
+          <HouseSeal size={52} />
+          <h1 className="mt-5 text-ink"><Wordmark as="span" className="block text-lg" subtitle="Panel de citas" /></h1>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="card-soft space-y-5">
-          <div className="flex justify-center mb-2">
-            <div className="w-12 h-12 rounded-full bg-cream-soft border border-ink-line flex items-center justify-center">
-              <KeyRound size={20} className="text-champagne" />
-            </div>
-          </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="engraved space-y-5 rounded-[1.4rem] p-7">
 
-          <Field label="Email" required error={errors.email?.message}>
+          <Field label="Correo" required error={errors.email?.message}>
             {(id, ariaProps) => (
               <div className="relative">
                 <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
@@ -80,7 +76,7 @@ export default function AdminLoginPage() {
                   {...register('email')}
                   type="email"
                   className="input-clean pl-9"
-                  placeholder="admin@ciaociao.mx"
+                  placeholder="tu correo del equipo"
                   autoComplete="email"
                   autoFocus
                 />

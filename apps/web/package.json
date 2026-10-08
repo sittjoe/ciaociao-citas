@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:privacy": "node scripts/check-privacy.mjs"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

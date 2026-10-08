@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import Image from 'next/image'
 import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { adminDb } from '@/lib/firebase-admin'
@@ -7,16 +6,17 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { BUSINESS_TZ, cn, formatDate, formatTime12 } from '@/lib/utils'
-import { appointmentTypeLabels, isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
+import { isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { StatusBadge } from '@/components/ui/Badge'
-import { Card } from '@/components/ui/Card'
-import { CalendarDays, CalendarPlus, Gem, Monitor } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Check, Monitor } from 'lucide-react'
 import type { AppointmentStatus, GuestStatus } from '@/types'
 import CancelButton from './CancelButton'
 import RescheduleSection from './RescheduleSection'
-import LocationCard, { getShowroomAddress } from './LocationCard'
+import LocationCard, { getShowroomAddress, getShowroomMapsUrl } from './LocationCard'
 import GuestsPanel, { type GuestSummary } from './GuestsPanel'
-import { TitleReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
+import { WordsReveal, DepthReveal, LightSweep } from '@/components/motion/cinematic'
+import { Wordmark } from '@/components/brand/Wordmark'
+import Countdown from './Countdown'
 import ReservaGate from './ReservaGate'
 import {
   normalizeReservaCode,
@@ -42,27 +42,18 @@ interface PageProps {
  */
 function GateView({ code }: { code: string }) {
   return (
-    <main className="min-h-screen bg-cream">
-      <section className="relative min-h-screen overflow-hidden px-4 py-10 sm:px-8 sm:py-16">
-        <Image
-          src="/atelier-vivo-hero.webp"
-          alt=""
-          aria-hidden
-          fill
-          sizes="100vw"
-          className="object-cover opacity-[0.18]"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.78),oklch(0.982_0.008_86/0.96))]" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
+    <main className="paper-grain min-h-screen text-ink">
+      <section className="px-4 py-8 sm:px-8 sm:py-12">
+        <div className="mx-auto grid min-h-[calc(100svh-6rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
           <header>
-            <p className="mb-4 text-11 font-semibold uppercase tracking-display-eyebrow text-champagne-solid">
-              Ciao Ciao · Showroom privado
-            </p>
-            <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">
-              <TitleReveal text="Estado de tu cita" />
+            <a href="/" className="inline-flex min-h-[44px] items-center text-champagne-deep" aria-label="Ciao Ciao Joyería, inicio">
+              <Wordmark className="text-sm" />
+            </a>
+            <h1 className="mt-10 font-serif text-[clamp(2.6rem,6.4vw,4.6rem)] font-light leading-[1.0] tracking-tight text-ink">
+              <WordsReveal text="Tu reserva, solo para ti." />
             </h1>
-            <p className="mt-6 max-w-md text-sm leading-7 text-ink-muted">
-              Los detalles de tu cita son solo para ti. Confirma tu correo una vez y este dispositivo la recordará por 30 días.
+            <p className="mt-6 max-w-md text-base font-light leading-7 text-ink-muted">
+              Confirma el correo con el que reservaste. Este dispositivo lo recordará por 30 días.
             </p>
           </header>
           <DepthReveal delay={0.35}>
@@ -87,14 +78,14 @@ const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 
 function statusMessage(status: AppointmentStatus, isVideo: boolean, hasMeetingUrl: boolean): string {
   if (status === 'pending') {
     return isVideo
-      ? 'Tu solicitud de video consulta fue recibida y está pendiente de revisión por nuestro equipo.'
-      : 'Tu solicitud fue recibida y está pendiente de revisión por nuestro equipo.'
+      ? 'Recibimos tu solicitud de videollamada; el equipo la revisa y te confirma por correo.'
+      : 'Recibimos tu solicitud; el equipo la revisa y te confirma por correo.'
   }
   if (status === 'accepted') {
     if (!isVideo) return 'Tu cita está confirmada. Te esperamos en el showroom.'
     return hasMeetingUrl
-      ? 'Tu video consulta está confirmada. El enlace está listo abajo.'
-      : 'Tu video consulta está confirmada. Te enviaremos el enlace antes de la llamada.'
+      ? 'Tu videollamada está confirmada. El enlace está listo abajo.'
+      : 'Tu videollamada está confirmada. Te enviaremos el enlace antes de la llamada.'
   }
   if (status === 'rejected') {
     return 'En este momento no podemos confirmar tu cita. Te invitamos a agendar en otro horario.'
@@ -201,7 +192,7 @@ export default async function ReservaPage({ params, searchParams }: PageProps) {
   const isUpcoming       = appt.slotDatetime.getTime() > Date.now()
   const showActions      = appt.status === 'accepted' && isUpcoming
   const showroomAddress  = getShowroomAddress()
-  const showroomMapsUrl  = (process.env.NEXT_PUBLIC_SHOWROOM_MAPS_URL ?? process.env.SHOWROOM_MAPS_URL ?? '').trim()
+  const showroomMapsUrl  = getShowroomMapsUrl()
 
   // La clienta puede mover su cita hasta 12 horas antes del horario actual
   // (misma regla que valida /api/reschedule/[token]).
@@ -222,152 +213,222 @@ export default async function ReservaPage({ params, searchParams }: PageProps) {
     })
   }
 
-  return (
-    <main className="min-h-screen bg-cream">
-      <section className="relative min-h-screen overflow-hidden px-4 py-10 sm:px-8 sm:py-16">
-        <Image
-          src="/atelier-vivo-hero.webp"
-          alt=""
-          aria-hidden
-          fill
-          sizes="100vw"
-          className="object-cover opacity-[0.18]"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.78),oklch(0.982_0.008_86/0.96))]" />
+  const firstName = appt.name.trim().split(/\s+/)[0] ?? ''
+  const heading =
+    appt.status === 'accepted' && isUpcoming ? `Te esperamos, ${firstName}.`
+    : appt.status === 'accepted' ? 'Gracias por tu visita.'
+    : appt.status === 'pending' ? 'Tu solicitud está en revisión.'
+    : appt.status === 'rejected' ? 'No pudimos confirmar este horario.'
+    : 'Esta cita fue cancelada.'
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
-          <header>
-            <p className="mb-4 text-11 font-semibold uppercase tracking-display-eyebrow text-champagne-solid">
-              Ciao Ciao · {isVideo ? 'Video consulta' : 'Showroom privado'}
+  // Línea de estado: dónde va la cita. Solo tiene sentido mientras está viva.
+  const timeline = canCancel ? [
+    { label: 'Solicitud recibida', state: 'done' as const },
+    { label: 'Confirmada por el equipo', state: appt.status === 'accepted' ? 'done' as const : 'current' as const },
+    { label: isVideo ? 'Tu videollamada' : 'Tu visita', state: appt.status === 'accepted' ? 'current' as const : 'next' as const },
+  ] : []
+
+  const bring = isVideo
+    ? [
+        'Una conexión estable y un lugar tranquilo, con buena luz.',
+        'Si sabes la talla o tienes fotos de referencia, tenlas a la mano.',
+      ]
+    : [
+        'Tu identificación oficial original y vigente.',
+        ...(guests.length > 0 ? ['Tus invitados, cada uno con su identificación ya verificada.'] : []),
+        'Llega cinco minutos antes; el equipo te recibe en la puerta.',
+      ]
+
+  return (
+    <main className="paper-grain min-h-screen text-ink">
+      <section className="px-4 pb-16 pt-8 sm:px-8 sm:pb-24 sm:pt-12">
+        <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-start lg:gap-16">
+          <header className="lg:sticky lg:top-12">
+            <a href="/" className="inline-flex min-h-[44px] items-center text-champagne-deep" aria-label="Ciao Ciao Joyería, inicio">
+              <Wordmark className="text-sm" />
+            </a>
+            <p className="mb-4 mt-10 text-11 font-medium uppercase tracking-display-eyebrow text-champagne-solid">
+              {isVideo ? 'Videollamada' : 'Cita privada'}
             </p>
-            <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">
-              <TitleReveal text="Estado de tu cita" />
+            <h1 className="font-serif text-[clamp(2.6rem,6.4vw,4.6rem)] font-light leading-[1.0] tracking-tight text-ink">
+              <WordsReveal text={heading} />
             </h1>
-            <p className="mt-6 max-w-md text-sm leading-7 text-ink-muted">
-              Conserva este código. El equipo lo usará para ubicar tu solicitud y preparar {isVideo ? 'tu llamada' : 'tu visita'}.
+            <p className="mt-5 max-w-md text-base font-light leading-7 text-ink-muted">
+              {statusMessage(appt.status, isVideo, Boolean(appt.meetingUrl))}
             </p>
+            {canCancel && isUpcoming && (
+              <div className="mt-6">
+                <Countdown iso={appt.slotDatetime.toISOString()} />
+              </div>
+            )}
+
+            {timeline.length > 0 && (
+              <ol className="mt-8 max-w-sm space-y-0" aria-label="Estado de tu cita">
+                {timeline.map((step, i) => (
+                  <li key={step.label} className="relative flex gap-4 pb-5 last:pb-0">
+                    {i < timeline.length - 1 && (
+                      <span aria-hidden className={cn('absolute left-[9px] top-6 h-[calc(100%-1.25rem)] w-px', step.state === 'done' ? 'bg-champagne' : 'bg-ink-line')} />
+                    )}
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'relative mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border',
+                        step.state === 'done' && 'border-champagne-solid bg-champagne-solid text-porcelain',
+                        step.state === 'current' && 'border-champagne-solid bg-porcelain',
+                        step.state === 'next' && 'border-ink-line bg-porcelain',
+                      )}
+                    >
+                      {step.state === 'done' && <Check size={11} strokeWidth={2.25} />}
+                      {step.state === 'current' && <span className="h-1.5 w-1.5 rounded-full bg-champagne-solid" />}
+                    </span>
+                    <span className={cn('text-sm', step.state === 'next' ? 'text-ink-muted' : 'text-ink')}>
+                      <span className="sr-only">{step.state === 'done' ? 'Hecho: ' : step.state === 'current' ? 'En curso: ' : 'Después: '}</span>
+                      {step.label}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
           </header>
 
-          <DepthReveal delay={0.35}>
-          <Card variant="atelier" className="relative w-full space-y-5 overflow-hidden p-6 sm:p-7">
+          <div className="space-y-5">
+          <DepthReveal delay={0.25}>
+          <article className="engraved relative overflow-hidden rounded-[1.6rem] px-6 py-7 sm:px-8">
             <LightSweep delay={1.1} />
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="h-eyebrow mb-2">Tu cita</p>
-                <h2 className="font-serif text-2xl font-light text-ink">{appt.name}</h2>
-              </div>
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-sm text-ink-muted">{appt.name}</p>
               <StatusBadge status={appt.status} />
             </div>
 
-            <p className="text-sm leading-6 text-ink-muted">{statusMessage(appt.status, isVideo, Boolean(appt.meetingUrl))}</p>
-
-            <div className="rounded-2xl border border-ink-line bg-porcelain/70 px-5 py-4">
-              {/* Protagonista: fecha y hora en serif, con aire */}
-              <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1">
-                <p className="font-serif text-[1.7rem] font-light leading-[1.05] text-ink">{fechaLarga}</p>
-                <p className="font-serif text-2xl font-light leading-none text-champagne-solid">
-                  {hora}<span className="ml-1 font-sans text-sm text-ink-subtle">{periodo}</span>
-                </p>
-              </div>
-              <p className="mt-1 text-xs text-ink-subtle">{anio}</p>
-
-              <dl className="mt-4 border-t border-ink-line text-sm">
-                {([
-                  ['Tipo',    appointmentTypeLabels[appt.appointmentType]],
-                  ['Código',  appt.confirmationCode],
-                  ...(isVideo ? [['Link', appt.meetingUrl || 'Pendiente por enviar']] : []),
-                  ...(isVideo && appt.meetingProvider ? [['Plataforma', appt.meetingProvider]] : []),
-                  ...(isVideo && appt.meetingInstructions ? [['Indicaciones', appt.meetingInstructions]] : []),
-                  ...(appt.notes ? [['Notas', appt.notes]] : [] as [string, string][]),
-                ] as [string, string][]).map(([label, value]) => (
-                  <div key={label} className="flex flex-col gap-1 border-b border-ink-line py-2.5 last:border-0 sm:flex-row sm:justify-between sm:gap-5">
-                    <dt className="text-ink-muted">{label}</dt>
-                    <dd className={cn(
-                      'break-words text-ink sm:max-w-[60%] sm:text-right',
-                      label === 'Código' && 'font-medium tracking-[0.14em] tabular-nums',
-                      label === 'Link'   && 'break-all',
-                    )}>
-                      {value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+            <div className="mt-5 border-b border-ink-line pb-5">
+              <p className="font-serif text-[2rem] font-light leading-[1.05] text-ink">{fechaLarga}</p>
+              <p className="mt-2 flex items-baseline gap-2">
+                <span className="font-serif text-[1.7rem] font-light leading-none text-champagne-deep">{hora}</span>
+                <span className="text-sm text-ink-muted">{periodo} · hora CDMX · {anio}</span>
+              </p>
             </div>
 
-            {!isVideo && guests.length > 0 && (
-              <GuestsPanel
-                guests={guests}
-                hostName={appt.name}
-                dateStr={formatDate(appt.slotDatetime)}
-                timeStr={formatTime12(appt.slotDatetime)}
-              />
-            )}
+            <dl className="text-sm">
+              {([
+                ['Experiencia', isVideo ? 'Videollamada' : 'Showroom privado'],
+                ['Código',  appt.confirmationCode],
+                ...(isVideo ? [['Enlace', appt.meetingUrl || 'Llega antes de la llamada']] : []),
+                ...(isVideo && appt.meetingProvider ? [['Plataforma', appt.meetingProvider]] : []),
+                ...(isVideo && appt.meetingInstructions ? [['Indicaciones', appt.meetingInstructions]] : []),
+                ...(appt.notes ? [['Tu nota', appt.notes]] : [] as [string, string][]),
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-1 border-b border-ink-line py-3 last:border-0 sm:flex-row sm:justify-between sm:gap-5">
+                  <dt className="text-ink-muted">{label}</dt>
+                  <dd className={cn(
+                    'break-words text-ink sm:max-w-[62%] sm:text-right',
+                    label === 'Código' && 'font-medium tabular-nums tracking-[0.14em]',
+                    label === 'Enlace'   && 'break-all',
+                  )}>
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
 
             {showActions && (
-              <div className="space-y-4 border-t border-ink-line pt-4">
+              <div className="mt-5 space-y-3 border-t border-ink-line pt-5">
                 {isVideo && appt.meetingUrl && (
-                  <a
-                    href={appt.meetingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={ACTION_PRIMARY}
-                  >
+                  <a href={appt.meetingUrl} target="_blank" rel="noopener noreferrer" className={ACTION_PRIMARY}>
                     <Monitor size={16} strokeWidth={1.5} />
                     Unirme a la videollamada
                   </a>
                 )}
-                <div className="space-y-2">
-                  <p className="h-eyebrow">Guárdala en tu agenda</p>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    <a
-                      href={`/api/calendar/${appt.id}?code=${encodeURIComponent(appt.confirmationCode)}`}
-                      className={ACTION_OUTLINE}
-                    >
-                      <CalendarPlus size={15} strokeWidth={1.5} />
-                      Agregar a mi calendario
-                    </a>
-                    <a
-                      href={googleCalendarUrl(appt, isVideo, showroomAddress)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={ACTION_QUIET}
-                    >
-                      <CalendarDays size={15} strokeWidth={1.5} />
-                      Google Calendar
-                    </a>
-                  </div>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <a
+                    href={`/api/calendar/${appt.id}?code=${encodeURIComponent(appt.confirmationCode)}`}
+                    className={isVideo && appt.meetingUrl ? ACTION_OUTLINE : ACTION_PRIMARY}
+                  >
+                    <CalendarPlus size={15} strokeWidth={1.5} />
+                    Agregar a mi calendario
+                  </a>
+                  <a
+                    href={googleCalendarUrl(appt, isVideo, showroomAddress)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={ACTION_QUIET}
+                  >
+                    <CalendarDays size={15} strokeWidth={1.5} />
+                    Google Calendar
+                  </a>
                 </div>
               </div>
             )}
-
-            {showActions && !isVideo && showroomAddress && (
-              <LocationCard address={showroomAddress} googleMapsUrl={showroomMapsUrl || undefined} />
-            )}
-
-            {canReschedule && (
-              <RescheduleSection
-                token={appt.cancelToken}
-                appointmentType={appt.appointmentType}
-                currentSlotId={appt.slotId}
-              />
-            )}
-
-            {canCancel && <CancelButton token={appt.cancelToken} />}
-
-            <div className="flex items-center justify-between gap-3 border-t border-ink-line pt-2">
-              <span className="inline-flex items-center gap-2 text-xs text-ink-subtle">
-                {isVideo ? <Monitor size={13} strokeWidth={1.5} className="text-champagne-solid" /> : <Gem size={13} strokeWidth={1.5} className="text-champagne-solid" />}
-                {isVideo ? 'Video consulta' : 'Showroom privado CDMX'}
-              </span>
-              <a
-                href="/"
-                className="inline-flex min-h-[44px] items-center rounded-lg px-2 text-xs font-medium text-champagne-solid transition-colors hover:text-champagne-deep focus-visible:outline-none focus-visible:shadow-focus-ring"
-              >
-                Nueva cita
-              </a>
-            </div>
-          </Card>
+          </article>
           </DepthReveal>
+
+          {showActions && !isVideo && showroomAddress && (
+            <LocationCard address={showroomAddress} googleMapsUrl={showroomMapsUrl || undefined} />
+          )}
+
+          {canCancel && isUpcoming && (
+            <section aria-labelledby="que-llevar" className="rounded-2xl bg-[var(--paper-deep)] px-5 py-5">
+              <h2 id="que-llevar" className="font-serif text-xl text-ink">Qué llevar</h2>
+              <ul className="mt-3 space-y-2.5">
+                {bring.map(item => (
+                  <li key={item} className="flex gap-3 text-sm leading-6 text-ink-muted">
+                    <span aria-hidden className="mt-[0.6rem] h-1 w-1 shrink-0 rotate-45 bg-champagne" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {!isVideo && guests.length > 0 && (
+            <GuestsPanel
+              guests={guests}
+              hostName={appt.name}
+              dateStr={formatDate(appt.slotDatetime)}
+              timeStr={formatTime12(appt.slotDatetime)}
+            />
+          )}
+
+          {canCancel && (
+            <section aria-labelledby="gestionar" className="space-y-3 rounded-2xl border border-ink-line bg-porcelain px-5 py-5">
+              <div>
+                <h2 id="gestionar" className="font-serif text-xl text-ink">¿Cambió tu agenda?</h2>
+                <p className="mt-1 text-sm leading-6 text-ink-muted">
+                  {canReschedule
+                    ? 'Puedes moverla a otro horario hasta 12 horas antes, o cancelarla si ya no puedes venir.'
+                    : 'Faltan menos de 12 horas, así que ya no se puede mover en línea. Escríbenos y lo resolvemos contigo.'}
+                </p>
+              </div>
+              {canReschedule && (
+                <RescheduleSection
+                  token={appt.cancelToken}
+                  appointmentType={appt.appointmentType}
+                  currentSlotId={appt.slotId}
+                />
+              )}
+              {!canReschedule && (
+                <a href={`mailto:hola@ciaociao.mx?subject=${encodeURIComponent(`Mi cita ${appt.confirmationCode}`)}`} className={ACTION_OUTLINE}>
+                  Escribir a hola@ciaociao.mx
+                </a>
+              )}
+              <CancelButton token={appt.cancelToken} />
+            </section>
+          )}
+
+          <div className="flex items-center justify-between gap-3 px-1">
+            <a
+              href="mailto:hola@ciaociao.mx"
+              className="inline-flex min-h-[44px] items-center text-xs text-ink-muted transition-colors hover:text-ink"
+            >
+              hola@ciaociao.mx
+            </a>
+            <a
+              href="/"
+              className="inline-flex min-h-[44px] items-center rounded-lg px-2 text-xs font-medium text-champagne-solid transition-colors hover:text-champagne-deep focus-visible:outline-none focus-visible:shadow-focus-ring"
+            >
+              Reservar otra cita
+            </a>
+          </div>
+          </div>
         </div>
       </section>
     </main>

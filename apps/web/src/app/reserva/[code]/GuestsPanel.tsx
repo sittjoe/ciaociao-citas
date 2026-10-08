@@ -22,7 +22,7 @@ interface GuestsPanelProps {
 // Reusa los tokens de estado canónicos (globals.css) en vez de colores sueltos:
 // verde = listo, ámbar = falta algo, neutro = vencido.
 const statusMap: Record<Exclude<GuestStatus, 'excluded'>, { label: string; className: string }> = {
-  verified: { label: 'Verificado',           className: 'status-accepted'  },
+  verified: { label: 'Verificación lista',   className: 'status-accepted'  },
   pending:  { label: 'Falta identificación', className: 'status-pending'   },
   expired:  { label: 'Plazo vencido',        className: 'status-cancelled' },
 }

@@ -5,7 +5,7 @@ import ConfirmScreen from './ConfirmScreen'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
-  title:  'Confirmar cita — Ciao Ciao',
+  title:  'Confirmar cita',
   robots: { index: false, follow: false, nocache: true },
 }
 

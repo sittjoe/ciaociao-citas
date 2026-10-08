@@ -1,49 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { CalendarCheck, Clock, Gem, XCircle, CalendarDays, CalendarClock, CheckCircle, AlertTriangle } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { CalendarClock, CheckCircle, AlertTriangle } from 'lucide-react'
 import type { AdminStats, CommercialStatus } from '@/types'
 import { StatusBadge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { commercialStatusLabels } from '@/lib/commercial'
 import { formatShortDate } from '@/lib/utils'
-import { NumberRoll } from '@/components/motion'
-import { Card } from '@/components/ui/Card'
 
 function reload() {
   if (typeof window !== 'undefined') window.location.reload()
-}
-
-// Paleta disciplinada: champagne = acento; ámbar/esmeralda = semáforos con
-// significado (falta algo / positivo); el resto en tinta. Nada de azul suelto
-// ni cinco colores compitiendo (eso sería "dashboard cripto"). Los tonos de
-// texto usan -700 para pasar contraste sobre superficies claras.
-const cards = (stats: AdminStats) => [
-  { label: 'Pendientes',         value: stats.totalPending,   num: 'text-amber-700',      icon: 'text-amber-600',    Icon: Clock        },
-  { label: 'Confirmadas hoy',    value: stats.acceptedToday,  num: 'text-emerald-700',    icon: 'text-emerald-600',  Icon: CalendarCheck },
-  { label: 'Total confirmadas',  value: stats.totalAccepted,  num: 'text-champagne-deep', icon: 'text-champagne',    Icon: Gem           },
-  { label: 'Rechazadas',         value: stats.totalRejected,  num: 'text-ink',            icon: 'text-ink-subtle',   Icon: XCircle      },
-  { label: 'Slots próx. semana', value: stats.upcomingSlots,  num: 'text-ink',            icon: 'text-ink-subtle',   Icon: CalendarDays  },
-]
-
-export function StatsCards({ stats }: { stats: AdminStats }) {
-  return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-      {cards(stats).map(({ label, value, num, icon, Icon }) => (
-        <Card key={label} variant="admin" className="flex flex-col gap-2 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="h-eyebrow truncate">{label}</p>
-            <Icon size={16} strokeWidth={1.5} className={cn(icon, 'shrink-0')} />
-          </div>
-          <NumberRoll
-            value={value}
-            className={cn('font-serif text-3xl font-light tabular-nums leading-none', num)}
-          />
-        </Card>
-      ))}
-    </div>
-  )
 }
 
 export function UpcomingList({

@@ -1,35 +1,82 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, CalendarDays, CalendarRange, CalendarClock, Settings, LogOut, Menu, X, Users, KeyRound, AlertTriangle, CalendarOff } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, CalendarRange, CalendarClock, Settings, LogOut, Menu, X, Users, KeyRound, AlertTriangle, CalendarOff, Search } from 'lucide-react'
 import { motion, AnimatePresence, LayoutGroup } from '@/components/motion'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { Wordmark } from '@/components/brand/Wordmark'
 
+// Rutas intactas (enlaces y costumbre), etiquetas en español y en el orden
+// del día: primero lo que se decide hoy.
 const navItems = [
-  { href: '/admin/hoy',         label: 'Hoy',        Icon: CalendarClock   },
-  { href: '/admin',             label: 'Dashboard',  Icon: LayoutDashboard },
-  { href: '/admin/problemas',   label: 'Problemas',  Icon: AlertTriangle   },
+  { href: '/admin/hoy',         label: 'Agenda',     Icon: CalendarClock   },
   { href: '/admin/citas',       label: 'Citas',      Icon: CalendarDays    },
+  { href: '/admin',             label: 'Resumen',    Icon: LayoutDashboard },
   { href: '/admin/calendario',  label: 'Calendario', Icon: CalendarRange   },
-  { href: '/admin/slots',       label: 'Slots',      Icon: Settings        },
+  { href: '/admin/slots',       label: 'Horarios',   Icon: Settings        },
   { href: '/admin/bloqueos',    label: 'Bloqueos',   Icon: CalendarOff     },
-  { href: '/admin/admins',      label: 'Admins',     Icon: Users           },
+  { href: '/admin/problemas',   label: 'Problemas',  Icon: AlertTriangle   },
+  { href: '/admin/admins',      label: 'Equipo',     Icon: Users           },
   { href: '/admin/cuenta',      label: 'Mi cuenta',  Icon: KeyRound        },
 ]
 
 function Logomark() {
   return (
     <div className="border-b border-admin-line px-4 py-4">
-      <p className="font-serif text-lg font-light tracking-[0.22em] uppercase text-ink leading-none">
-        Ciao Ciao
-      </p>
-      <p className="text-[0.625rem] tracking-[0.28em] uppercase text-ink-subtle mt-1 font-medium">
-        Joyería · Admin
-      </p>
+      <Wordmark className="text-[0.8rem] text-ink" subtitle="Panel de citas" />
     </div>
+  )
+}
+
+/**
+ * Buscador global: escribe y Enter lleva a Citas filtrada (?q=). La tecla
+ * «/» lo enfoca desde cualquier pantalla del panel.
+ */
+function GlobalSearch({ onDone, shortcut = false }: { onDone?: () => void; shortcut?: boolean }) {
+  const router = useRouter()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [q, setQ] = useState('')
+
+  useEffect(() => {
+    if (!shortcut) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
+      e.preventDefault()
+      inputRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [shortcut])
+
+  return (
+    <form
+      role="search"
+      className="px-2.5 pt-2.5"
+      onSubmit={e => {
+        e.preventDefault()
+        const term = q.trim()
+        router.push(term ? `/admin/citas?q=${encodeURIComponent(term)}` : '/admin/citas')
+        onDone?.()
+      }}
+    >
+      <label className="relative block">
+        <span className="sr-only">Buscar clienta, correo, teléfono o código</span>
+        <Search size={14} strokeWidth={1.5} aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+        <input
+          ref={inputRef}
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Buscar clienta"
+          className="min-h-[44px] w-full rounded-lg py-2 pl-8 pr-8 text-sm"
+        />
+        {shortcut && <kbd aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">/</kbd>}
+      </label>
+    </form>
   )
 }
 
@@ -41,7 +88,7 @@ interface NavCounts {
 /** Badge numérico del nav para el href dado (undefined = sin badge). */
 function navBadgeCount(href: string, counts: NavCounts | null): number | undefined {
   if (!counts) return undefined
-  if (href === '/admin/citas')     return counts.pendientes
+  if (href === '/admin/hoy')       return counts.pendientes
   if (href === '/admin/problemas') return counts.problemas
   return undefined
 }
@@ -179,6 +226,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col w-56 bg-admin-panel border-r border-admin-line fixed inset-y-0 left-0">
         <Logomark />
+        <GlobalSearch shortcut />
         <NavList pathname={pathname} onClose={() => {}} counts={counts} />
         <div className="p-3 border-t border-admin-line">
           <div className="flex items-center gap-2.5 px-3 pb-2.5">
@@ -198,7 +246,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
 
       {/* Mobile header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-admin-panel border-b border-admin-line">
-        <p className="font-serif tracking-[0.2em] uppercase text-ink">Ciao Ciao</p>
+        <Wordmark className="text-[0.8rem] text-ink" />
         <button
           onClick={() => setOpen(!open)}
           className="-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:text-ink focus-visible:text-ink focus-visible:outline-none focus-visible:shadow-focus-ring"
@@ -219,7 +267,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-40 bg-showroom-ink/40 lg:hidden"
               onClick={() => setOpen(false)}
             />
             <motion.aside
@@ -241,6 +289,7 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
                 <X size={18} strokeWidth={1.5} />
               </button>
               <Logomark />
+              <GlobalSearch onDone={() => setOpen(false)} />
               <NavList pathname={pathname} onClose={() => setOpen(false)} counts={counts} />
               <div className="p-3 border-t border-admin-line">
                 <div className="flex items-center gap-2.5 px-3 pb-2.5">

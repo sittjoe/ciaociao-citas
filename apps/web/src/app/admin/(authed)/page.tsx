@@ -1,13 +1,19 @@
 import type { Metadata } from 'next'
-import { AlertTriangle } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, ArrowRight } from 'lucide-react'
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { StatsCards, UpcomingList, OverdueFollowUpsList, type OverdueFollowUpItem } from '@/components/admin/StatsCards'
-import { Card, CardHeader, CardBody } from '@/components/ui/Card'
+import { UpcomingList, OverdueFollowUpsList, type OverdueFollowUpItem } from '@/components/admin/StatsCards'
+import { WeeklyAttendance } from '@/components/admin/WeeklyAttendance'
+import { BUSINESS_TZ, cn } from '@/lib/utils'
+import { attendanceRate, bucketByWeek, nextDayKeys, weekStartKey, type WeekBucket } from '@/lib/agenda'
 import type { AdminStats, Appointment, AppointmentStatus, CommercialStatus } from '@/types'
 
 export const dynamic  = 'force-dynamic'
-export const metadata: Metadata = { title: 'Dashboard' }
+export const metadata: Metadata = { title: 'Resumen' }
+
+const WEEKS = 8
 
 const EMPTY_STATS: AdminStats = {
   totalPending: 0, acceptedToday: 0, totalAccepted: 0, totalRejected: 0,
@@ -16,14 +22,14 @@ const EMPTY_STATS: AdminStats = {
 
 async function getStats(): Promise<{ stats: AdminStats; error: boolean }> {
   const now        = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const todayEnd   = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
+  // «Hoy» es el día de CDMX, no el del reloj del servidor (UTC): antes, de
+  // 6 pm en adelante «Confirmadas hoy» contaba las de mañana.
+  const todayKey   = formatInTimeZone(now, BUSINESS_TZ, 'yyyy-MM-dd')
+  const todayStart = fromZonedTime(`${todayKey}T00:00:00`, BUSINESS_TZ)
+  const todayEnd   = fromZonedTime(`${nextDayKeys(todayKey, 2)[1]}T00:00:00`, BUSINESS_TZ)
   const weekEnd    = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
   try {
-    // All of these use single-field equality or existing composite indexes.
-    // Conversion is derived from the accepted/rejected totals below — no extra
-    // query, so it can't depend on an index that isn't deployed.
     const [pendingSnap, acceptedTodaySnap, totalAcceptedSnap, totalRejectedSnap, upcomingSlotsSnap, nextApptSnap] =
       await Promise.all([
         adminDb.collection('appointments').where('status', '==', 'pending').count().get(),
@@ -92,6 +98,41 @@ async function getStats(): Promise<{ stats: AdminStats; error: boolean }> {
   }
 }
 
+/**
+ * Citas confirmadas que ya ocurrieron en las últimas 8 semanas, por semana
+ * (lunes CDMX) y por asistencia. Misma forma de query que «Confirmadas hoy»
+ * (status == accepted + rango de slotDatetime): no requiere índices nuevos.
+ */
+async function getWeekly(): Promise<{ weeks: WeekBucket[]; error: boolean }> {
+  const now = new Date()
+  const todayKey = formatInTimeZone(now, BUSINESS_TZ, 'yyyy-MM-dd')
+  const thisMonday = weekStartKey(todayKey, Number(formatInTimeZone(now, BUSINESS_TZ, 'i')))
+  const [y, m, d] = thisMonday.split('-').map(Number)
+  const firstMonday = new Date(Date.UTC(y, m - 1, d - 7 * (WEEKS - 1))).toISOString().slice(0, 10)
+  const weekKeys = Array.from({ length: WEEKS }, (_, i) => nextDayKeys(firstMonday, 7 * i + 1)[7 * i])
+  try {
+    const snap = await adminDb.collection('appointments')
+      .where('status', '==', 'accepted')
+      .where('slotDatetime', '>=', Timestamp.fromDate(fromZonedTime(`${firstMonday}T00:00:00`, BUSINESS_TZ)))
+      .where('slotDatetime', '<',  Timestamp.fromDate(now))
+      .select('slotDatetime', 'attended')
+      .get()
+    const rows = snap.docs.map(doc => {
+      const dt = (doc.data().slotDatetime as Timestamp).toDate()
+      const key = formatInTimeZone(dt, BUSINESS_TZ, 'yyyy-MM-dd')
+      const attended = doc.data().attended
+      return {
+        weekKey: weekStartKey(key, Number(formatInTimeZone(dt, BUSINESS_TZ, 'i'))),
+        attended: typeof attended === 'boolean' ? attended : null,
+      }
+    })
+    return { weeks: bucketByWeek(weekKeys, rows), error: false }
+  } catch (err) {
+    console.error('getWeekly failed, rendering empty chart:', err)
+    return { weeks: bucketByWeek(weekKeys, []), error: true }
+  }
+}
+
 // Estados comerciales que ya no requieren seguimiento (ver lib/commercial).
 const CLOSED_COMMERCIAL_STATUSES: CommercialStatus[] = ['purchased', 'not_purchased']
 
@@ -127,92 +168,104 @@ async function getOverdueFollowUps(): Promise<{ items: OverdueFollowUpItem[]; er
 }
 
 export default async function AdminDashboard() {
-  const [statsResult, followUpsResult] = await Promise.all([getStats(), getOverdueFollowUps()])
+  const [statsResult, followUpsResult, weeklyResult] = await Promise.all([getStats(), getOverdueFollowUps(), getWeekly()])
   const { stats, error: statsError } = statsResult
   const { items: overdueFollowUps, error: followUpsError } = followUpsResult
-  const hasError = statsError || followUpsError
-  const needsAttention = stats.totalPending + stats.upcomingSlots === 0
+  const hasError = statsError || followUpsError || weeklyResult.error
+  const rate = attendanceRate(weeklyResult.weeks)
+  const totalWeeks = weeklyResult.weeks.reduce((n, w) => n + w.attended + w.noShow + w.unmarked, 0)
+
+  // Lo que pide acción ahora. «Sin horarios publicados» era antes «al día».
+  const attention = statsError ? [] : [
+    ...(stats.totalPending > 0 ? [{ href: '/admin/hoy', text: `${stats.totalPending} solicitud${stats.totalPending === 1 ? '' : 'es'} por decidir` }] : []),
+    ...(stats.upcomingSlots === 0 ? [{ href: '/admin/slots', text: 'No hay horarios libres en los próximos 7 días' }] : []),
+    ...(overdueFollowUps.length > 0 ? [{ href: '/admin/citas', text: `${overdueFollowUps.length} seguimiento${overdueFollowUps.length === 1 ? '' : 's'} vencido${overdueFollowUps.length === 1 ? '' : 's'}` }] : []),
+  ]
+
+  const figures = [
+    { label: 'Confirmadas hoy', value: stats.acceptedToday },
+    { label: 'Por decidir', value: stats.totalPending },
+    { label: 'Horarios libres, 7 días', value: stats.upcomingSlots },
+    { label: 'Aceptación', value: stats.conversion === null ? 'Sin datos' : `${stats.conversion}%`, hint: stats.decided > 0 ? `${stats.decided} decididas` : undefined },
+  ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="h-eyebrow mb-2">Operación</p>
-          <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Dashboard</h1>
-          <p className="text-sm text-ink-muted mt-1">Pendientes, próximos horarios y citas confirmadas.</p>
-        </div>
-        <div className="shrink-0 self-start rounded-xl border border-admin-line bg-admin-panel px-4 py-2.5 text-left lg:self-auto lg:text-right">
-          <p className="h-eyebrow">Pendientes</p>
-          <p className="mt-0.5 font-serif text-xl font-light leading-none text-ink">
-            <span className="tabular-nums">{statsError ? '—' : stats.totalPending}</span>
-            <span className="ml-1.5 align-middle font-sans text-xs font-normal text-ink-subtle">
-              {statsError ? 'sin datos' : needsAttention ? 'al día' : 'por revisar'}
-            </span>
-          </p>
-        </div>
-      </div>
+    <div className="space-y-8">
+      <header>
+        <h1 className="font-serif text-display-sm font-light tracking-tight text-ink">Resumen</h1>
+        <p className="mt-1 text-sm text-ink-muted">Lo que pide atención, cómo van las citas y quién viene.</p>
+      </header>
 
       {hasError && (
-        <Card variant="admin" className="flex items-start gap-3 border-amber-200 bg-amber-50/60 p-4">
-          <AlertTriangle size={18} strokeWidth={1.5} className="mt-0.5 shrink-0 text-amber-600" />
+        <div role="alert" className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <AlertTriangle size={18} strokeWidth={1.5} className="mt-0.5 shrink-0 text-amber-700" />
           <div>
             <p className="text-sm font-medium text-ink">No pudimos cargar algunos datos</p>
             <p className="text-sm text-ink-muted">Recarga la página para reintentar.</p>
           </div>
-        </Card>
+        </div>
       )}
 
-      <StatsCards stats={stats} />
+      {!statsError && (
+        <section aria-label="Requiere atención" className={cn('rounded-2xl border px-5 py-4', attention.length ? 'border-champagne-soft bg-champagne-tint/60' : 'border-admin-line bg-admin-panel')}>
+          {attention.length === 0 ? (
+            <p className="text-sm text-ink">Todo al día: sin solicitudes por decidir y con horarios publicados.</p>
+          ) : (
+            <ul className="divide-y divide-champagne-soft">
+              {attention.map(item => (
+                <li key={item.text}>
+                  <Link href={item.href} className="flex min-h-[44px] items-center justify-between gap-3 py-1 text-sm font-medium text-ink hover:text-champagne-deep focus-visible:shadow-focus-ring">
+                    {item.text}
+                    <ArrowRight size={15} strokeWidth={1.5} className="shrink-0 text-champagne-deep" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-      <Card variant="admin">
-        <CardHeader>
-          <h2 className="font-serif text-lg font-light text-ink">Próximas citas</h2>
-        </CardHeader>
-        <CardBody className="pt-0">
-          <UpcomingList appointments={stats.nextAppointments} error={statsError} />
-        </CardBody>
-      </Card>
+      {/* Cifras en línea, separadas por filetes: sin tarjetas de métrica gigante. */}
+      <dl className="grid grid-cols-2 gap-y-5 border-y border-admin-line py-5 lg:grid-cols-4 lg:divide-x lg:divide-admin-line">
+        {figures.map(f => (
+          <div key={f.label} className="px-1 lg:px-6 lg:first:pl-0">
+            <dt className="text-xs text-ink-muted">{f.label}</dt>
+            <dd className="mt-1 font-serif text-[2rem] font-light leading-none text-ink tabular-nums">
+              {statsError ? <span className="font-sans text-sm text-ink-muted">Sin datos</span> : f.value}
+              {f.hint && !statsError && <span className="ml-2 font-sans text-xs text-ink-muted">{f.hint}</span>}
+            </dd>
+          </div>
+        ))}
+      </dl>
 
-      <div className="space-y-4">
-      <Card variant="admin">
-        <CardHeader>
-          <h2 className="font-serif text-lg font-light text-ink">
-            Seguimientos vencidos ({overdueFollowUps.length})
-          </h2>
-        </CardHeader>
-        <CardBody className="pt-0">
-          <OverdueFollowUpsList items={overdueFollowUps} error={followUpsError} />
-        </CardBody>
-      </Card>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <section aria-labelledby="semanas" className="rounded-2xl border border-admin-line bg-admin-panel p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="semanas" className="font-serif text-xl font-light text-ink">Citas por semana</h2>
+            <p className="text-sm text-ink-muted">
+              {rate === null ? 'Aún no hay asistencias marcadas' : <>Asistencia <span className="font-medium text-ink">{rate}%</span> de las marcadas</>}
+            </p>
+          </div>
+          <WeeklyAttendance weeks={weeklyResult.weeks} />
+          {totalWeeks > 0 && (
+            <p className="mt-3 text-xs text-ink-muted">
+              Confirmadas que ya ocurrieron, últimas {WEEKS} semanas. «Sin marcar» son las que nadie registró en la Agenda.
+            </p>
+          )}
+        </section>
 
-      <Card variant="admin" className="p-5">
-        <p className="h-eyebrow mb-4">Atención rápida</p>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between border-b border-admin-line pb-3">
-            <span className="text-ink-muted">Pendientes</span>
-            <span className="font-medium text-amber-700">{stats.totalPending}</span>
-          </div>
-          <div className="flex items-center justify-between border-b border-admin-line pb-3">
-            <span className="text-ink-muted">Hoy</span>
-            <span className="font-medium text-emerald-700">{stats.acceptedToday}</span>
-          </div>
-          <div className="flex items-center justify-between border-b border-admin-line pb-3">
-            <span className="text-ink-muted">Slots 7 días</span>
-            <span className="font-medium text-champagne-deep">{stats.upcomingSlots}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-ink-muted">Conversión</span>
-            <span className="font-medium text-ink">
-              {stats.conversion === null ? '—' : `${stats.conversion}%`}
-              <span className="ml-1.5 text-[0.7rem] font-normal text-ink-subtle">
-                {stats.decided > 0 ? `(${stats.decided} decididas)` : 'sin decisiones'}
-              </span>
-            </span>
-          </div>
+        <div className="space-y-8">
+          <section aria-labelledby="proximas">
+            <h2 id="proximas" className="mb-3 font-serif text-xl font-light text-ink">Próximas citas</h2>
+            <UpcomingList appointments={stats.nextAppointments} error={statsError} />
+          </section>
+          <section aria-labelledby="seguimientos">
+            <h2 id="seguimientos" className="mb-3 font-serif text-xl font-light text-ink">
+              Seguimientos vencidos <span className="font-sans text-sm text-ink-muted">{overdueFollowUps.length}</span>
+            </h2>
+            <OverdueFollowUpsList items={overdueFollowUps} error={followUpsError} />
+          </section>
         </div>
-      </Card>
-      </div>
       </div>
     </div>
   )
