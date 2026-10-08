@@ -429,7 +429,7 @@ export function BookingWizard() {
                   i > stepIndex && 'border-ink-line bg-porcelain/70 text-ink-subtle',
                 )}
               >
-                <span className="block text-[0.62rem] font-semibold uppercase tracking-eyebrow">{i + 1}</span>
+                <span className="block text-11 font-semibold uppercase tracking-eyebrow">{i + 1}</span>
                 <span className="block truncate text-xs font-medium">{STEP_LABELS[s]}</span>
               </button>
             ))}
@@ -447,7 +447,7 @@ export function BookingWizard() {
               />
             ))}
           </div>
-          <p className="text-[0.6rem] text-ink-muted text-right tracking-eyebrow uppercase font-semibold">
+          <p className="text-11 text-ink-muted text-right tracking-eyebrow uppercase font-semibold">
             Paso {Math.min(stepIndex + 1, activeSteps.length - 1)} de {activeSteps.length - 1} · {STEP_LABELS[step]}
           </p>
         </div>
@@ -475,7 +475,6 @@ export function BookingWizard() {
           {step === 'type' && (
             <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso 1</p>
                 <h2 className="font-serif font-light text-2xl text-ink">Elige tu experiencia</h2>
               </div>
 
@@ -546,7 +545,6 @@ export function BookingWizard() {
               {!showWaitlist && (
               <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
-                  <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Selecciona una fecha</h2>
                 </div>
                 <span className="hidden text-xs text-ink-muted sm:block">
@@ -588,7 +586,6 @@ export function BookingWizard() {
           {step === 'slots' && selectedDate && (
             <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                 <h2 className="font-serif font-light text-2xl text-ink">
                   {(() => {
                     // Only the first letter: Tailwind `capitalize` produced "Viernes 12 De Junio"
@@ -654,7 +651,6 @@ export function BookingWizard() {
             >
               <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
                 <div>
-                  <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Tus datos</h2>
                 </div>
 
@@ -868,7 +864,6 @@ export function BookingWizard() {
           {step === 'upload' && (
             <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                 <h2 className="font-serif font-light text-2xl text-ink">Identificación oficial</h2>
                 <p className="text-sm text-ink-muted mt-1">
                   Requerida para confirmar tu visita al showroom privado.
@@ -907,7 +902,6 @@ export function BookingWizard() {
             >
               <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
                 <div>
-                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Confirmar solicitud</h2>
                 </div>
 
@@ -1024,7 +1018,7 @@ export function BookingWizard() {
 
               <div className="bg-vellum border border-ink-line rounded-2xl py-5 px-8 inline-block mx-auto">
                 <p className="h-eyebrow mb-2">Código de referencia</p>
-                <p className="font-mono text-2xl font-bold text-champagne tracking-[0.18em] sm:text-3xl">{confirmCode}</p>
+                <p className="font-serif text-3xl font-normal tracking-display-eyebrow text-champagne-deep tabular-nums pl-[0.32em] sm:text-4xl">{confirmCode}</p>
               </div>
 
               <div className="space-y-2.5">

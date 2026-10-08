@@ -120,7 +120,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
           className="mb-4 flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-2.5 text-left transition-colors duration-150 hover:border-champagne"
         >
           <span>
-            <span className="block text-[0.6rem] font-semibold uppercase tracking-eyebrow text-champagne-deep">
+            <span className="block text-11 font-semibold uppercase tracking-eyebrow text-champagne-deep">
               Próxima fecha disponible
             </span>
             <span className="mt-0.5 block font-serif text-sm text-ink">

@@ -171,7 +171,7 @@ export default async function ReservaPage({ params }: PageProps) {
 
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
           <header>
-            <p className="mb-4 text-[0.6rem] font-semibold uppercase tracking-display-eyebrow text-champagne-solid">
+            <p className="mb-4 text-11 font-semibold uppercase tracking-display-eyebrow text-champagne-solid">
               Ciao Ciao · {isVideo ? 'Video consulta' : 'Showroom privado'}
             </p>
             <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">

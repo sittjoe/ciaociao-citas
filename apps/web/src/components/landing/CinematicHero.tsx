@@ -51,13 +51,13 @@ export function CinematicHero() {
             />
             <a
               href="#booking"
-              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
+              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-11 font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
             >
               Reservar
             </a>
             <a
               href="/reserva"
-              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
+              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-11 font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
             >
               Ver mi reserva
             </a>
@@ -67,7 +67,7 @@ export function CinematicHero() {
             <ParallaxLayer depth={5}>
               <StaggerChildren>
                 <StaggerItem>
-                  <p className="mb-5 text-[0.6rem] font-semibold uppercase tracking-display-eyebrow text-[oklch(0.88_0.045_82)]">
+                  <p className="mb-5 text-11 font-semibold uppercase tracking-display-eyebrow text-[oklch(0.88_0.045_82)]">
                     Showroom privado · México
                   </p>
                 </StaggerItem>

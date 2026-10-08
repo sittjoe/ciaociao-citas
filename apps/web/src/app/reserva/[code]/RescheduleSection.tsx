@@ -175,7 +175,7 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
                       : 'border-ink-line bg-white/60 text-ink hover:border-champagne',
                   )}
                 >
-                  <span className={cn('text-[0.6rem] font-semibold uppercase tracking-wide', selected ? 'text-white/80' : 'text-ink-subtle')}>
+                  <span className={cn('text-11 font-semibold uppercase tracking-wide', selected ? 'text-white/80' : 'text-ink-subtle')}>
                     {formatInTimeZone(sample, BUSINESS_TZ, 'EEE', { locale: es })}
                   </span>
                   <span className="text-sm font-medium">

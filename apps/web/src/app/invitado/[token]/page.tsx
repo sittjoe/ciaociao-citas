@@ -104,7 +104,7 @@ export default function InvitadoPage() {
         <div className="text-center mb-10">
           <h1 className="font-serif font-light text-3xl text-ink tracking-[0.12em]">CIAO CIAO</h1>
           <div className="w-8 h-px bg-champagne mx-auto my-3" />
-          <p className="text-[0.6rem] text-champagne-deep tracking-[0.32em] uppercase font-semibold">
+          <p className="text-11 text-champagne-deep tracking-[0.32em] uppercase font-semibold">
             Joyería fina · Showroom privado
           </p>
         </div>
