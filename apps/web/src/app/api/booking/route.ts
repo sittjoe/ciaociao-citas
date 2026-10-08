@@ -7,7 +7,7 @@ import { generateCode, phoneDigits, sanitize } from '@/lib/utils'
 import { reservaPath } from '@/lib/reserva-access'
 import { isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { sendBookingConfirmation, sendGuestInvitation } from '@/lib/email'
-import { releaseExpiredHolds } from '@/lib/holds'
+import { releaseExpiredHolds, PENDING_ALERT_AFTER_MS } from '@/lib/holds'
 import { createSlotLock } from '@/lib/slot-locks'
 import { logAppointmentEvent } from '@/lib/appointment-events'
 import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
@@ -22,8 +22,9 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024 // 5 MB
 type UploadedFileRef = { delete: () => Promise<unknown> }
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const ALLOWED_MIME   = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-// Slot hold duration: pending appointments hold the slot for 30 minutes
-const HOLD_MS = 30 * 60 * 1000
+// `heldUntil` del horario = cuándo revisar la solicitud: a los 20 min sin
+// atender se avisa al equipo (ver lib/holds.ts). La solicitud NO se cancela.
+const HOLD_MS = PENDING_ALERT_AFTER_MS
 
 export async function POST(request: Request) {
   let uploadedFileRef: UploadedFileRef | null = null
