@@ -84,6 +84,10 @@ export function BookingWizard() {
   const [needsIdAgain, setNeedsIdAgain]= useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
   const direction = useRef<1 | -1>(1)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // Solo un cambio de paso hecho por la clienta desplaza la página: ni el
+  // primer render ni la restauración del borrador deben robarle el scroll.
+  const scrollOnStepChange = useRef(false)
   const submitInFlight = useRef(false)
   // Slot elegido en un borrador restaurado, pendiente de revalidar contra /api/slots.
   const restoredSlot = useRef<{ id: string; type: AppointmentType } | null>(null)
@@ -262,8 +266,22 @@ export function BookingWizard() {
   const goTo = useCallback((next: Step) => {
     const nextIdx = activeSteps.indexOf(next)
     direction.current = nextIdx > stepIndex ? 1 : -1
+    scrollOnStepChange.current = true
     setStep(next)
   }, [activeSteps, stepIndex])
+
+  // Al cambiar de paso, lleva a la clienta al inicio del asistente: sin esto
+  // queda a media página (p. ej. tras tocar un día al fondo del calendario).
+  useEffect(() => {
+    if (!scrollOnStepChange.current) return
+    scrollOnStepChange.current = false
+    const el = rootRef.current
+    if (!el) return
+    const marginTop = parseFloat(getComputedStyle(el).scrollMarginTop) || 0
+    if (Math.abs(el.getBoundingClientRect().top - marginTop) < 4) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduce ? 'instant' : 'smooth', block: 'start' })
+  }, [step])
 
   const goBack = useCallback(() => goTo(activeSteps[stepIndex - 1]), [activeSteps, stepIndex, goTo])
 
@@ -347,6 +365,7 @@ export function BookingWizard() {
       localStorage.removeItem(DRAFT_KEY)
       idempotencyKey.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
       direction.current = 1
+      scrollOnStepChange.current = true
       setStep('done')
     } catch {
       const msg = 'No se pudo enviar. Tus datos siguen guardados en este dispositivo.'
@@ -359,7 +378,7 @@ export function BookingWizard() {
   }, [selectedSlot, idFile, guests, goTo, isVideo, appointmentType, loadSlots, dayHasFutureSlots, selectedDate])
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div ref={rootRef} data-booking-wizard className="w-full max-w-2xl mx-auto scroll-mt-4">
       {draftRestored && step !== 'done' && (
         <div role="status" className="mb-4 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-3 text-sm text-champagne-deep">
           Recuperamos tu avance guardado en este dispositivo. Puedes continuar donde te quedaste.
