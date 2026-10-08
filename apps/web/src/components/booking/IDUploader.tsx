@@ -335,7 +335,7 @@ export function IDUploader({ value, onChange, error }: IDUploaderProps) {
       </AnimatePresence>
 
       {displayError && (
-        <p className="text-xs text-red-500">{displayError}</p>
+        <p className="text-xs text-red-700">{displayError}</p>
       )}
     </div>
   )

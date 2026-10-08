@@ -5,7 +5,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
-import { BUSINESS_TZ, cn, formatDate, formatTime } from '@/lib/utils'
+import { BUSINESS_TZ, cn, formatDate, formatTime, formatTime12 } from '@/lib/utils'
 import { appointmentTypeLabels, isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
@@ -127,7 +127,8 @@ export default async function ReservaPage({ params }: PageProps) {
   // Protagonista: fecha y hora de la cita como cifra de portada (serif).
   const fechaLarga = capitalize(formatInTimeZone(appt.slotDatetime, BUSINESS_TZ, "EEEE d 'de' MMMM", { locale: es }))
   const anio       = formatInTimeZone(appt.slotDatetime, BUSINESS_TZ, 'yyyy')
-  const hora       = formatTime(appt.slotDatetime)
+  // «1:00 pm» en CDMX: la cifra va en serif y el «pm» pequeño al lado.
+  const [hora, periodo] = formatTime12(appt.slotDatetime).split(' ')
 
   // Acciones (calendario, videollamada, cómo llegar): solo citas aceptadas
   // que aún no ocurren.
@@ -164,13 +165,13 @@ export default async function ReservaPage({ params }: PageProps) {
           aria-hidden
           fill
           sizes="100vw"
-          className="object-cover opacity-18"
+          className="object-cover opacity-[0.18]"
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.78),oklch(0.982_0.008_86/0.96))]" />
 
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-10 lg:grid-cols-[1fr_440px]">
           <header>
-            <p className="mb-4 text-[0.6rem] font-semibold uppercase tracking-display-eyebrow text-champagne-solid">
+            <p className="mb-4 text-11 font-semibold uppercase tracking-display-eyebrow text-champagne-solid">
               Ciao Ciao · {isVideo ? 'Video consulta' : 'Showroom privado'}
             </p>
             <h1 className="font-serif text-[clamp(3rem,7vw,5.5rem)] font-light leading-[0.94] text-ink">
@@ -199,7 +200,7 @@ export default async function ReservaPage({ params }: PageProps) {
               <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1">
                 <p className="font-serif text-[1.7rem] font-light leading-[1.05] text-ink">{fechaLarga}</p>
                 <p className="font-serif text-2xl font-light leading-none text-champagne-solid">
-                  {hora}<span className="ml-1 font-sans text-sm text-ink-subtle">h</span>
+                  {hora}<span className="ml-1 font-sans text-sm text-ink-subtle">{periodo}</span>
                 </p>
               </div>
               <p className="mt-1 text-xs text-ink-subtle">{anio}</p>

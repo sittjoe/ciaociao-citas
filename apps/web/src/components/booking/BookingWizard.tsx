@@ -9,7 +9,7 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { AlertTriangle, CheckCircle2, ChevronLeft, ExternalLink, Gem, Monitor, Send, ShieldCheck, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { motion } from '@/components/motion'
+import { AnimatePresence, motion } from '@/components/motion'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -32,7 +32,7 @@ import {
   type BookingFormInput,
   type GuestInput,
 } from '@/lib/schemas'
-import { BUSINESS_TZ, cn, formatDate, formatTime } from '@/lib/utils'
+import { BUSINESS_TZ, cn, formatDate, formatTime12 } from '@/lib/utils'
 import type { AppointmentType } from '@/types'
 
 interface Slot { id: string; datetime: string; slotType?: AppointmentType }
@@ -59,14 +59,26 @@ const STEP_LABELS: Record<Step, string> = {
   review: 'Confirmar',
   done: '',
 }
+// Nombre corto para el resumen fijo («Jue 8 oct · 1:00 pm · Showroom»).
+const SHORT_TYPE_LABELS: Record<AppointmentType, string> = {
+  showroom: 'Showroom',
+  video_engagement_rings: 'Video consulta',
+}
+const SUMMARY_STEPS: Step[] = ['form', 'upload', 'review']
 const DRAFT_KEY = 'ciaociao-booking-draft-v1'
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const SUPPORT_EMAIL = 'hola@ciaociao.mx'
 
+// Transición entre pasos (DESIGN.md: 380ms, ease-quart). Al avanzar el paso
+// nuevo sube desde abajo y el anterior sale hacia arriba; al retroceder, al
+// revés. Con prefers-reduced-motion, MotionConfig reducedMotion="user" anula
+// el desplazamiento y queda solo el fundido.
+const EASE_QUART: [number, number, number, number] = [0.25, 1, 0.5, 1]
+const STEP_SHIFT_PX = 16
 const stepVariants = {
-  initial: (dir: number) => ({ opacity: 0, x: dir * 36 }),
-  animate: { opacity: 1, x: 0, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
-  exit:    (dir: number) => ({ opacity: 0, x: dir * -36, transition: { duration: 0.18 } }),
+  initial: (dir: number) => ({ opacity: 0, y: dir * STEP_SHIFT_PX }),
+  animate: { opacity: 1, y: 0, transition: { duration: 0.38, ease: EASE_QUART } },
+  exit:    (dir: number) => ({ opacity: 0, y: dir * -STEP_SHIFT_PX, transition: { duration: 0.38, ease: EASE_QUART } }),
 }
 
 export function BookingWizard() {
@@ -84,6 +96,10 @@ export function BookingWizard() {
   const [needsIdAgain, setNeedsIdAgain]= useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
   const direction = useRef<1 | -1>(1)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // Solo un cambio de paso hecho por la clienta desplaza la página: ni el
+  // primer render ni la restauración del borrador deben robarle el scroll.
+  const scrollOnStepChange = useRef(false)
   const submitInFlight = useRef(false)
   // Slot elegido en un borrador restaurado, pendiente de revalidar contra /api/slots.
   const restoredSlot = useRef<{ id: string; type: AppointmentType } | null>(null)
@@ -228,6 +244,17 @@ export function BookingWizard() {
     [slots],
   )
 
+  // Sin horarios, el paso de fecha se convierte en la lista de espera: no es
+  // un paso del asistente, así que no lleva barra de progreso ni encabezado.
+  const showWaitlist = step === 'calendar' && !loadingSlots && !slotsError && !hasAvailability
+
+  const choiceSummary = useMemo(() => {
+    if (!selectedSlot) return null
+    const day = formatInTimeZone(parseISO(selectedSlot.datetime), BUSINESS_TZ, 'EEE d MMM', { locale: es }).replace(/\./g, '')
+    return `${day.charAt(0).toUpperCase()}${day.slice(1)} · ${formatTime12(selectedSlot.datetime)} · ${SHORT_TYPE_LABELS[appointmentType]}`
+  }, [selectedSlot, appointmentType])
+  const showSummary = SUMMARY_STEPS.includes(step) && choiceSummary !== null
+
   const stepIndex = activeSteps.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
   const hostEmail = watch('email') ?? ''
@@ -242,7 +269,7 @@ export function BookingWizard() {
       const dual = dualTimeLabel(selectedSlot.datetime, deviceTz)
       if (dual.local) return `${dual.cdmx} CDMX · ${dual.local} tu hora`
     }
-    return formatTime(selectedSlot.datetime)
+    return formatTime12(selectedSlot.datetime)
   }, [selectedSlot, isVideo, deviceTz])
 
   useEffect(() => {
@@ -262,10 +289,45 @@ export function BookingWizard() {
   const goTo = useCallback((next: Step) => {
     const nextIdx = activeSteps.indexOf(next)
     direction.current = nextIdx > stepIndex ? 1 : -1
+    scrollOnStepChange.current = true
     setStep(next)
   }, [activeSteps, stepIndex])
 
+  // Al cambiar de paso, lleva a la clienta al inicio del asistente: sin esto
+  // queda a media página (p. ej. tras tocar un día al fondo del calendario).
+  // Corre cuando el paso nuevo empieza a entrar (onAnimationStart): antes, el
+  // paso saliente — quizá más corto — limitaría el scroll máximo del documento.
+  const scrollToWizardIfPending = useCallback(() => {
+    if (!scrollOnStepChange.current) return
+    scrollOnStepChange.current = false
+    const el = rootRef.current
+    if (!el) return
+    const marginTop = parseFloat(getComputedStyle(el).scrollMarginTop) || 0
+    if (Math.abs(el.getBoundingClientRect().top - marginTop) < 4) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduce ? 'instant' : 'smooth', block: 'start' })
+  }, [])
+
   const goBack = useCallback(() => goTo(activeSteps[stepIndex - 1]), [activeSteps, stepIndex, goTo])
+
+  // Paso 1: tocar una experiencia la marca y, tras un instante para que se
+  // vea elegida, avanza sola al calendario (Enter/Espacio hacen lo mismo).
+  const TYPE_ADVANCE_MS = 250
+  const [advancingType, setAdvancingType] = useState<AppointmentType | null>(null)
+  const typeAdvanceTimer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (typeAdvanceTimer.current !== null) window.clearTimeout(typeAdvanceTimer.current)
+  }, [])
+  const chooseType = useCallback((type: AppointmentType) => {
+    if (typeAdvanceTimer.current !== null) return
+    setValue('appointmentType', type)
+    setAdvancingType(type)
+    typeAdvanceTimer.current = window.setTimeout(() => {
+      typeAdvanceTimer.current = null
+      setAdvancingType(null)
+      goTo('calendar')
+    }, TYPE_ADVANCE_MS)
+  }, [setValue, goTo])
 
   // Revalida el slot de un borrador restaurado contra la lista fresca de
   // /api/slots: si sigue disponible se re-selecciona; si ya lo tomaron (o ya
@@ -347,6 +409,7 @@ export function BookingWizard() {
       localStorage.removeItem(DRAFT_KEY)
       idempotencyKey.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
       direction.current = 1
+      scrollOnStepChange.current = true
       setStep('done')
     } catch {
       const msg = 'No se pudo enviar. Tus datos siguen guardados en este dispositivo.'
@@ -359,7 +422,7 @@ export function BookingWizard() {
   }, [selectedSlot, idFile, guests, goTo, isVideo, appointmentType, loadSlots, dayHasFutureSlots, selectedDate])
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div ref={rootRef} data-booking-wizard className="w-full max-w-2xl mx-auto scroll-mt-4">
       {draftRestored && step !== 'done' && (
         <div role="status" className="mb-4 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-3 text-sm text-champagne-deep">
           Recuperamos tu avance guardado en este dispositivo. Puedes continuar donde te quedaste.
@@ -367,7 +430,7 @@ export function BookingWizard() {
       )}
 
       {/* Progress bar */}
-      {step !== 'done' && (
+      {step !== 'done' && !showWaitlist && (
         <div className="mb-6">
           <div
             className="mb-3 hidden gap-2 sm:grid"
@@ -381,14 +444,21 @@ export function BookingWizard() {
                 disabled={i > stepIndex}
                 aria-current={i === stepIndex ? 'step' : undefined}
                 className={cn(
-                  'rounded-xl border px-3 py-2 text-left transition-colors',
+                  'relative rounded-xl border px-3 py-2 text-left transition-colors',
                   i < stepIndex && 'border-champagne-soft bg-champagne-tint text-champagne-deep',
-                  i === stepIndex && 'border-champagne bg-porcelain text-ink shadow-soft',
+                  i === stepIndex && 'border-transparent text-ink',
                   i > stepIndex && 'border-ink-line bg-porcelain/70 text-ink-subtle',
                 )}
               >
-                <span className="block text-[0.62rem] font-semibold uppercase tracking-eyebrow">{i + 1}</span>
-                <span className="block truncate text-xs font-medium">{STEP_LABELS[s]}</span>
+                {i === stepIndex && (
+                  <motion.span
+                    layoutId="progress-active-desktop"
+                    className="absolute -inset-px rounded-xl border border-champagne bg-porcelain shadow-soft"
+                    transition={{ duration: 0.38, ease: EASE_QUART }}
+                  />
+                )}
+                <span className="relative block text-11 font-semibold uppercase tracking-eyebrow">{i + 1}</span>
+                <span className="relative block truncate text-xs font-medium">{STEP_LABELS[s]}</span>
               </button>
             ))}
           </div>
@@ -396,16 +466,25 @@ export function BookingWizard() {
             {activeSteps.slice(0, -1).map((s, i) => (
               <div
                 key={s}
+                data-progress-segment
                 className={cn(
-                  'h-0.5 flex-1 rounded-full transition-all duration-500',
-                  i < stepIndex     ? 'bg-champagne'
-                  : i === stepIndex ? 'bg-champagne/40'
-                  :                   'bg-ink-line',
+                  'relative h-1 flex-1 rounded-full transition-colors duration-500 ease-expo',
+                  i < stepIndex ? 'bg-champagne/50' : 'bg-ink-line',
                 )}
-              />
+              >
+                {/* El segmento activo se desliza al siguiente (layoutId). */}
+                {i === stepIndex && (
+                  <motion.span
+                    data-progress-fill
+                    layoutId="progress-active"
+                    className="absolute inset-0 rounded-full bg-champagne-solid"
+                    transition={{ duration: 0.38, ease: EASE_QUART }}
+                  />
+                )}
+              </div>
             ))}
           </div>
-          <p className="text-[0.6rem] text-ink-muted text-right tracking-eyebrow uppercase font-semibold">
+          <p className="text-11 text-ink-muted text-right tracking-eyebrow uppercase font-semibold">
             Paso {Math.min(stepIndex + 1, activeSteps.length - 1)} de {activeSteps.length - 1} · {STEP_LABELS[step]}
           </p>
         </div>
@@ -422,18 +501,46 @@ export function BookingWizard() {
         </button>
       )}
 
+      {/* Resumen fijo de la elección en los pasos posteriores al horario. */}
+      <AnimatePresence initial={false}>
+        {showSummary && (
+          <motion.div
+            key="choice-summary"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.38, ease: EASE_QUART }}
+            className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-ink-line/80 bg-porcelain/70 py-2 pl-4 pr-1"
+          >
+            <p data-booking-summary className="min-w-0 font-serif text-lg font-light leading-tight text-ink sm:text-2xl">
+              <span className="sr-only">Tu elección: </span>{choiceSummary}
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-[44px] shrink-0 px-3 text-sm text-champagne-solid hover:text-champagne-deep"
+              onClick={() => goTo('calendar')}
+            >
+              Cambiar
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait" initial={false} custom={direction.current}>
       <motion.div
         key={step}
         custom={direction.current}
         variants={stepVariants}
         initial="initial"
         animate="animate"
+        exit="exit"
+        onAnimationStart={definition => { if (definition === 'animate') scrollToWizardIfPending() }}
       >
           {/* STEP: Type */}
           {step === 'type' && (
             <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso 1</p>
                 <h2 className="font-serif font-light text-2xl text-ink">Elige tu experiencia</h2>
               </div>
 
@@ -457,22 +564,33 @@ export function BookingWizard() {
                     type="button"
                     role="radio"
                     aria-checked={appointmentType === option.type}
-                    onClick={() => setValue('appointmentType', option.type)}
+                    onClick={() => chooseType(option.type)}
                     className={cn(
-                      'rounded-2xl border p-4 text-left transition-all',
+                      'relative rounded-2xl border p-4 text-left transition-all duration-150 ease-expo',
                       appointmentType === option.type
                         ? 'border-champagne bg-champagne-tint shadow-soft'
                         : 'border-ink-line bg-porcelain hover:border-champagne-soft',
                     )}
                   >
                     <option.Icon size={20} strokeWidth={1.5} className="text-champagne" />
+                    {advancingType === option.type && (
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                        className="absolute right-4 top-4 text-champagne-solid"
+                        aria-hidden="true"
+                      >
+                        <CheckCircle2 size={18} strokeWidth={1.5} />
+                      </motion.span>
+                    )}
                     <span className="mt-3 block font-serif text-xl font-light text-ink">{option.title}</span>
                     <span className="mt-2 block text-sm leading-6 text-ink-muted">{option.copy}</span>
                   </button>
                 ))}
               </div>
 
-              {isVideo && (
+              {isVideo && advancingType === null && (
                 <div className="overflow-hidden rounded-2xl border border-ink-line">
                   <Image
                     src="/video-engagement-consultation.webp"
@@ -484,24 +602,22 @@ export function BookingWizard() {
                 </div>
               )}
 
-              <Button className="w-full" onClick={() => goTo('calendar')}>
-                Continuar
-              </Button>
             </Card>
           )}
 
           {/* STEP: Calendar */}
           {step === 'calendar' && (
             <Card variant="atelier" className="p-5 sm:p-7">
+              {!showWaitlist && (
               <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
-                  <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Selecciona una fecha</h2>
                 </div>
                 <span className="hidden text-xs text-ink-muted sm:block">
                   {isVideo ? 'Horarios de videollamada' : 'Horarios CDMX'}
                 </span>
               </div>
+              )}
               {loadingSlots ? (
                 <div role="status" aria-live="polite">
                   <span className="sr-only">Cargando horarios disponibles…</span>
@@ -517,7 +633,7 @@ export function BookingWizard() {
                   />
                 </div>
               ) : !hasAvailability ? (
-                  <WaitlistForm appointmentType={appointmentType} />
+                  <WaitlistForm appointmentType={appointmentType} productType={getValues('productType') ?? ''} />
               ) : (
                 <CalendarView
                   slots={slots}
@@ -536,7 +652,6 @@ export function BookingWizard() {
           {step === 'slots' && selectedDate && (
             <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                 <h2 className="font-serif font-light text-2xl text-ink">
                   {(() => {
                     // Only the first letter: Tailwind `capitalize` produced "Viernes 12 De Junio"
@@ -562,14 +677,26 @@ export function BookingWizard() {
           {step === 'form' && (
             <form
               className="space-y-4"
+              // La validación la hace zod con mensajes propios; la burbuja nativa
+              // del navegador (type=email) la saltaba y dejaba el foco a medias.
+              noValidate
               onSubmit={async e => {
                 e.preventDefault()
-                const formOk = await trigger(['name', 'email', 'phone', 'notes', 'productType', 'budgetRange', 'lookingFor', 'engagementBrief', 'whatsapp'])
+                // shouldFocus enfoca el primer campo con error en orden del
+                // formulario; leer `errors` aquí daría el estado del render anterior.
+                const formOk = await trigger(
+                  ['name', 'email', 'phone', 'notes', 'productType', 'budgetRange', 'lookingFor', 'engagementBrief', 'whatsapp'],
+                  { shouldFocus: true },
+                )
                 if (!formOk) {
                   toast.error('Completa tus datos antes de continuar')
-                  if (errors.name) setFocus('name')
-                  else if (errors.email) setFocus('email')
-                  else if (errors.phone) setFocus('phone')
+                  // El foco nativo deja el campo pegado al borde; centrarlo deja
+                  // ver también su etiqueta y el mensaje de error.
+                  const focused = document.activeElement
+                  if (focused instanceof HTMLElement && focused !== document.body) {
+                    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                    focused.scrollIntoView({ behavior: reduce ? 'instant' : 'smooth', block: 'center' })
+                  }
                   return
                 }
                 if (!isVideo && guests.length > 0) {
@@ -593,7 +720,6 @@ export function BookingWizard() {
             >
               <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
                 <div>
-                  <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Tus datos</h2>
                 </div>
 
@@ -777,7 +903,7 @@ export function BookingWizard() {
                   </div>
                 )}
 
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <label className="flex min-h-[44px] items-center gap-2.5 cursor-pointer select-none">
                   <input
                     {...register('whatsapp')}
                     type="checkbox"
@@ -807,7 +933,6 @@ export function BookingWizard() {
           {step === 'upload' && (
             <Card variant="atelier" className="space-y-4 p-5 sm:p-7">
               <div>
-                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                 <h2 className="font-serif font-light text-2xl text-ink">Identificación oficial</h2>
                 <p className="text-sm text-ink-muted mt-1">
                   Requerida para confirmar tu visita al showroom privado.
@@ -846,7 +971,6 @@ export function BookingWizard() {
             >
               <Card variant="atelier" className="space-y-5 p-5 sm:p-7">
                 <div>
-                <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
                   <h2 className="font-serif font-light text-2xl text-ink">Confirmar solicitud</h2>
                 </div>
 
@@ -963,7 +1087,7 @@ export function BookingWizard() {
 
               <div className="bg-vellum border border-ink-line rounded-2xl py-5 px-8 inline-block mx-auto">
                 <p className="h-eyebrow mb-2">Código de referencia</p>
-                <p className="font-mono text-2xl font-bold text-champagne tracking-[0.18em] sm:text-3xl">{confirmCode}</p>
+                <p className="font-serif text-3xl font-normal tracking-display-eyebrow text-champagne-deep tabular-nums pl-[0.32em] sm:text-4xl">{confirmCode}</p>
               </div>
 
               <div className="space-y-2.5">
@@ -983,6 +1107,7 @@ export function BookingWizard() {
             </Card>
           )}
       </motion.div>
+      </AnimatePresence>
     </div>
   )
 }
@@ -998,12 +1123,12 @@ function CalendarSkeleton() {
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-9 w-9" />
       </div>
-      <div className="mb-2 grid grid-cols-7 gap-1.5">
+      <div className="-mx-2.5 mb-2 grid grid-cols-7 gap-1 sm:mx-0 sm:gap-1.5">
         {Array.from({ length: 7 }).map((_, i) => (
           <Skeleton key={i} className="mx-auto h-3 w-3.5" />
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="-mx-2.5 grid grid-cols-7 gap-1 sm:mx-0 sm:gap-1.5">
         {Array.from({ length: 35 }).map((_, i) => (
           <Skeleton key={i} className="aspect-square" />
         ))}
@@ -1012,13 +1137,16 @@ function CalendarSkeleton() {
   )
 }
 
-function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType }) {
+function WaitlistForm({ appointmentType, productType = '' }: { appointmentType: AppointmentType; productType?: string }) {
+  // Si el producto ya se eligió antes (la video consulta fija «Anillo»), se
+  // envía tal cual y no se vuelve a preguntar.
+  const productChosen = productType !== ''
   const [values, setValues] = useState({
     appointmentType,
     name: '',
     email: '',
     phone: '',
-    productType: '',
+    productType,
     budgetRange: '',
     message: '',
   })
@@ -1066,7 +1194,7 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
     <form className="space-y-4 px-1 py-2" onSubmit={submit}>
       <div className="text-center">
         <p className="h-eyebrow mb-2">Lista de espera</p>
-        <h3 className="font-serif text-2xl font-light text-ink">Agenda completa por ahora</h3>
+        <h2 className="font-serif text-2xl font-light text-ink">Agenda completa por ahora</h2>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
           Déjanos tus datos y te avisamos en cuanto abramos nuevos espacios para {appointmentTypeLabels[appointmentType].toLowerCase()}. Nuestras piezas empiezan desde $20,000 MXN.
         </p>
@@ -1116,7 +1244,8 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
         )}
       </Field>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={cn('grid gap-3', !productChosen && 'sm:grid-cols-2')}>
+        {!productChosen && (
         <Field label="Producto de interés">
           {(id, ariaProps) => (
             <select
@@ -1131,6 +1260,7 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
             </select>
           )}
         </Field>
+        )}
         <Field label="Presupuesto aproximado">
           {(id, ariaProps) => (
             <select

@@ -27,6 +27,17 @@ import {
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
 
+// useReducedMotion() lee la preferencia del sistema ya en el primer render del
+// navegador, pero el servidor no la conoce: si el HTML depende de ella, la
+// hidratación falla (React #418) para quien tiene «reducir movimiento». Este
+// hook arranca igual que el servidor y aplica la preferencia tras montar.
+function useReducedMotionAfterMount() {
+  const reduced = useReducedMotion()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  return mounted && !!reduced
+}
+
 // ── ParallaxStage / ParallaxLayer ──────────────────────────────────────────
 // Stage tracks the cursor (smoothed by a spring) and exposes normalized
 // -1…1 values. Layers multiply them by their depth: positive depth drifts
@@ -40,7 +51,7 @@ interface StageContextValue {
 const StageContext = createContext<StageContextValue | null>(null)
 
 export function ParallaxStage({ children, className }: { children: ReactNode; className?: string }) {
-  const reduced = useReducedMotion()
+  const reduced = useReducedMotionAfterMount()
   const [canHover, setCanHover] = useState(false)
   useEffect(() => {
     setCanHover(window.matchMedia('(hover: hover) and (pointer: fine)').matches)
@@ -115,7 +126,7 @@ export function ScrollParallax({
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const reduced = useReducedMotion()
+  const reduced = useReducedMotionAfterMount()
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
   const range = (1 - speed) * 320
   const y = useTransform(scrollYProgress, [0, 1], [0, range])
@@ -183,7 +194,7 @@ export function LightSweep({
   delay?: number
   className?: string
 }) {
-  const reduced = useReducedMotion()
+  const reduced = useReducedMotionAfterMount()
   if (reduced) return null
   return (
     <motion.span

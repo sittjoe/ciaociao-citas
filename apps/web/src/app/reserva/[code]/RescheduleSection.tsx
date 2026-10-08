@@ -7,7 +7,7 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { CalendarClock } from 'lucide-react'
-import { BUSINESS_TZ, cn } from '@/lib/utils'
+import { BUSINESS_TZ, cn, formatTime12 } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -175,7 +175,7 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
                       : 'border-ink-line bg-white/60 text-ink hover:border-champagne',
                   )}
                 >
-                  <span className={cn('text-[0.6rem] font-semibold uppercase tracking-wide', selected ? 'text-white/80' : 'text-ink-subtle')}>
+                  <span className={cn('text-11 font-semibold uppercase tracking-wide', selected ? 'text-white/80' : 'text-ink-subtle')}>
                     {formatInTimeZone(sample, BUSINESS_TZ, 'EEE', { locale: es })}
                   </span>
                   <span className="text-sm font-medium">
@@ -201,7 +201,7 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
                       : 'border-ink-line text-ink hover:border-champagne hover:bg-champagne-soft',
                   )}
                 >
-                  {formatInTimeZone(parseISO(slot.datetime), BUSINESS_TZ, 'HH:mm')}
+                  {formatTime12(slot.datetime)}
                 </button>
               )
             })}
@@ -214,7 +214,7 @@ export default function RescheduleSection({ token, appointmentType, currentSlotI
                 <span className="font-medium">
                   {formatInTimeZone(parseISO(selectedSlot.datetime), BUSINESS_TZ, "EEEE d 'de' MMMM", { locale: es })}
                   {' · '}
-                  {formatInTimeZone(parseISO(selectedSlot.datetime), BUSINESS_TZ, 'HH:mm')} h
+                  {formatTime12(selectedSlot.datetime)}
                 </span>
               </p>
               <Button

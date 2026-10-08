@@ -101,7 +101,7 @@ export function GuestsField({ value, onChange, hostEmail }: GuestsFieldProps) {
           >
             <div className="p-3 bg-cream-soft border border-ink-line rounded-xl space-y-2.5">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[0.6rem] text-ink-muted font-semibold tracking-[0.18em] uppercase">
+                <span className="text-11 text-ink-muted font-semibold tracking-[0.18em] uppercase">
                   Invitado {i + 1}
                 </span>
                 <button

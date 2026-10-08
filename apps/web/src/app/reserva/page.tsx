@@ -12,7 +12,7 @@ export default function ReservaLookupPage() {
         alt="Detalle de joyería fina en mesa de atelier"
         fill
         sizes="100vw"
-        className="object-cover opacity-18"
+        className="object-cover opacity-[0.18]"
       />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,oklch(0.982_0.008_86/0.80),oklch(0.982_0.008_86/0.97))]" />
       <div className="relative z-10 mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl items-center justify-center">

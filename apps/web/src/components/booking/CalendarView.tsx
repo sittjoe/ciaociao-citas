@@ -120,7 +120,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
           className="mb-4 flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-champagne-soft bg-champagne-tint px-4 py-2.5 text-left transition-colors duration-150 hover:border-champagne"
         >
           <span>
-            <span className="block text-[0.6rem] font-semibold uppercase tracking-eyebrow text-champagne-deep">
+            <span className="block text-11 font-semibold uppercase tracking-eyebrow text-champagne-deep">
               Próxima fecha disponible
             </span>
             <span className="mt-0.5 block font-serif text-sm text-ink">
@@ -155,7 +155,8 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
       </div>
 
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 mb-2">
+      {/* -mx-2.5 + gap-1: a 390px de ancho cada día mide ≥44px (era 40). */}
+      <div className="-mx-2.5 mb-2 grid grid-cols-7 gap-1 sm:mx-0 sm:gap-1.5">
         {weekdays.map(d => (
           <div key={d} className="text-center text-xs text-ink-subtle font-semibold tracking-wider py-1">
             {d}
@@ -165,7 +166,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
 
       {/* Day grid */}
       <LayoutGroup>
-      <div className="grid grid-cols-7 gap-1.5" style={{ perspective: '900px' }}>
+      <div className="-mx-2.5 grid grid-cols-7 gap-1 sm:mx-0 sm:gap-1.5" style={{ perspective: '900px' }}>
         {startPad.map(i => <div key={`pad-${i}`} />)}
 
         {dayKeys.map(key => {
@@ -190,7 +191,7 @@ export function CalendarView({ slots, selectedDate, onSelectDate }: CalendarView
               className={cn(
                 'cal-day-3d relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition-colors duration-150',
                 isPast && 'opacity-30 cursor-not-allowed',
-                !isPast && !hasSlots && 'text-ink-subtle cursor-not-allowed',
+                !isPast && !hasSlots && 'text-ink-subtle/60 cursor-not-allowed',
                 !isPast && hasSlots && !isSel && [
                   'text-ink cursor-pointer',
                   'hover:bg-champagne-tint',

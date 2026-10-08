@@ -104,7 +104,7 @@ export default function InvitadoPage() {
         <div className="text-center mb-10">
           <h1 className="font-serif font-light text-3xl text-ink tracking-[0.12em]">CIAO CIAO</h1>
           <div className="w-8 h-px bg-champagne mx-auto my-3" />
-          <p className="text-[0.6rem] text-champagne tracking-[0.32em] uppercase font-semibold">
+          <p className="text-11 text-champagne-deep tracking-[0.32em] uppercase font-semibold">
             Joyería fina · Showroom privado
           </p>
         </div>
@@ -130,7 +130,7 @@ export default function InvitadoPage() {
                 <h2 className="font-serif font-light text-xl text-ink">Link inválido</h2>
                 <p className="text-sm text-ink-muted leading-relaxed">
                   Este link no es válido o ya fue usado. Si crees que es un error, contacta a{' '}
-                  <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
+                  <a href="mailto:hola@ciaociao.mx" className="text-champagne-solid hover:underline">hola@ciaociao.mx</a>.
                 </p>
               </Card>
             )}
@@ -141,7 +141,7 @@ export default function InvitadoPage() {
                 <h2 className="font-serif font-light text-xl text-ink">Plazo vencido</h2>
                 <p className="text-sm text-ink-muted leading-relaxed">
                   El plazo para verificar tu identidad ha vencido. Contacta a{' '}
-                  <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>{' '}
+                  <a href="mailto:hola@ciaociao.mx" className="text-champagne-solid hover:underline">hola@ciaociao.mx</a>{' '}
                   para que el equipo pueda ayudarte.
                 </p>
               </Card>
@@ -153,7 +153,7 @@ export default function InvitadoPage() {
                 <h2 className="font-serif font-light text-xl text-ink">Invitación no activa</h2>
                 <p className="text-sm text-ink-muted leading-relaxed">
                   Esta invitación ya no está activa. Si crees que es un error, contacta a{' '}
-                  <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>.
+                  <a href="mailto:hola@ciaociao.mx" className="text-champagne-solid hover:underline">hola@ciaociao.mx</a>.
                 </p>
               </Card>
             )}
@@ -233,7 +233,7 @@ export default function InvitadoPage() {
         </AnimatePresence>
 
         <p className="text-center text-xs text-ink-muted mt-8">
-          Dudas: <a href="mailto:hola@ciaociao.mx" className="text-champagne hover:underline">hola@ciaociao.mx</a>
+          Dudas: <a href="mailto:hola@ciaociao.mx" className="text-champagne-solid hover:underline">hola@ciaociao.mx</a>
         </p>
       </div>
     </div>
