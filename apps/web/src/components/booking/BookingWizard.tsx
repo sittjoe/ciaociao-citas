@@ -583,12 +583,21 @@ export function BookingWizard() {
               className="space-y-4"
               onSubmit={async e => {
                 e.preventDefault()
-                const formOk = await trigger(['name', 'email', 'phone', 'notes', 'productType', 'budgetRange', 'lookingFor', 'engagementBrief', 'whatsapp'])
+                // shouldFocus enfoca el primer campo con error en orden del
+                // formulario; leer `errors` aquí daría el estado del render anterior.
+                const formOk = await trigger(
+                  ['name', 'email', 'phone', 'notes', 'productType', 'budgetRange', 'lookingFor', 'engagementBrief', 'whatsapp'],
+                  { shouldFocus: true },
+                )
                 if (!formOk) {
                   toast.error('Completa tus datos antes de continuar')
-                  if (errors.name) setFocus('name')
-                  else if (errors.email) setFocus('email')
-                  else if (errors.phone) setFocus('phone')
+                  // El foco nativo deja el campo pegado al borde; centrarlo deja
+                  // ver también su etiqueta y el mensaje de error.
+                  const focused = document.activeElement
+                  if (focused instanceof HTMLElement && focused !== document.body) {
+                    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                    focused.scrollIntoView({ behavior: reduce ? 'instant' : 'smooth', block: 'center' })
+                  }
                   return
                 }
                 if (!isVideo && guests.length > 0) {
