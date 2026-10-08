@@ -29,7 +29,7 @@ const statusMap: Record<Exclude<GuestStatus, 'excluded'>, { label: string; class
 
 function whatsappShareUrl(guest: GuestSummary, hostName: string, dateStr: string, timeStr: string): string {
   const link    = `${SITE}/invitado/${guest.verifyToken}`
-  const message = `Hola ${guest.name}, soy ${hostName}. Te comparto tu enlace personal para verificar tu identidad antes de nuestra visita a Ciao Ciao Joyería el ${dateStr} a las ${timeStr} h: ${link}`
+  const message = `Hola ${guest.name}, soy ${hostName}. Te comparto tu enlace personal para verificar tu identidad antes de nuestra visita a Ciao Ciao Joyería el ${dateStr} a las ${timeStr}: ${link}`
   return `https://wa.me/?text=${encodeURIComponent(message)}`
 }
 

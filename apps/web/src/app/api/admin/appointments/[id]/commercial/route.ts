@@ -4,7 +4,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { requireAdminSession } from '@/lib/admin-auth'
 import { commercialUpdateSchema } from '@/lib/schemas'
 import { sanitize } from '@/lib/utils'
-import { sendStatusUpdate } from '@/lib/email'
+import { sendStatusUpdate, syncScheduledReminderEmails } from '@/lib/email'
 import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
@@ -40,6 +40,15 @@ export async function PATCH(
     if (!snap.exists) return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
     const data = snap.data()!
 
+    const meetingChanged = cleanMeetingUrl !== String(data.meetingUrl ?? '')
+      || cleanMeetingProvider !== String(data.meetingProvider ?? '')
+      || cleanMeetingInstructions !== String(data.meetingInstructions ?? '')
+    const isAcceptedVideo = data.status === 'accepted' && isVideoEngagement(data.appointmentType)
+    // El .ics que se reenvía con el link nuevo debe llevar SEQUENCE mayor
+    // para que el calendario de la clienta actualice el evento existente.
+    const bumpSequence = meetingChanged && isAcceptedVideo
+    const nextSequence = (Number(data.icsSequence ?? 0) || 0) + (bumpSequence ? 1 : 0)
+
     await ref.update({
       commercialStatus,
       internalNote: sanitize(internalNote ?? ''),
@@ -50,12 +59,10 @@ export async function PATCH(
       commercialUpdatedBy: admin.email,
       commercialUpdatedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+      ...(bumpSequence ? { icsSequence: FieldValue.increment(1) } : {}),
     })
 
-    const meetingChanged = cleanMeetingUrl !== String(data.meetingUrl ?? '')
-      || cleanMeetingProvider !== String(data.meetingProvider ?? '')
-      || cleanMeetingInstructions !== String(data.meetingInstructions ?? '')
-    if (meetingChanged && cleanMeetingUrl && data.status === 'accepted' && isVideoEngagement(data.appointmentType)) {
+    if (bumpSequence) {
       const updatedAppointment: Appointment = {
         id,
         slotId: data.slotId,
@@ -79,15 +86,23 @@ export async function PATCH(
         meetingUrl: cleanMeetingUrl,
         meetingProvider: cleanMeetingProvider,
         meetingInstructions: cleanMeetingInstructions,
+        icsSequence: nextSequence,
         createdAt: (data.createdAt as Timestamp).toDate(),
       }
-      after(sendStatusUpdate(updatedAppointment, 'accept').catch(err =>
-        console.error('Meeting link email failed (non-fatal):', err)
-      ))
-      after(updateAppointmentCalendarEvent(updatedAppointment).catch(err => {
-        console.error('Meeting link calendar update failed (non-fatal):', err)
-        return ref.update({ calendarSyncFailed: true }).catch(() => {})
-      }))
+      // Los recordatorios de 24h/2h ya programados en Resend llevaban el link
+      // viejo (o «Pendiente por enviar»): se cancelan y se reprograman con el
+      // contenido nuevo (la Idempotency-Key incluye SEQUENCE + huella del contenido).
+      after(syncScheduledReminderEmails(updatedAppointment, data.scheduledEmails ?? null)
+        .catch(err => console.error('Scheduled reminders resync failed (non-fatal):', err)))
+      if (cleanMeetingUrl) {
+        after(sendStatusUpdate(updatedAppointment, 'accept').catch(err =>
+          console.error('Meeting link email failed (non-fatal):', err)
+        ))
+        after(updateAppointmentCalendarEvent(updatedAppointment).catch(err => {
+          console.error('Meeting link calendar update failed (non-fatal):', err)
+          return ref.update({ calendarSyncFailed: true }).catch(() => {})
+        }))
+      }
     }
     after(logAppointmentEvent({
       appointmentId: id,

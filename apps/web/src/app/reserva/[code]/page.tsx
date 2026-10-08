@@ -6,7 +6,7 @@ import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { formatInTimeZone } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
-import { BUSINESS_TZ, cn, formatDate, formatTime, formatTime12 } from '@/lib/utils'
+import { BUSINESS_TZ, cn, formatDate, formatTime12 } from '@/lib/utils'
 import { appointmentTypeLabels, isVideoEngagement, normalizeAppointmentType } from '@/lib/commercial'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
@@ -299,7 +299,7 @@ export default async function ReservaPage({ params, searchParams }: PageProps) {
                 guests={guests}
                 hostName={appt.name}
                 dateStr={formatDate(appt.slotDatetime)}
-                timeStr={formatTime(appt.slotDatetime)}
+                timeStr={formatTime12(appt.slotDatetime)}
               />
             )}
 

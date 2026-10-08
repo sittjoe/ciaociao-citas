@@ -103,8 +103,10 @@ export async function POST(
         status:    'cancelled',
         googleCalendarEventId: null,
         scheduledEmails: FieldValue.delete(),
+        icsSequence: FieldValue.increment(1),
         updatedAt: FieldValue.serverTimestamp(),
       })
+      appointment.icsSequence = (Number(freshData.icsSequence ?? 0) || 0) + 1
       liberarSlotDeCita(tx, slotRef, freshData)
       releaseSlotLock(tx, freshData.slotDatetime as Timestamp)
     })
@@ -123,9 +125,11 @@ export async function POST(
       }
     }
 
-    // Cancela en Resend los recordatorios programados (24h/2h); ignora errores.
-    after(cancelScheduledReminderEmails(scheduledEmailIds))
-    after(sendCancellationEmail(appointment).catch(err =>
+    // Cancela en Resend los recordatorios programados (24h/2h). Revisa el
+    // resultado; lo que no se pueda cancelar queda para reintento del cron.
+    after(cancelScheduledReminderEmails(scheduledEmailIds, { appointmentId: doc.id }))
+    // Si estaba confirmada, el correo lleva un .ics METHOD:CANCEL.
+    after(sendCancellationEmail(appointment, { wasAccepted: cancelledWasAccepted }).catch(err =>
       console.error('Cancellation email failed (non-fatal):', err)
     ))
     after(logAppointmentEvent({

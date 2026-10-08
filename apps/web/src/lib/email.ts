@@ -1,11 +1,40 @@
 import { Resend } from 'resend'
-import { FieldValue } from 'firebase-admin/firestore'
-import { formatInTimeZone } from 'date-fns-tz'
-import { formatDate, formatTime, BUSINESS_TZ, redactPII } from './utils'
+import { createHash } from 'crypto'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { formatDate, formatTime12, redactPII } from './utils'
 import { adminDb } from './firebase-admin'
 import { appointmentTypeLabels, engagementBriefRows, isVideoEngagement } from './commercial'
 import { reservaUrl } from './reserva-access'
+import { buildAppointmentICS, type IcsMethod } from './ics'
+import { relativeDayWord, scheduled24SendAt } from './reminder-windows'
 import type { Appointment } from '@/types'
+
+/**
+ * Resend 4.x NUNCA lanza: devuelve `{ data: null, error }` ante un 429, un 422
+ * o una caída. Sin esta comprobación el envío fallido se registraba como
+ * exitoso (outbox 'sent', emailEvents ok:true) y nunca se reintentaba.
+ */
+export class ResendError extends Error {
+  readonly code: string
+  constructor(message: string, code = 'resend_error') {
+    super(message)
+    this.name = 'ResendError'
+    this.code = code
+  }
+}
+
+export function assertResendOk<T extends { id?: string } | null | undefined>(
+  result: { data?: T; error?: { message?: string; name?: string } | null } | null | undefined,
+  what = 'envío',
+): string {
+  if (!result) throw new ResendError(`Resend no respondió (${what})`, 'no_response')
+  if (result.error) {
+    throw new ResendError(`Resend ${what}: ${result.error.message ?? result.error.name ?? 'error'}`, result.error.name ?? 'resend_error')
+  }
+  const id = (result.data as { id?: string } | null | undefined)?.id
+  if (!id) throw new ResendError(`Resend no devolvió id (${what})`, 'missing_id')
+  return id
+}
 
 const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
@@ -13,7 +42,7 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
 // si no está configurada, los bloques de ubicación simplemente no se renderizan.
 const SHOWROOM_ADDRESS = process.env.SHOWROOM_ADDRESS || ''
 
-type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'confirmation_request' | 'calendar_error' | 'guest_invitation' | 'guest_reminder' | 'reservation_recovery' | 'slots_reminder'
+type EmailKind = 'booking_client' | 'booking_admin' | 'status_update' | 'reminder' | 'confirmation_request' | 'calendar_error' | 'guest_invitation' | 'guest_reminder' | 'reservation_recovery' | 'slots_reminder' | 'request_alert' | 'request_expired'
 
 let resendClient: Resend | null = null
 
@@ -83,7 +112,11 @@ async function sendTracked(params: {
   to: string | string[]
   subject: string
   html: string
-  attachments?: { filename: string; content: string }[]
+  attachments?: { filename: string; content: string; contentType?: string }[]
+  /** Idempotency-Key de Resend; se guarda en el outbox y se reusa al reintentar. */
+  idempotencyKey?: string
+  /** Pasado este instante el outbox ya no lo reintenta (p.ej. un «en 2 horas» tardío). */
+  notAfter?: Date
 }) {
   const outboxRef = adminDb.collection('emailOutbox').doc()
   const payload = {
@@ -94,6 +127,8 @@ async function sendTracked(params: {
     subject: params.subject,
     html: params.html,
     attachments: params.attachments ?? [],
+    idempotencyKey: params.idempotencyKey ?? null,
+    notAfter: params.notAfter ? Timestamp.fromDate(params.notAfter) : null,
   }
   await outboxRef.set({
     ...payload,
@@ -112,7 +147,8 @@ async function sendTracked(params: {
       html: params.html,
       ...(params.attachments ? { attachments: params.attachments } : {}),
       headers: { 'List-Unsubscribe': `<mailto:${FROM}?subject=Baja>` },
-    })
+    }, params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : undefined)
+    const resendId = assertResendOk(result, params.kind)
     await recordEmailEvent({
       kind: params.kind,
       to: params.to,
@@ -122,7 +158,7 @@ async function sendTracked(params: {
     })
     await outboxRef.update({
       status: 'sent',
-      resendId: result.data?.id ?? null,
+      resendId,
       sentAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }).catch(() => {})
@@ -170,6 +206,14 @@ export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; s
       abandoned++
       continue
     }
+    // Un recordatorio con caducidad («en 2 horas») no se manda tarde.
+    const notAfter = data.notAfter instanceof Timestamp ? data.notAfter.toMillis() : null
+    if (notAfter !== null && Date.now() > notAfter) {
+      await doc.ref.update({ status: 'expired', updatedAt: FieldValue.serverTimestamp() }).catch(() => {})
+      errors.push(`${doc.id}: caducado sin reenviar`)
+      abandoned++
+      continue
+    }
     try {
       await doc.ref.update({
         status: 'sending',
@@ -177,6 +221,7 @@ export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; s
         lastAttemptAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       })
+      const idempotencyKey = typeof data.idempotencyKey === 'string' && data.idempotencyKey ? data.idempotencyKey : null
       const result = await getResend().emails.send({
         from: data.from,
         to: data.to,
@@ -184,10 +229,11 @@ export async function retryEmailOutbox(limit = 20): Promise<{ retried: number; s
         html: data.html,
         ...(Array.isArray(data.attachments) && data.attachments.length > 0 ? { attachments: data.attachments } : {}),
         headers: { 'List-Unsubscribe': `<mailto:${FROM}?subject=Baja>` },
-      })
+      }, idempotencyKey ? { idempotencyKey } : undefined)
+      const resendId = assertResendOk(result, `reintento ${data.kind}`)
       await doc.ref.update({
         status: 'sent',
-        resendId: result.data?.id ?? null,
+        resendId,
         sentAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       })
@@ -313,7 +359,7 @@ export async function sendBookingConfirmation(
   guestNames: string[] = [],
 ) {
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
   const url = reservaUrl(SITE, appt.confirmationCode)
   const isVideo = isVideoAppointment(appt)
 
@@ -325,7 +371,9 @@ export async function sendBookingConfirmation(
        </div>`
     : ''
 
-  await sendTracked({
+  // Si falla el correo a la clienta, el aviso al equipo sale igual (antes
+  // Resend nunca lanzaba; ahora sí, y no debe tapar la «Nueva solicitud»).
+  const clientError = await sendTracked({
     kind: 'booking_client',
     appointmentId: appt.id,
     from: `Ciao Ciao Joyería <${FROM}>`,
@@ -345,7 +393,7 @@ export async function sendBookingConfirmation(
       ${guestBlock}
       <p style="text-align:center"><a class="btn" href="${url}">Ver estado de tu cita</a></p>
     `),
-  })
+  }).then(() => null, (err: unknown) => err)
 
   const adminRecipients = await getActiveAdminEmails()
   if (adminRecipients.length > 0) {
@@ -377,17 +425,15 @@ export async function sendBookingConfirmation(
       `),
     })
   }
+  if (clientError) throw clientError
 }
 
 export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 'reject', reason?: string) {
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
   const accepted = action === 'accept'
   const isVideo = isVideoAppointment(appt)
-  const icsContent = accepted ? generateICS(appt) : null
-  const attachments = icsContent
-    ? [{ filename: 'cita-ciaociao.ics', content: Buffer.from(icsContent).toString('base64') }]
-    : []
+  const attachments = accepted ? [icsAttachment(appt, 'REQUEST')] : []
 
   const body = accepted
     ? isVideo
@@ -432,9 +478,9 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
   })
 }
 
-export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
+export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2, opts: { idempotencyKey?: string; notAfter?: Date } = {}) {
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
   const label = hoursAhead === 24 ? 'mañana' : 'en 2 horas'
   const isVideo = isVideoAppointment(appt)
 
@@ -443,6 +489,7 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
     appointmentId: appt.id,
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: appt.email,
+    ...opts,
     subject: `Recordatorio: tu cita es ${label}`,
     html: baseTemplate(`
       <div class="card">
@@ -460,9 +507,9 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
   })
 }
 
-export async function sendReminder24Confirm(appt: Appointment) {
+export async function sendReminder24Confirm(appt: Appointment, opts: { idempotencyKey?: string; notAfter?: Date } = {}) {
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
   const isVideo = isVideoAppointment(appt)
 
   await sendTracked({
@@ -470,6 +517,7 @@ export async function sendReminder24Confirm(appt: Appointment) {
     appointmentId: appt.id,
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: appt.email,
+    ...opts,
     subject: `Confirma tu cita de mañana — ${dateStr}`,
     html: baseTemplate(`
       <div class="card">
@@ -562,7 +610,7 @@ async function scheduleTracked(params: {
 /** Recordatorio 24h programado — deriva del correo de confirmación de asistencia del cron. */
 function scheduledReminder24Content(appt: Appointment): { subject: string; html: string } {
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
   const isVideo = isVideoAppointment(appt)
 
   return {
@@ -588,15 +636,18 @@ function scheduledReminder24Content(appt: Appointment): { subject: string; html:
 
 /** Recordatorio 2h programado — corto y directo. */
 function scheduledReminder2Content(appt: Appointment): { subject: string; html: string } {
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
+  // «hoy» solo si lo es al momento de enviarse (2 h antes); una cita a las
+  // 00:30 recibe este correo a las 22:30 del día anterior: ahí es «mañana».
+  const dayWord = relativeDayWord(appt.slotDatetime, new Date(appt.slotDatetime.getTime() - 2 * HOUR_MS))
   const isVideo = isVideoAppointment(appt)
 
   return {
-    subject: `Tu ${isVideo ? 'video consulta' : 'cita'} es en 2 horas — ${timeStr} h`,
+    subject: `Tu ${isVideo ? 'video consulta' : 'cita'} es en 2 horas — ${timeStr}`,
     html: baseTemplate(`
       <div class="card">
         <p class="title">Te esperamos en 2 horas</p>
-        <p class="copy">${escapeHtml(appt.name)}, tu ${isVideo ? 'video consulta' : 'cita en el showroom privado'} es hoy a las ${timeStr} h.${isVideo && !appt.meetingUrl ? ' El equipo te compartirá el enlace de videollamada antes de iniciar.' : ''}</p>
+        <p class="copy">${escapeHtml(appt.name)}, tu ${isVideo ? 'video consulta' : 'cita en el showroom privado'} es ${dayWord ? `${dayWord} ` : ''}a las ${timeStr}.${isVideo && !appt.meetingUrl ? ' El equipo te compartirá el enlace de videollamada antes de iniciar.' : ''}</p>
         ${details([
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
@@ -609,23 +660,48 @@ function scheduledReminder2Content(appt: Appointment): { subject: string; html: 
   }
 }
 
+/** Huella corta del contenido: cambia si cambia el link, la hora, el nombre… */
+function contentHash(...parts: string[]): string {
+  return createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 16)
+}
+
 /**
- * Programa los recordatorios de una cita aceptada. Reglas:
- *  - 24h antes: solo si la cita está a más de 24 horas;
- *  - 2h antes: solo si la cita está a más de 2 horas;
- *  - ambos solo si la cita está a ≤30 días (límite de Resend). Si está más
- *    lejos, NO se programa nada y el cron diario la cubre con sus flags.
- * Nunca lanza: cada fallo se registra y se devuelve el mapa parcial de ids.
+ * Idempotency-Key versionada: cita + horario + SEQUENCE del .ics + huella del
+ * contenido. Con la llave vieja (`reminder-h2/{id}-{slotMs}`) un cambio de link
+ * de videollamada, o reprogramar A→B→A en menos de 24 h, hacía que Resend
+ * devolviera el correo viejo (o 409) y la clienta recibía el link anterior.
  */
-export async function scheduleAppointmentReminderEmails(appt: Appointment): Promise<ScheduledReminderEmailIds> {
-  const scheduled: ScheduledReminderEmailIds = {}
-  if (!isEmailConfigured()) return scheduled
+export function scheduledReminderIdempotencyKey(
+  kind: 'h24' | 'h2',
+  appt: Pick<Appointment, 'id' | 'slotDatetime' | 'icsSequence'>,
+  subject: string,
+  html: string,
+): string {
+  return `reminder-${kind}/${appt.id}-${appt.slotDatetime.getTime()}-s${appt.icsSequence ?? 0}-${contentHash(subject, html)}`
+}
 
+/** No programar algo que saldría en menos de este margen: lo cubre el cron. */
+const MIN_SCHEDULE_LEAD_MS = 5 * 60 * 1000
+
+interface ScheduleOutcome {
+  ids: ScheduledReminderEmailIds
+  /** Qué recordatorios correspondía programar (aunque la programación fallara). */
+  attempted: { h24: boolean; h2: boolean }
+}
+
+async function scheduleReminders(appt: Appointment): Promise<ScheduleOutcome> {
+  const out: ScheduleOutcome = { ids: {}, attempted: { h24: false, h2: false } }
+  if (!isEmailConfigured()) return out
+
+  const now = Date.now()
   const slotMs = appt.slotDatetime.getTime()
-  const msUntil = slotMs - Date.now()
-  if (msUntil <= 0 || msUntil > RESEND_MAX_SCHEDULE_AHEAD_MS) return scheduled
+  const msUntil = slotMs - now
+  if (msUntil <= 0 || msUntil > RESEND_MAX_SCHEDULE_AHEAD_MS) return out
 
-  if (msUntil > 24 * HOUR_MS) {
+  // «Mañana»: 24 h antes, pero nunca en horario silencioso (22:00–08:00 CDMX).
+  const send24 = scheduled24SendAt(appt.slotDatetime)
+  if (msUntil > 24 * HOUR_MS && send24.getTime() - now > MIN_SCHEDULE_LEAD_MS) {
+    out.attempted.h24 = true
     const { subject, html } = scheduledReminder24Content(appt)
     const id = await scheduleTracked({
       kind: 'confirmation_request',
@@ -633,13 +709,14 @@ export async function scheduleAppointmentReminderEmails(appt: Appointment): Prom
       to: appt.email,
       subject,
       html,
-      scheduledAt: new Date(slotMs - 24 * HOUR_MS).toISOString(),
-      idempotencyKey: `reminder-h24/${appt.id}-${slotMs}`,
+      scheduledAt: send24.toISOString(),
+      idempotencyKey: scheduledReminderIdempotencyKey('h24', appt, subject, html),
     })
-    if (id) scheduled.h24 = id
+    if (id) out.ids.h24 = id
   }
 
-  if (msUntil > 2 * HOUR_MS) {
+  if (msUntil - 2 * HOUR_MS > MIN_SCHEDULE_LEAD_MS) {
+    out.attempted.h2 = true
     const { subject, html } = scheduledReminder2Content(appt)
     const id = await scheduleTracked({
       kind: 'reminder',
@@ -648,58 +725,170 @@ export async function scheduleAppointmentReminderEmails(appt: Appointment): Prom
       subject,
       html,
       scheduledAt: new Date(slotMs - 2 * HOUR_MS).toISOString(),
-      idempotencyKey: `reminder-h2/${appt.id}-${slotMs}`,
+      idempotencyKey: scheduledReminderIdempotencyKey('h2', appt, subject, html),
     })
-    if (id) scheduled.h2 = id
+    if (id) out.ids.h2 = id
   }
 
-  return scheduled
+  return out
+}
+
+/**
+ * Programa los recordatorios de una cita aceptada. Reglas:
+ *  - «mañana» (24h): si la cita está a más de 24 h; sale 24 h antes metido en
+ *    [08:00, 21:30] CDMX del día anterior (nunca de madrugada);
+ *  - 2h antes: solo si la cita está a más de 2 horas;
+ *  - ambos solo si la cita está a ≤30 días (límite de Resend). Si está más
+ *    lejos, NO se programa nada y el cron la cubre con sus flags y ventanas.
+ * Nunca lanza: cada fallo se registra y se devuelve el mapa parcial de ids.
+ */
+export async function scheduleAppointmentReminderEmails(appt: Appointment): Promise<ScheduledReminderEmailIds> {
+  return (await scheduleReminders(appt)).ids
+}
+
+/** Colección donde quedan las cancelaciones de Resend que fallaron; el cron las reintenta. */
+const PENDING_CANCELS = 'scheduledEmailCancels'
+/** ~24 h de reintentos con el cron cada 30 min. */
+const MAX_CANCEL_ATTEMPTS = 48
+
+/**
+ * Errores de `emails.cancel` que NO tiene sentido reintentar: el correo ya
+ * salió, ya estaba cancelado o el id no existe.
+ */
+function isFinalCancelError(error: { name?: string; message?: string }): boolean {
+  const name = String(error.name ?? '')
+  const message = String(error.message ?? '')
+  return name === 'not_found'
+    || /already|cannot be cancel|can't be cancel|not found|not scheduled/i.test(message)
+}
+
+async function cancelOnce(id: string): Promise<'ok' | 'final' | 'retry'> {
+  try {
+    const result = await getResend().emails.cancel(id)
+    if (!result) return 'retry'
+    if (!result.error) return 'ok'
+    return isFinalCancelError(result.error) ? 'final' : 'retry'
+  } catch {
+    return 'retry'
+  }
+}
+
+export interface CancelScheduledResult {
+  cancelled: string[]
+  /** Ya enviado / ya cancelado / inexistente: nada que hacer. */
+  skipped: string[]
+  /** No se pudo cancelar: quedó registrado para que el cron lo reintente. */
+  pending: string[]
 }
 
 /**
  * Cancela en Resend los correos programados de una cita. Acepta el valor
- * crudo del campo `scheduledEmails` del doc (unknown). Ignora todos los
- * errores: un id ya enviado o ya cancelado no debe romper el flujo.
+ * crudo del campo `scheduledEmails` del doc (unknown). Resend 4.x no lanza:
+ * se revisa `error` en cada respuesta, se reintenta 3 veces y, si aún falla,
+ * el id queda en `scheduledEmailCancels` para que el cron siga intentándolo
+ * (si no, la clienta que canceló recibía igual «Confirma tu cita de mañana»).
+ * Nunca lanza.
  */
-export async function cancelScheduledReminderEmails(ids: unknown): Promise<void> {
-  if (!ids || typeof ids !== 'object' || !isEmailConfigured()) return
+export async function cancelScheduledReminderEmails(
+  ids: unknown,
+  opts: { appointmentId?: string; retryDelaysMs?: number[] } = {},
+): Promise<CancelScheduledResult> {
+  const res: CancelScheduledResult = { cancelled: [], skipped: [], pending: [] }
+  if (!ids || typeof ids !== 'object' || !isEmailConfigured()) return res
   const { h24, h2 } = ids as { h24?: unknown; h2?: unknown }
+  const delays = opts.retryDelaysMs ?? [250, 1000]
   for (const id of [h24, h2]) {
     if (typeof id !== 'string' || !id) continue
-    try {
-      await getResend().emails.cancel(id)
-    } catch (err) {
-      console.error('No se pudo cancelar un correo programado (ignorado):', err)
+    let outcome = await cancelOnce(id)
+    for (const delay of delays) {
+      if (outcome !== 'retry') break
+      await new Promise(resolve => setTimeout(resolve, delay))
+      outcome = await cancelOnce(id)
+    }
+    if (outcome === 'ok') { res.cancelled.push(id); continue }
+    if (outcome === 'final') { res.skipped.push(id); continue }
+    res.pending.push(id)
+    console.error(`No se pudo cancelar el correo programado ${id}; queda para reintento del cron`)
+    await adminDb.collection(PENDING_CANCELS).doc(id).set({
+      resendId: id,
+      appointmentId: opts.appointmentId ?? null,
+      status: 'pending',
+      attempts: 1 + delays.length,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true }).catch(err => console.error('Unable to record pending cancel:', err))
+  }
+  return res
+}
+
+/** Reintenta (desde el cron) las cancelaciones de correos programados que fallaron. */
+export async function retryPendingScheduledEmailCancels(limit = 20): Promise<{ retried: number; cancelled: number; failed: number; abandoned: number }> {
+  const out = { retried: 0, cancelled: 0, failed: 0, abandoned: 0 }
+  if (!isEmailConfigured()) return out
+  const snap = await adminDb.collection(PENDING_CANCELS).where('status', '==', 'pending').limit(limit).get()
+  for (const doc of snap.docs) {
+    out.retried++
+    const data = doc.data()
+    const attempts = Number(data.attempts ?? 0) + 1
+    const outcome = await cancelOnce(String(data.resendId ?? doc.id))
+    if (outcome === 'ok' || outcome === 'final') {
+      out.cancelled++
+      await doc.ref.update({ status: outcome === 'ok' ? 'cancelled' : 'not_cancellable', attempts, updatedAt: FieldValue.serverTimestamp() }).catch(() => {})
+    } else if (attempts >= MAX_CANCEL_ATTEMPTS) {
+      out.abandoned++
+      await doc.ref.update({ status: 'abandoned', attempts, updatedAt: FieldValue.serverTimestamp() }).catch(() => {})
+    } else {
+      out.failed++
+      await doc.ref.update({ attempts, updatedAt: FieldValue.serverTimestamp() }).catch(() => {})
     }
   }
+  return out
 }
 
 /**
  * Cancela los recordatorios programados previos (si los hay), programa los del
- * horario vigente y persiste los ids en `scheduledEmails` del doc de la cita.
- * Marca reminder24Sent/reminder2Sent para que el cron diario no duplique.
- * Si no se puede persistir, cancela lo recién programado (mejor perder el
- * recordatorio — el cron lo cubre — que mandarlo doble). Nunca lanza.
+ * horario/contenido vigente y persiste los ids en `scheduledEmails` del doc.
+ * Marca reminder24Sent/reminder2Sent para los que quedaron programados (el
+ * cron no duplica) y los deja en false si la programación falló (el cron, con
+ * sus ventanas, los cubre). La escritura es transaccional: si mientras tanto
+ * la cita se canceló o cambió de horario, lo recién programado se cancela
+ * (antes quedaba un recordatorio vivo de una cita cancelada). Nunca lanza.
  */
 export async function syncScheduledReminderEmails(
   appt: Appointment,
   previousIds?: unknown,
 ): Promise<ScheduledReminderEmailIds> {
-  await cancelScheduledReminderEmails(previousIds)
-  const scheduled = await scheduleAppointmentReminderEmails(appt)
-  if (!scheduled.h24 && !scheduled.h2) return scheduled
+  await cancelScheduledReminderEmails(previousIds, { appointmentId: appt.id })
+  const { ids: scheduled, attempted } = await scheduleReminders(appt)
+  const hadPrevious = Boolean(previousIds && typeof previousIds === 'object'
+    && Object.values(previousIds as Record<string, unknown>).some(Boolean))
+  if (!scheduled.h24 && !scheduled.h2 && !attempted.h24 && !attempted.h2 && !hadPrevious) return scheduled
 
   try {
-    await adminDb.collection('appointments').doc(appt.id).update({
-      scheduledEmails: scheduled,
-      ...(scheduled.h24 ? { reminder24Sent: true } : {}),
-      ...(scheduled.h2 ? { reminder2Sent: true } : {}),
-      updatedAt: FieldValue.serverTimestamp(),
+    const ref = adminDb.collection('appointments').doc(appt.id)
+    const stillValid = await adminDb.runTransaction(async tx => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return false
+      const d = snap.data()!
+      const slotMs = d.slotDatetime instanceof Timestamp ? d.slotDatetime.toMillis() : NaN
+      if (d.status !== 'accepted' || slotMs !== appt.slotDatetime.getTime()) return false
+      tx.update(ref, {
+        scheduledEmails: scheduled,
+        ...(attempted.h24 ? { reminder24Sent: Boolean(scheduled.h24) } : {}),
+        ...(attempted.h2 ? { reminder2Sent: Boolean(scheduled.h2) } : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      return true
     })
+    if (!stillValid) {
+      console.error(`La cita ${appt.id} cambió o se canceló mientras se programaban sus recordatorios; se cancelan`)
+      await cancelScheduledReminderEmails(scheduled, { appointmentId: appt.id })
+      return {}
+    }
     return scheduled
   } catch (err) {
     console.error(`No se pudieron guardar los ids de correos programados (cita ${appt.id}); se cancelan para evitar dobles:`, err)
-    await cancelScheduledReminderEmails(scheduled)
+    await cancelScheduledReminderEmails(scheduled, { appointmentId: appt.id })
     return {}
   }
 }
@@ -709,7 +898,7 @@ export async function sendCalendarError(appt: Appointment, errorMessage: string)
   if (adminRecipients.length === 0) return
 
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
 
   await sendTracked({
     kind: 'calendar_error',
@@ -739,9 +928,9 @@ export async function sendGuestInvitation(params: {
 }) {
   const { guest, appointment, hostName } = params
   const dateStr  = formatDate(appointment.slotDatetime)
-  const timeStr  = formatTime(appointment.slotDatetime)
+  const timeStr  = formatTime12(appointment.slotDatetime)
   const deadline = new Date(appointment.slotDatetime.getTime() - 24 * 60 * 60 * 1000)
-  const deadlineStr = `${formatDate(deadline)} a las ${formatTime(deadline)}`
+  const deadlineStr = `${formatDate(deadline)} a las ${formatTime12(deadline)}`
   const link = `${SITE}/invitado/${guest.verifyToken}`
 
   await sendTracked({
@@ -780,7 +969,7 @@ export async function sendGuestReminder(params: {
 }) {
   const { guest, appointment, hoursAhead } = params
   const dateStr = formatDate(appointment.slotDatetime)
-  const timeStr = formatTime(appointment.slotDatetime)
+  const timeStr = formatTime12(appointment.slotDatetime)
   const label   = hoursAhead === 48 ? '48 horas' : '24 horas'
   const link    = `${SITE}/invitado/${guest.verifyToken}`
 
@@ -806,62 +995,40 @@ export async function sendGuestReminder(params: {
   })
 }
 
-function generateICS(appt: Appointment): string {
-  const start    = appt.slotDatetime
-  const end      = new Date(start.getTime() + 60 * 60 * 1000)
-  const fmtLocal = (d: Date) => formatInTimeZone(d, BUSINESS_TZ, "yyyyMMdd'T'HHmmss")
-  const dtstamp  = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
-  const admin    = getConfiguredAdminEmails()[0] ?? 'info@ciaociao.mx'
-  const isVideo  = isVideoAppointment(appt)
-  const description = isVideo
-    ? [
-        'Video consulta para anillo de compromiso en Ciao Ciao Joyería.',
-        appt.meetingUrl ? `Link: ${appt.meetingUrl}` : 'Link: pendiente por enviar.',
-        appt.meetingInstructions ? `Indicaciones: ${appt.meetingInstructions}` : '',
-      ].filter(Boolean).join('\\n')
-    : 'Tu cita personalizada en el showroom privado de Ciao Ciao Joyería.'
-
-  return [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//CiaoCiao//Citas//ES',
-    'METHOD:REQUEST',
-    'BEGIN:VTIMEZONE',
-    `TZID:${BUSINESS_TZ}`,
-    'BEGIN:STANDARD',
-    'DTSTART:19700101T000000',
-    'TZNAME:CST',
-    'TZOFFSETFROM:-0600',
-    'TZOFFSETTO:-0600',
-    'END:STANDARD',
-    'END:VTIMEZONE',
-    'BEGIN:VEVENT',
-    `UID:${appt.id}@ciaociao.mx`,
-    `DTSTAMP:${dtstamp}`,
-    `DTSTART;TZID=${BUSINESS_TZ}:${fmtLocal(start)}`,
-    `DTEND;TZID=${BUSINESS_TZ}:${fmtLocal(end)}`,
-    `SUMMARY:${isVideo ? 'Video consulta Ciao Ciao' : 'Cita en Ciao Ciao Joyería'}`,
-    `DESCRIPTION:${description}`,
-    `LOCATION:${isVideo ? (appt.meetingUrl || 'Videollamada') : 'Showroom Ciao Ciao Joyería'}`,
-    `ORGANIZER;CN=Ciao Ciao Joyería:mailto:${admin}`,
-    `ATTENDEE;RSVP=TRUE;CN=${appt.name}:mailto:${appt.email}`,
-    'STATUS:CONFIRMED',
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].join('\r\n')
+/** Organizador del .ics: el mismo en el adjunto y en /api/calendar. */
+export function icsOrganizerEmail(): string {
+  return getConfiguredAdminEmails()[0] ?? 'info@ciaociao.mx'
 }
 
-export async function sendCancellationEmail(appt: Appointment) {
+export function generateICS(appt: Appointment, method: IcsMethod = 'REQUEST'): string {
+  return buildAppointmentICS(appt, { method, organizerEmail: icsOrganizerEmail() })
+}
+
+function icsAttachment(appt: Appointment, method: IcsMethod): { filename: string; content: string; contentType: string } {
+  return {
+    filename: method === 'CANCEL' ? 'cita-ciaociao-cancelada.ics' : 'cita-ciaociao.ics',
+    content: Buffer.from(generateICS(appt, method)).toString('base64'),
+    contentType: `text/calendar; charset=utf-8; method=${method}`,
+  }
+}
+
+/**
+ * `wasAccepted`: si la cita estaba confirmada, la clienta pudo agregarla a su
+ * calendario; se adjunta un .ics METHOD:CANCEL (mismo UID, SEQUENCE mayor) para
+ * que el evento desaparezca.
+ */
+export async function sendCancellationEmail(appt: Appointment, opts: { wasAccepted?: boolean } = {}) {
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
   const isVideo = isVideoAppointment(appt)
 
-  await sendTracked({
+  const clientError = await sendTracked({
     kind: 'status_update',
     appointmentId: appt.id,
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: appt.email,
     subject: `Cita cancelada - ${dateStr}`,
+    ...(opts.wasAccepted ? { attachments: [icsAttachment(appt, 'CANCEL')] } : {}),
     html: baseTemplate(`
       <div class="card">
         <p class="title">Cita cancelada</p>
@@ -874,7 +1041,7 @@ export async function sendCancellationEmail(appt: Appointment) {
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}">Agendar nueva cita</a></p>
     `),
-  })
+  }).then(() => null, (err: unknown) => err)
 
   const adminRecipients = await getActiveAdminEmails()
   if (adminRecipients.length > 0) {
@@ -899,11 +1066,12 @@ export async function sendCancellationEmail(appt: Appointment) {
       `),
     })
   }
+  if (clientError) throw clientError
 }
 
 export async function sendRescheduleNotice(appt: Appointment) {
   const dateStr = formatDate(appt.slotDatetime)
-  const timeStr = formatTime(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
   const isVideo = isVideoAppointment(appt)
 
   await sendTracked({
@@ -912,6 +1080,9 @@ export async function sendRescheduleNotice(appt: Appointment) {
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: appt.email,
     subject: `Tu cita fue reprogramada — ${dateStr}`,
+    // Cita confirmada: .ics con el mismo UID y SEQUENCE mayor para que el
+    // calendario de la clienta MUEVA el evento en lugar de dejarlo en la hora vieja.
+    ...(appt.status === 'accepted' ? { attachments: [icsAttachment(appt, 'REQUEST')] } : {}),
     html: baseTemplate(`
       <div class="card">
         <p class="title">Tu cita fue reprogramada</p>
@@ -926,6 +1097,96 @@ export async function sendRescheduleNotice(appt: Appointment) {
       <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver tu cita</a></p>
     `),
   })
+}
+
+/**
+ * Aviso al equipo: una solicitud enviada por la clienta lleva >20 min sin que
+ * nadie la acepte o rechace. Antes, a los 30 min se cancelaba sola y en silencio.
+ */
+export async function sendPendingRequestAlert(appt: Appointment, minutesWaiting: number) {
+  const adminRecipients = await getActiveAdminEmails()
+  if (adminRecipients.length === 0) return { sent: false as const, recipients: 0 }
+  const dateStr = formatDate(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
+
+  await sendTracked({
+    kind: 'request_alert',
+    appointmentId: appt.id,
+    from: `Sistema Citas <${FROM}>`,
+    to: adminRecipients,
+    subject: `Solicitud sin atender (${minutesWaiting} min): ${appt.name} — ${dateStr} ${timeStr}`,
+    idempotencyKey: `request-alert/${appt.id}`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">Una clienta espera respuesta</p>
+        <p class="copy">Esta solicitud lleva ${minutesWaiting} minutos sin aceptarse ni rechazarse. El horario sigue apartado para ella; no se cancelará sola mientras la cita no haya pasado.</p>
+        ${details([
+          ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
+          ['Nombre', appt.name],
+          ['Teléfono', appt.phone],
+          ['Fecha', `${dateStr} ${timeStr}`],
+          ['Código', appt.confirmationCode],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}">Atender solicitud</a></p>
+    `),
+  })
+  return { sent: true as const, recipients: adminRecipients.length }
+}
+
+/**
+ * Una solicitud que nadie atendió llegó a su horario y se cancela: se le avisa
+ * a la clienta (con una disculpa y la liga para agendar) y al equipo.
+ */
+export async function sendRequestExpiredNotices(appt: Appointment) {
+  const dateStr = formatDate(appt.slotDatetime)
+  const timeStr = formatTime12(appt.slotDatetime)
+
+  const clientError = await sendTracked({
+    kind: 'request_expired',
+    appointmentId: appt.id,
+    from: `Ciao Ciao Joyería <${FROM}>`,
+    to: appt.email,
+    subject: 'Sobre tu solicitud de cita en Ciao Ciao',
+    idempotencyKey: `request-expired-client/${appt.id}`,
+    html: baseTemplate(`
+      <div class="card">
+        <p class="title">No alcanzamos a confirmar tu solicitud</p>
+        <p class="copy">Hola ${escapeHtml(appt.name)}, lamentamos no haber confirmado a tiempo tu solicitud para el ${escapeHtml(dateStr)} a las ${escapeHtml(timeStr)}. Nos encantará recibirte: elige un nuevo horario o escríbenos y te ayudamos.</p>
+        ${details([
+          ['Código', appt.confirmationCode],
+        ])}
+      </div>
+      <p style="text-align:center"><a class="btn" href="${SITE}">Elegir un nuevo horario</a></p>
+    `),
+  }).then(() => null, (err: unknown) => err)
+
+  const adminRecipients = await getActiveAdminEmails()
+  if (adminRecipients.length > 0) {
+    await sendTracked({
+      kind: 'request_expired',
+      appointmentId: appt.id,
+      from: `Sistema Citas <${FROM}>`,
+      to: adminRecipients,
+      subject: `Solicitud expirada sin respuesta: ${appt.name} — ${dateStr} ${timeStr}`,
+      idempotencyKey: `request-expired-team/${appt.id}`,
+      html: baseTemplate(`
+        <div class="card">
+          <p class="title">Solicitud expirada sin respuesta</p>
+          <p class="copy">Nadie aceptó ni rechazó esta solicitud antes de su horario, así que se canceló y se le avisó a la clienta. Conviene contactarla.</p>
+          ${details([
+            ['Nombre', appt.name],
+            ['Email', appt.email],
+            ['Teléfono', appt.phone],
+            ['Fecha', `${dateStr} ${timeStr}`],
+            ['Código', appt.confirmationCode],
+          ])}
+        </div>
+        <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}">Ver en el panel</a></p>
+      `),
+    })
+  }
+  if (clientError) throw clientError
 }
 
 /**
@@ -1010,7 +1271,7 @@ export async function sendReservationRecovery(params: {
         ${details([
           ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
           ['Fecha', formatDate(appt.slotDatetime)],
-          ['Hora', formatTime(appt.slotDatetime)],
+          ['Hora', formatTime12(appt.slotDatetime)],
           ['Estado', appt.status === 'accepted' ? 'Confirmada' : 'Pendiente de revisión'],
           ['Código', appt.confirmationCode],
         ])}

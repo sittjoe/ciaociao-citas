@@ -14,8 +14,8 @@
 import { Resend } from 'resend'
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from './firebase-admin'
-import { formatDate, formatTime, redactPII } from './utils'
-import { getActiveAdminEmails } from './email'
+import { formatDate, formatTime12, redactPII } from './utils'
+import { assertResendOk, getActiveAdminEmails } from './email'
 import { reservaUrl } from './reserva-access'
 import type { AppointmentType } from '@/types'
 
@@ -78,6 +78,8 @@ async function sendTrackedDaily(params: {
     subject: params.subject,
     html: params.html,
     attachments: [],
+    // retryEmailOutbox() reusa la llave: un reintento nunca duplica el correo.
+    idempotencyKey: params.idempotencyKey,
     status: 'sending',
     attempts: 1,
     lastAttemptAt: FieldValue.serverTimestamp(),
@@ -93,6 +95,8 @@ async function sendTrackedDaily(params: {
       html: params.html,
       headers: { 'List-Unsubscribe': `<mailto:${FROM}?subject=Baja>` },
     }, { idempotencyKey: params.idempotencyKey })
+    // Resend 4.x no lanza: sin esto un 429/422 quedaba como enviado.
+    const resendId = assertResendOk(result, params.kind)
     await recordEmailEvent({
       kind: params.kind,
       to: params.to,
@@ -102,7 +106,7 @@ async function sendTrackedDaily(params: {
     })
     await outboxRef.update({
       status: 'sent',
-      resendId: result.data?.id ?? null,
+      resendId,
       sentAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }).catch(() => {})
@@ -434,7 +438,7 @@ export async function sendWaitlistSlotOpen(params: {
         </p>
         ${details([
           ['Fecha', formatDate(params.slotDatetime)],
-          ['Hora', formatTime(params.slotDatetime)],
+          ['Hora', formatTime12(params.slotDatetime)],
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}">Reservar ahora</a></p>

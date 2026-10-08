@@ -66,6 +66,8 @@ export interface Appointment {
   reminder2Sent: boolean
   /** Ids de correos programados en Resend (24h/2h antes) para poder cancelarlos al mover/cancelar la cita. */
   scheduledEmails?: { h24?: string; h2?: string }
+  /** SEQUENCE del .ics (RFC 5545): sube en cada reprogramación, cambio de link o cancelación. */
+  icsSequence?: number
   googleCalendarEventId?: string | null
   calendarSyncFailed?: boolean | null
   decidedBy?: string | null
