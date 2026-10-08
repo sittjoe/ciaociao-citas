@@ -232,6 +232,10 @@ export function BookingWizard() {
     [slots],
   )
 
+  // Sin horarios, el paso de fecha se convierte en la lista de espera: no es
+  // un paso del asistente, así que no lleva barra de progreso ni encabezado.
+  const showWaitlist = step === 'calendar' && !loadingSlots && !slotsError && !hasAvailability
+
   const stepIndex = activeSteps.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
   const hostEmail = watch('email') ?? ''
@@ -386,7 +390,7 @@ export function BookingWizard() {
       )}
 
       {/* Progress bar */}
-      {step !== 'done' && (
+      {step !== 'done' && !showWaitlist && (
         <div className="mb-6">
           <div
             className="mb-3 hidden gap-2 sm:grid"
@@ -512,6 +516,7 @@ export function BookingWizard() {
           {/* STEP: Calendar */}
           {step === 'calendar' && (
             <Card variant="atelier" className="p-5 sm:p-7">
+              {!showWaitlist && (
               <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
                   <p className="h-eyebrow mb-2">Paso {stepIndex + 1}</p>
@@ -521,6 +526,7 @@ export function BookingWizard() {
                   {isVideo ? 'Horarios de videollamada' : 'Horarios CDMX'}
                 </span>
               </div>
+              )}
               {loadingSlots ? (
                 <div role="status" aria-live="polite">
                   <span className="sr-only">Cargando horarios disponibles…</span>
@@ -536,7 +542,7 @@ export function BookingWizard() {
                   />
                 </div>
               ) : !hasAvailability ? (
-                  <WaitlistForm appointmentType={appointmentType} />
+                  <WaitlistForm appointmentType={appointmentType} productType={getValues('productType') ?? ''} />
               ) : (
                 <CalendarView
                   slots={slots}
@@ -1040,13 +1046,16 @@ function CalendarSkeleton() {
   )
 }
 
-function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType }) {
+function WaitlistForm({ appointmentType, productType = '' }: { appointmentType: AppointmentType; productType?: string }) {
+  // Si el producto ya se eligió antes (la video consulta fija «Anillo»), se
+  // envía tal cual y no se vuelve a preguntar.
+  const productChosen = productType !== ''
   const [values, setValues] = useState({
     appointmentType,
     name: '',
     email: '',
     phone: '',
-    productType: '',
+    productType,
     budgetRange: '',
     message: '',
   })
@@ -1094,7 +1103,7 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
     <form className="space-y-4 px-1 py-2" onSubmit={submit}>
       <div className="text-center">
         <p className="h-eyebrow mb-2">Lista de espera</p>
-        <h3 className="font-serif text-2xl font-light text-ink">Agenda completa por ahora</h3>
+        <h2 className="font-serif text-2xl font-light text-ink">Agenda completa por ahora</h2>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">
           Déjanos tus datos y te avisamos en cuanto abramos nuevos espacios para {appointmentTypeLabels[appointmentType].toLowerCase()}. Nuestras piezas empiezan desde $20,000 MXN.
         </p>
@@ -1144,7 +1153,8 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
         )}
       </Field>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={cn('grid gap-3', !productChosen && 'sm:grid-cols-2')}>
+        {!productChosen && (
         <Field label="Producto de interés">
           {(id, ariaProps) => (
             <select
@@ -1159,6 +1169,7 @@ function WaitlistForm({ appointmentType }: { appointmentType: AppointmentType })
             </select>
           )}
         </Field>
+        )}
         <Field label="Presupuesto aproximado">
           {(id, ariaProps) => (
             <select
