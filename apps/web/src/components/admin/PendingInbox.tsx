@@ -87,6 +87,13 @@ export function PendingInbox({ serverNowMs }: { serverNowMs: number }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, ...(meetingUrl ? { meetingUrl } : {}) }),
           })
+          if (res.status === 409) {
+            // Otra persona del equipo ya la decidió: no la regresamos como
+            // pendiente, recargamos la bandeja con lo que hay en el servidor.
+            toast.error(`La solicitud de ${first} ya la había decidido alguien más.`)
+            void load()
+            return
+          }
           if (!res.ok) {
             const err = await res.json().catch(() => ({})) as { error?: string }
             throw new Error(err.error ?? 'No se pudo guardar la decisión')
@@ -98,7 +105,7 @@ export function PendingInbox({ serverNowMs }: { serverNowMs: number }) {
         }
       },
     })
-  }, [links, schedule])
+  }, [links, schedule, load])
 
   const alertedCount = sorted.filter(i => waitLevel(new Date(i.createdAt).getTime(), nowMs) !== 'fresh').length
 

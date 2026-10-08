@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 
 interface Pending {
   timer: number
+  toastId: string | number
   run: () => Promise<void>
 }
 
@@ -40,6 +41,8 @@ export function useDeferredAction() {
       for (const [key, item] of map) {
         window.clearTimeout(item.timer)
         map.delete(key)
+        // Ya se envía: el toast no puede seguir ofreciendo «Deshacer».
+        toast.dismiss(item.toastId)
         void item.run()
       }
     }
@@ -53,7 +56,10 @@ export function useDeferredAction() {
   return useCallback((key: string, { message, run, onUndo, delayMs = UNDO_WINDOW_MS }: DeferredOptions) => {
     const map = pending.current
     const previous = map.get(key)
-    if (previous) window.clearTimeout(previous.timer)
+    if (previous) {
+      window.clearTimeout(previous.timer)
+      toast.dismiss(previous.toastId)
+    }
 
     const toastId = toast(message, {
       duration: delayMs,
@@ -61,7 +67,12 @@ export function useDeferredAction() {
         label: 'Deshacer',
         onClick: () => {
           const item = map.get(key)
-          if (!item) return
+          // La ventana ya venció (sonner pausa el toast con el puntero encima)
+          // o se envió al cambiar de página: decirlo, no fingir que se deshizo.
+          if (!item || item.toastId !== toastId) {
+            toast.error('Ya se había guardado; no se pudo deshacer.')
+            return
+          }
           window.clearTimeout(item.timer)
           map.delete(key)
           onUndo()
@@ -72,8 +83,9 @@ export function useDeferredAction() {
 
     const timer = window.setTimeout(() => {
       map.delete(key)
+      toast.dismiss(toastId)
       void run()
     }, delayMs)
-    map.set(key, { timer, run })
+    map.set(key, { timer, toastId, run })
   }, [])
 }
