@@ -66,7 +66,8 @@ const SHORT_TYPE_LABELS: Record<AppointmentType, string> = {
   showroom: 'Showroom',
   video_engagement_rings: 'Video consulta',
 }
-const SUMMARY_STEPS: Step[] = ['form', 'upload', 'review']
+// En «review» la fecha ya es la protagonista del paso: sin resumen duplicado.
+const SUMMARY_STEPS: Step[] = ['form', 'upload']
 const DRAFT_KEY = 'ciaociao-booking-draft-v1'
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const SUPPORT_EMAIL = 'hola@ciaociao.mx'
@@ -604,7 +605,7 @@ export function BookingWizard() {
                         name={option.image}
                         alt=""
                         sizes="(min-width: 640px) 300px, 90vw"
-                        className="aspect-[16/10]"
+                        className="aspect-[2/1] sm:aspect-[16/10]"
                         imgClassName="transition-transform duration-700 ease-expo group-hover:scale-[1.03]"
                       />
                     </span>
@@ -1033,14 +1034,14 @@ export function BookingWizard() {
 
                 {/* La fecha es la protagonista, como en la tarjeta final. */}
                 <div className="rounded-2xl bg-[var(--paper-deep)] px-5 py-4">
-                  <p className="font-serif text-[1.6rem] font-light leading-tight text-ink">{formatDate(selectedSlot.datetime)}</p>
+                  <p className="font-serif text-[1.6rem] font-light leading-tight text-ink">{(() => { const d = formatDate(selectedSlot.datetime); return d.charAt(0).toUpperCase() + d.slice(1) })()}</p>
                   <p className="mt-1 text-sm text-ink-muted">{reviewTimeLabel} · {SHORT_TYPE_LABELS[appointmentType]}</p>
                 </div>
 
                 <div className="divide-y divide-ink-line">
                   {([
                     ['Nombre',        getValues('name')],
-                    ['Email',         getValues('email')],
+                    ['Correo',        getValues('email')],
                     ['Teléfono',      getValues('phone')],
                     ...(getValues('productType') ? [['Pieza', getValues('productType')!]] : []),
                     ...(getValues('budgetRange') ? [['Presupuesto', getValues('budgetRange')!]] : []),

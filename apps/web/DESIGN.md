@@ -26,9 +26,10 @@ These are design-time references. The hex values above are canonical.
 
 ## Typography
 
-### Fonts
-- **Cormorant Garamond** (display, serif): weights 300 and 400 only. Never bold. Used for display headings, large numerics, and the brand wordmark.
-- **Inter** (sans): all body copy, labels, inputs, UI elements.
+### Fonts (oct-2026: same three voices as the certificate «El Estuche»)
+- **Cinzel** (wordmark): «CIAO CIAO MX» only, via `<Wordmark>` (src/components/brand/Wordmark.tsx), tracking 0.3em.
+- **Cormorant Garamond** (display, serif): weights 300 to 500 + italic. Never bold. Headings, large numerics (always lining figures: old-style made «11:00» read «I I:OO»), chapter numerals.
+- **Jost** (sans, `--font-body`): all body copy, labels, inputs, UI elements, public and admin. Inter is retired.
 
 ### Scale
 | Name | Size | Line-height | Usage |
@@ -112,3 +113,21 @@ Warm shimmer: `#F7F2E8 → #FAFAF7 → #F7F2E8`, not cool gray.
 - Admin content max-width: none (full fluid).
 - Spacing rhythm: intentional variation. Not the same padding everywhere.
 - Sidebar: w-56 on lg, icon-rail w-14 on md, hidden on sm (hamburger drawer).
+
+## House stationery (oct-2026)
+
+Public surface reads as an invitation card from a maison, not a booking tool.
+
+- `.paper-grain`: warm paper with a fixed, pointer-events-none grain layer.
+- `.engraved`: double hairline frame (outer champagne). Used for the final invitation card, the private reservation card and the admin login.
+- `.gold-leaf` + `<HouseSeal>`: 5-stop OKLCH metallic gradient, only for seals and rules, never text.
+- `.ornament-rule`: hairline with a central lozenge; `.chapter-numeral`: Cormorant italic roman numerals (I, II, III) instead of «Step 1/2/3».
+- Imagery: `<HousePicture>` serves pre-optimized AVIF/WebP from public/images (3 widths, no metadata) with explicit width/height.
+- Motion: `WordsReveal` (per-word mask rise), `Rise` (once on view), layoutId for the experience ring, slot pill and agenda day. Everything carries `data-reveal` so the noscript CSS shows it without JS.
+- Privacy: the showroom address never appears on public pages, metadata, OG or client bundles (see src/lib/showroom-privacy.test.ts and `npm run check:privacy`).
+
+## Admin (product register)
+
+- Agenda (/admin/hoy): week strip + day timeline (free gaps, «Ahora» marker, next appointment) and the «Por decidir» inbox.
+- Decisions and attendance use a deferred «Deshacer» window (useDeferredAction): nothing is sent until it expires.
+- Resumen: inline figures between hairlines (no giant metric cards) and a CSS stacked weekly attendance chart.

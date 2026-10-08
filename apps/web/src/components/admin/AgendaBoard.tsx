@@ -167,12 +167,12 @@ export function AgendaBoard({
   let nowPlaced = !isToday
   dayItems.forEach((appt, i) => {
     const start = new Date(appt.slotDatetime).getTime()
-    if (!nowPlaced && start > nowMs) { rows.push({ kind: 'now' }); nowPlaced = true }
     if (i > 0) {
       const prevEnd = new Date(dayItems[i - 1].slotDatetime).getTime() + 60 * 60_000
       const gap = (start - prevEnd) / 60_000
       if (gap >= 60) rows.push({ kind: 'gap', minutes: gap })
     }
+    if (!nowPlaced && start > nowMs) { rows.push({ kind: 'now' }); nowPlaced = true }
     rows.push({ kind: 'appt', appt })
   })
   if (!nowPlaced && dayItems.length > 0) rows.push({ kind: 'now' })

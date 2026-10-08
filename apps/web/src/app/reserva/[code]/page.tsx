@@ -78,14 +78,14 @@ const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 
 function statusMessage(status: AppointmentStatus, isVideo: boolean, hasMeetingUrl: boolean): string {
   if (status === 'pending') {
     return isVideo
-      ? 'Tu solicitud de video consulta fue recibida y está pendiente de revisión por nuestro equipo.'
-      : 'Tu solicitud fue recibida y está pendiente de revisión por nuestro equipo.'
+      ? 'Recibimos tu solicitud de videollamada; el equipo la revisa y te confirma por correo.'
+      : 'Recibimos tu solicitud; el equipo la revisa y te confirma por correo.'
   }
   if (status === 'accepted') {
     if (!isVideo) return 'Tu cita está confirmada. Te esperamos en el showroom.'
     return hasMeetingUrl
-      ? 'Tu video consulta está confirmada. El enlace está listo abajo.'
-      : 'Tu video consulta está confirmada. Te enviaremos el enlace antes de la llamada.'
+      ? 'Tu videollamada está confirmada. El enlace está listo abajo.'
+      : 'Tu videollamada está confirmada. Te enviaremos el enlace antes de la llamada.'
   }
   if (status === 'rejected') {
     return 'En este momento no podemos confirmar tu cita. Te invitamos a agendar en otro horario.'

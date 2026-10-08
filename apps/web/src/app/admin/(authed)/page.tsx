@@ -238,7 +238,7 @@ export default async function AdminDashboard() {
         ))}
       </dl>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <section aria-labelledby="semanas" className="rounded-2xl border border-admin-line bg-admin-panel p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 id="semanas" className="font-serif text-xl font-light text-ink">Citas por semana</h2>

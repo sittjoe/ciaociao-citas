@@ -19,7 +19,7 @@ export function Wordmark({
     <Tag className={cn('leading-none', className)}>
       <span className="wordmark block text-[0.95em]">Ciao Ciao Mx</span>
       {subtitle && (
-        <span className="mt-1.5 block pl-[0.3em] font-serif text-[0.62em] italic tracking-normal opacity-80">
+        <span className="mt-1.5 block pl-[0.3em] font-serif text-[max(0.62em,0.8rem)] italic tracking-normal opacity-80">
           {subtitle}
         </span>
       )}
