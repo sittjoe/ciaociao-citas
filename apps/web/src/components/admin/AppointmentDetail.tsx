@@ -48,6 +48,8 @@ export type SerialAppointment = Omit<
   followUpAt?: string | null
   attendedAt?: string | null
   autoCancelledAt?: string | null
+  /** Cuándo se avisó al equipo de que la solicitud llevaba >20 min sin atender. */
+  pendingAlertSentAt?: string | null
   commercialPriority?: CommercialPriority
   customerHistory?: CustomerHistoryItem[]
   eventHistory?: AppointmentEventItem[]
@@ -128,6 +130,7 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
   const [resending, setResending] = useState(false)
   const [rescheduling, setRescheduling] = useState(false)
 
+  const [rejectArmed, setRejectArmed] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [commercialStatus, setCommercialStatus] = useState<CommercialStatus>('pending')
   const [internalNote, setInternalNote] = useState('')
@@ -477,8 +480,23 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
             <div className="space-y-3 rounded-2xl border border-champagne-soft bg-champagne-tint/40 p-4">
               <div>
                 <p className="h-eyebrow mb-1">Decisión</p>
-                <p className="text-xs text-ink-muted">Confirma o rechaza la solicitud. El cliente recibe el resultado por correo.</p>
+                <p className="text-xs text-ink-muted">Confirma o rechaza la solicitud. La clienta recibe el resultado por correo.</p>
               </div>
+              {/* La evidencia junto a la decisión: qué quiere ver y si trae lo necesario. */}
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-2 rounded-xl bg-admin-panel px-3 py-3 text-sm sm:grid-cols-2">
+                <div><dt className="text-xs text-ink-muted">Quiere ver</dt><dd className="text-ink">{[appt.productType, appt.budgetRange].filter(Boolean).join(' · ') || 'Sin especificar'}</dd></div>
+                <div>
+                  <dt className="text-xs text-ink-muted">{appt.appointmentType === 'video_engagement_rings' ? 'Link de video' : 'Identificación'}</dt>
+                  <dd className={cn('font-medium',
+                    (appt.appointmentType === 'video_engagement_rings' ? meetingUrl.trim() : appt.identificationUrl) ? 'text-emerald-800' : 'text-red-700')}>
+                    {appt.appointmentType === 'video_engagement_rings'
+                      ? (meetingUrl.trim() ? 'Listo' : 'Falta (puedes agregarlo abajo)')
+                      : (appt.identificationUrl ? 'Recibida' : 'Falta: no se puede confirmar')}
+                    {(appt.guestCount ?? 0) > 0 && <span className="font-normal text-ink-muted"> · +{appt.guestCount} invitados</span>}
+                  </dd>
+                </div>
+                {appt.lookingFor && <div className="sm:col-span-2"><dt className="text-xs text-ink-muted">En sus palabras</dt><dd className="text-ink">«{appt.lookingFor}»</dd></div>}
+              </dl>
               <div>
                 <label htmlFor={`${uid}-reject`} className="label-clean">Motivo de rechazo (opcional)</label>
                 <Textarea
@@ -494,10 +512,23 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
                 <Button variant="gold" className="min-h-[44px] flex-1" loading={deciding} onClick={() => void decide('accept')}>
                   <CheckCircle size={15} strokeWidth={1.5} /> Confirmar
                 </Button>
-                <Button variant="danger" className="min-h-[44px] flex-1" loading={deciding} onClick={() => void decide('reject')}>
-                  <XCircle size={15} strokeWidth={1.5} /> Rechazar
+                {/* Rechazar le manda un correo a la clienta: pide un segundo toque. */}
+                <Button
+                  variant="danger"
+                  className="min-h-[44px] flex-1"
+                  loading={deciding}
+                  aria-describedby={rejectArmed ? `${uid}-reject-warn` : undefined}
+                  onClick={() => { if (rejectArmed) { setRejectArmed(false); void decide('reject') } else setRejectArmed(true) }}
+                >
+                  <XCircle size={15} strokeWidth={1.5} /> {rejectArmed ? 'Sí, rechazar' : 'Rechazar'}
                 </Button>
               </div>
+              {rejectArmed && (
+                <p id={`${uid}-reject-warn`} role="alert" className="flex flex-wrap items-center justify-between gap-2 text-xs text-red-700">
+                  Se le avisará por correo y se libera el horario.
+                  <button type="button" className="min-h-[44px] px-2 font-medium text-ink-muted underline" onClick={() => setRejectArmed(false)}>No, volver</button>
+                </p>
+              )}
             </div>
           )}
 
@@ -509,7 +540,7 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
                 <p className="text-xs text-ink-muted">
                   {appt.attended === true ? 'Registrada como asistió.'
                     : appt.attended === false ? 'Registrada como no se presentó.'
-                    : 'Marca si el cliente acudió a su cita. Los no-shows se excluyen de la conversión.'}
+                    : 'Marca si la clienta acudió a su cita. Los no-shows se excluyen de la conversión.'}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -538,7 +569,7 @@ export function AppointmentDetail({ appointmentId, initialData, onClose, onUpdat
             <div className="rounded-2xl border border-admin-line bg-admin-surface/60 p-4">
               <div className="mb-3">
                 <p className="h-eyebrow mb-1">Reagendar</p>
-                <p className="text-xs text-ink-muted">Mueve la cita a otro horario disponible. El cliente recibe la nueva fecha por correo.</p>
+                <p className="text-xs text-ink-muted">Mueve la cita a otro horario disponible. La clienta recibe la nueva fecha por correo.</p>
               </div>
               {!showReschedule ? (
                 <Button

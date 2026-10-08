@@ -167,8 +167,9 @@ export function AppointmentTable() {
   const [error,       setError]         = useState(false)
   const [nextCursor,  setNextCursor]    = useState<string | null>(null)
   const [nuevaAbierta, setNuevaAbierta] = useState(false)
-  const [search,      setSearch]        = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  // ?q= llega desde el buscador global del panel (tecla «/»).
+  const [search,      setSearch]        = useState(() => searchParams.get('q') ?? '')
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('q') ?? '')
   const [dateFrom,    setDateFrom]      = useState('')
   const [dateTo,      setDateTo]        = useState('')
   const [statusFilter,setStatusFilter]  = useState<AppointmentStatus | ''>('')
@@ -186,6 +187,11 @@ export function AppointmentTable() {
   const [openInitial, setOpenInitial]   = useState<SerialAppt | null>(null)
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set())
   const [batchActing, setBatchActing]   = useState(false)
+
+  const qParam = searchParams.get('q')
+  useEffect(() => {
+    if (qParam !== null) { setSearch(qParam); setDebouncedSearch(qParam) }
+  }, [qParam])
 
   // Debounce the search box so we don't fire one request per keystroke
   useEffect(() => {
@@ -251,6 +257,12 @@ export function AppointmentTable() {
   const batchDecide = useCallback(async (action: 'accept' | 'reject') => {
     const ids = [...selectedIds]
     if (ids.length === 0) return
+    // Cada decisión le manda un correo a una clienta: en lote, se confirma antes.
+    const n = ids.length
+    const question = action === 'accept'
+      ? `¿Aceptar ${n} solicitud${n === 1 ? '' : 'es'}? Cada clienta recibirá su confirmación por correo.`
+      : `¿Rechazar ${n} solicitud${n === 1 ? '' : 'es'}? Cada clienta recibirá un correo y se liberan los horarios.`
+    if (!window.confirm(question)) return
     setBatchActing(true)
     try {
       const res = await fetch('/api/admin/appointments/batch', {
