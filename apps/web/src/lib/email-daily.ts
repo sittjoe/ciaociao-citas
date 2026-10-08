@@ -18,6 +18,7 @@ import { formatDate, formatTime12, redactPII } from './utils'
 import { assertResendOk, getActiveAdminEmails } from './email'
 import { reservaUrl } from './reserva-access'
 import type { AppointmentType } from '@/types'
+import { FUENTES, PAPEL, aviso, boton, documento, enlace, escapeHtml, libro, notaCentrada, parrafo, seccion } from './email-design'
 
 const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://citas.ciaociao.mx'
@@ -130,73 +131,17 @@ async function sendTrackedDaily(params: {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, char => {
-    const map: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }
-    return map[char] ?? char
-  })
-}
-
-// Mismo lienzo maison que lib/email.ts (duplicado a propósito: ese módulo no
-// exporta sus plantillas y no se toca desde aquí).
-function baseTemplate(body: string): string {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  body { margin:0; background:#FAFAF7; font-family:Inter,Helvetica,Arial,sans-serif; color:#1A1A1A; }
-  .wrap { max-width:600px; margin:0 auto; padding:36px 20px; }
-  .logo { text-align:center; margin-bottom:28px; }
-  .logo h1 { font-family:Georgia,serif; color:#1A1A1A; font-size:30px; margin:0; letter-spacing:4px; font-weight:400; }
-  .logo p { color:#9A7E50; font-size:11px; letter-spacing:3px; margin:6px 0 0; text-transform:uppercase; }
-  .card { background:#FFFFFF; border:1px solid #E7E2D7; border-radius:16px; padding:28px; margin:22px 0; }
-  .title { font-family:Georgia,serif; font-size:24px; color:#1A1A1A; margin:0 0 12px; font-weight:400; }
-  .copy { color:#6B6B6B; font-size:14px; line-height:1.65; margin:0 0 18px; }
-  .detail { display:flex; justify-content:space-between; gap:20px; padding:11px 0; border-bottom:1px solid #F0EDE6; font-size:14px; }
-  .detail:last-child { border-bottom:none; }
-  .label { color:#9A7E50; }
-  .value { color:#1A1A1A; font-weight:600; text-align:right; }
-  .btn { display:inline-block; background:#B89968; color:#FFFFFF; padding:13px 24px; border-radius:10px; text-decoration:none; font-weight:700; font-size:14px; margin-top:18px; }
-  .footer { text-align:center; color:#8B8B8B; font-size:12px; margin-top:30px; line-height:1.6; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="logo">
-    <h1>CIAO CIAO</h1>
-    <p>Joyería fina · Citas privadas</p>
-  </div>
-  ${body}
-  <div class="footer">
-    <p>Ciao Ciao Joyería · Showroom Privado</p>
-    <p>Dudas: <a href="mailto:hola@ciaociao.mx" style="color:#9A7E50;">hola@ciaociao.mx</a></p>
-  </div>
-</div>
-</body>
-</html>`
-}
-
-function details(rows: [string, string][]): string {
-  return rows.map(([label, value]) =>
-    `<div class="detail"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value)}</span></div>`
-  ).join('')
-}
+// Presentación: la misma papelería de la casa que lib/email.ts
+// (lib/email-design.ts). Aquí solo se arma el contenido de cada correo.
+const details = libro
 
 /** Botón de contacto para clientas: WhatsApp del equipo si está configurado, correo si no. */
 function contactButton(prefillText: string): string {
   if (TEAM_WHATSAPP) {
     const url = `https://wa.me/${TEAM_WHATSAPP}?text=${encodeURIComponent(prefillText)}`
-    return `<p style="text-align:center"><a class="btn" href="${url}">Escríbenos por WhatsApp</a></p>`
+    return boton(url, 'Escríbenos por WhatsApp')
   }
-  return `<p style="text-align:center"><a class="btn" href="mailto:${FROM}">Escríbenos</a></p>`
+  return boton(`mailto:${FROM}`, 'Escríbenos')
 }
 
 // ---------------------------------------------------------------------------
@@ -228,43 +173,41 @@ export interface DigestPendingRow {
   typeLabel: string
 }
 
+const SANS = FUENTES.sans
+
 function digestSection(title: string, rowsHtml: string): string {
-  return `<div class="card" style="padding:22px 28px;">
-    <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px;font-weight:600;">${escapeHtml(title)}</p>
-    ${rowsHtml}
-  </div>`
+  return seccion(title, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="cc-linea" style="width:100%;border-collapse:collapse;border-top:1px solid ${PAPEL.linea}">${rowsHtml}</table>`)
+}
+
+/** Fila de agenda: momento a la izquierda (sans: Georgia, el respaldo de Gmail, usa cifras antiguas y «11:00» se leería «I I:OO») y quién a la derecha. */
+function digestRow(when: string, name: string, typeLabel: string, extra: string, whenWidth = 84): string {
+  return `<tr><td class="cc-linea cc-tinta" width="${whenWidth}" valign="top" style="width:${whenWidth}px;padding:12px 12px 12px 0;border-bottom:1px solid ${PAPEL.linea};font-family:${SANS};font-size:15px;line-height:21px;font-weight:500;color:${PAPEL.tinta};font-variant-numeric:lining-nums tabular-nums">${escapeHtml(when)}</td>`
+    + `<td class="cc-linea" valign="top" style="padding:12px 0;border-bottom:1px solid ${PAPEL.linea};font-family:${SANS};font-size:14px;line-height:21px">`
+    + `<span class="cc-tinta" style="color:${PAPEL.tinta};font-weight:500">${escapeHtml(name)}</span> <span class="cc-tenue" style="color:${PAPEL.tenue}">· ${escapeHtml(typeLabel)}</span>`
+    + `<div style="margin-top:3px;font-size:12px;line-height:18px">${extra}</div></td></tr>`
 }
 
 function digestTodayRows(rows: DigestTodayRow[]): string {
   if (rows.length === 0) {
-    return '<p style="font-size:13px;color:#8B8B8B;margin:8px 0 0;">Sin citas agendadas para hoy.</p>'
+    return `<tr><td class="cc-tenue" style="padding:12px 0;font-family:${SANS};font-size:13px;color:${PAPEL.tenue}">Sin citas agendadas para hoy.</td></tr>`
   }
   return rows.map(r => {
     const confirmChip = r.clientConfirmed
-      ? '<span style="color:#2E7D32;font-weight:600;">&#9679; Confirmó</span>'
-      : '<span style="color:#B26A00;font-weight:600;">&#9675; Sin confirmar</span>'
+      ? `<span style="color:${PAPEL.bien};font-weight:500;">&#9679; Confirmó</span>`
+      : `<span style="color:${PAPEL.atencion};font-weight:500;">&#9675; Sin confirmar</span>`
     const idChip = r.isVideo
       ? ''
-      : ` &nbsp;·&nbsp; <span style="color:${r.hasIdentification ? '#2E7D32' : '#B26A00'};">ID ${r.hasIdentification ? '&#10003;' : 'pendiente'}</span>`
-    return `<div style="padding:10px 0;border-bottom:1px solid #F0EDE6;">
-      <p style="margin:0;font-size:14px;color:#1A1A1A;"><strong>${escapeHtml(r.time)}</strong> — ${escapeHtml(r.name)} <span style="color:#6B6B6B;">· ${escapeHtml(r.typeLabel)}</span></p>
-      <p style="margin:4px 0 0;font-size:12px;">${confirmChip}${idChip}</p>
-    </div>`
+      : ` &nbsp;·&nbsp; <span style="color:${r.hasIdentification ? PAPEL.bien : PAPEL.atencion};">ID ${r.hasIdentification ? '&#10003;' : 'pendiente'}</span>`
+    return digestRow(r.time, r.name, r.typeLabel, confirmChip + idChip)
   }).join('')
 }
 
 function digestUnconfirmedRows(rows: DigestUnconfirmedRow[]): string {
-  return rows.map(r => `<div style="padding:10px 0;border-bottom:1px solid #F0EDE6;">
-      <p style="margin:0;font-size:14px;color:#1A1A1A;"><strong>${escapeHtml(r.dateLabel)}</strong> — ${escapeHtml(r.name)} <span style="color:#6B6B6B;">· ${escapeHtml(r.typeLabel)}</span></p>
-      <p style="margin:4px 0 0;"><a href="${r.whatsappUrl}" style="font-size:12px;color:#9A7E50;text-decoration:none;font-weight:600;">Pedir confirmación por WhatsApp &rarr;</a></p>
-    </div>`).join('')
+  return rows.map(r => digestRow(r.dateLabel, r.name, r.typeLabel, enlace(r.whatsappUrl, 'Pedir confirmación por WhatsApp →'), 132)).join('')
 }
 
 function digestPendingRows(rows: DigestPendingRow[]): string {
-  return rows.map(r => `<div style="padding:10px 0;border-bottom:1px solid #F0EDE6;">
-      <p style="margin:0;font-size:14px;color:#1A1A1A;"><strong>${escapeHtml(r.dateLabel)}</strong> — ${escapeHtml(r.name)} <span style="color:#6B6B6B;">· ${escapeHtml(r.typeLabel)}</span></p>
-      <p style="margin:4px 0 0;"><a href="${SITE}/admin/citas?open=${encodeURIComponent(r.id)}" style="font-size:12px;color:#9A7E50;text-decoration:none;font-weight:600;">Decidir &rarr;</a></p>
-    </div>`).join('')
+  return rows.map(r => digestRow(r.dateLabel, r.name, r.typeLabel, enlace(`${SITE}/admin/citas?open=${encodeURIComponent(r.id)}`, 'Decidir →'), 132)).join('')
 }
 
 /**
@@ -303,14 +246,11 @@ export async function sendDailyTeamDigest(params: {
 
   // Línea destacada de pocos horarios — arriba de todo, es lo más accionable.
   const lowSlotsAlert = lowSlots !== null
-    ? `<div class="card" style="border:1px solid #E5C26B;background:#FFF9EC;padding:20px 28px;">
-        <p style="margin:0;font-size:14px;line-height:1.55;color:#8A6D1D;font-weight:600;">
-          ${lowSlots === 1
-            ? 'Queda 1 horario publicado para los próximos 7 días — publica más desde Slots.'
-            : `Quedan ${lowSlots} horarios publicados para los próximos 7 días — publica más desde Slots.`}
-        </p>
-        <p style="margin:10px 0 0;"><a href="${SITE}/admin/slots" style="font-size:12px;color:#9A7E50;text-decoration:none;font-weight:600;">Abrir Slots &rarr;</a></p>
-      </div>`
+    ? aviso('Pocos horarios',
+        `<span style="font-weight:500">${lowSlots === 1
+          ? 'Queda 1 horario publicado para los próximos 7 días — publica más desde Slots.'
+          : `Quedan ${lowSlots} horarios publicados para los próximos 7 días — publica más desde Slots.`}</span><br>${enlace(`${SITE}/admin/slots`, 'Abrir Slots →')}`,
+        { centrado: false })
     : ''
 
   const sections = [
@@ -329,14 +269,14 @@ export async function sendDailyTeamDigest(params: {
     from: `Sistema Citas <${FROM}>`,
     to: adminRecipients,
     subject: `☀️ ${params.dayLabel}: ${subjectParts.join(' · ')}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Agenda del día</p>
-        <p class="copy" style="margin:0;">${escapeHtml(params.dayLabel)} · resumen matutino para el equipo.</p>
-      </div>
-      ${sections}
-      <p style="text-align:center"><a class="btn" href="${SITE}/admin/hoy">Abrir la hoja del día</a></p>
-    `),
+    html: documento({
+      eyebrow: 'Para el equipo',
+      titulo: 'Agenda del día',
+      preheader: subjectParts.join(' · '),
+      cuerpo: parrafo(`${escapeHtml(params.dayLabel)} · resumen matutino para el equipo.`, { centrado: true })
+        + sections
+        + boton(`${SITE}/admin/hoy`, 'Abrir la hoja del día'),
+    }),
     idempotencyKey: `daily-digest-${params.dateKey}`,
   })
   return { sent: true, recipients: adminRecipients.length }
@@ -359,20 +299,14 @@ export async function sendPostVisitThanks(params: {
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: params.email,
     subject: 'Gracias por tu visita a Ciao Ciao',
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Gracias por tu visita</p>
-        <p class="copy">
-          Hola ${escapeHtml(params.name)}, fue un gusto recibirte ${params.isVideo ? 'en tu video consulta' : 'en nuestro showroom privado'}.
-          Esperamos que la experiencia haya estado a la altura de lo que buscabas.
-        </p>
-        <p class="copy" style="margin-bottom:0;">
-          Si te quedaste pensando en alguna pieza, quieres ver opciones a tu medida
-          o simplemente tienes una duda, estamos a un mensaje de distancia.
-        </p>
-      </div>
-      ${contactButton(prefill)}
-    `),
+    html: documento({
+      eyebrow: 'Después de tu cita',
+      titulo: 'Gracias por tu visita',
+      preheader: 'Estamos a un mensaje de distancia.',
+      cuerpo: parrafo(`Hola ${escapeHtml(params.name)}, fue un gusto recibirte ${params.isVideo ? 'en tu video consulta' : 'en nuestro showroom privado'}. Esperamos que la experiencia haya estado a la altura de lo que buscabas.`)
+        + parrafo('Si te quedaste pensando en alguna pieza, quieres ver opciones a tu medida o simplemente tienes una duda, estamos a un mensaje de distancia.', { final: true })
+        + contactButton(prefill),
+    }),
     idempotencyKey: `post-visit-${params.appointmentId}`,
   })
 }
@@ -391,20 +325,15 @@ export async function sendPostVisitRescue(params: {
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: params.email,
     subject: 'Te esperamos en Ciao Ciao — ¿reagendamos?',
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Te esperamos — ¿reagendamos?</p>
-        <p class="copy">
-          Hola ${escapeHtml(params.name)}, no pudimos coincidir en tu ${params.isVideo ? 'video consulta' : 'cita'} — esperamos que todo esté bien.
-        </p>
-        <p class="copy" style="margin-bottom:0;">
-          Tu lugar en Ciao Ciao sigue apartado para cuando quieras retomarla.
-          Elegir un nuevo horario toma menos de un minuto.
-        </p>
-      </div>
-      <p style="text-align:center"><a class="btn" href="${statusUrl}">Reagendar mi cita</a></p>
-      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">Si prefieres, responde este correo y lo vemos contigo.</p>
-    `),
+    html: documento({
+      eyebrow: 'Tu cita',
+      titulo: 'Te esperamos — ¿reagendamos?',
+      preheader: 'Elegir un nuevo horario toma menos de un minuto.',
+      cuerpo: parrafo(`Hola ${escapeHtml(params.name)}, no pudimos coincidir en tu ${params.isVideo ? 'video consulta' : 'cita'} — esperamos que todo esté bien.`)
+        + parrafo('Tu lugar en Ciao Ciao sigue apartado para cuando quieras retomarla. Elegir un nuevo horario toma menos de un minuto.', { final: true })
+        + boton(statusUrl, 'Reagendar mi cita')
+        + notaCentrada('Si prefieres, responde este correo y lo vemos contigo.'),
+    }),
     idempotencyKey: `post-visit-${params.appointmentId}`,
   })
 }
@@ -429,21 +358,18 @@ export async function sendWaitlistSlotOpen(params: {
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: params.email,
     subject: 'Se abrió un horario en Ciao Ciao',
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Se abrió un horario</p>
-        <p class="copy">
-          Hola ${escapeHtml(params.name)}, nos pediste avisarte cuando hubiera
-          disponibilidad para ${wanted}. Acaba de abrirse este horario:
-        </p>
-        ${details([
+    html: documento({
+      eyebrow: 'Lista de espera',
+      titulo: 'Se abrió un horario',
+      preheader: `${formatDate(params.slotDatetime)} · ${formatTime12(params.slotDatetime)}`,
+      cuerpo: parrafo(`Hola ${escapeHtml(params.name)}, nos pediste avisarte cuando hubiera disponibilidad para ${wanted}. Acaba de abrirse este horario:`)
+        + details([
           ['Fecha', formatDate(params.slotDatetime)],
           ['Hora', formatTime12(params.slotDatetime)],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}">Reservar ahora</a></p>
-      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">Los lugares se asignan por orden de reserva. Si este horario no te acomoda, en la página verás el resto de la disponibilidad.</p>
-    `),
+        ])
+        + boton(SITE, 'Reservar ahora')
+        + notaCentrada('Los lugares se asignan por orden de reserva. Si este horario no te acomoda, en la página verás el resto de la disponibilidad.'),
+    }),
     idempotencyKey: `waitlist-open-${params.entryId}`,
   })
 }
