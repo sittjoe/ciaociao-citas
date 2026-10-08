@@ -8,6 +8,7 @@ import { liberarSlotDeCita } from '@/lib/slot-release'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
 import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
+import { hasReservaAccess, NO_STORE_HEADERS } from '@/lib/reserva-access'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -53,6 +54,16 @@ export async function POST(
     }
 
     const doc = snap.docs[0]
+
+    // El cancelToken viajaba en el HTML de /reserva/[code], que cualquiera con
+    // el código podía abrir. Además del token se exige la cookie de acceso de
+    // esa reserva (enlace firmado o correo verificado en la puerta).
+    if (!hasReservaAccess(request, doc.data().confirmationCode)) {
+      return NextResponse.json(
+        { error: 'Por seguridad, vuelve a abrir tu cita desde el enlace de tu correo.' },
+        { status: 403, headers: NO_STORE_HEADERS },
+      )
+    }
 
     let updatedAppt: Appointment | null = null
     let previousSlotId = ''

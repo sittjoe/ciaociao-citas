@@ -16,6 +16,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from './firebase-admin'
 import { formatDate, formatTime, redactPII } from './utils'
 import { getActiveAdminEmails } from './email'
+import { reservaUrl } from './reserva-access'
 import type { AppointmentType } from '@/types'
 
 const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
@@ -379,7 +380,7 @@ export async function sendPostVisitRescue(params: {
   confirmationCode: string
   isVideo: boolean
 }) {
-  const statusUrl = `${SITE}/reserva/${params.confirmationCode}`
+  const statusUrl = reservaUrl(SITE, params.confirmationCode)
   await sendTrackedDaily({
     kind: 'post_visit_rescue',
     appointmentId: params.appointmentId,

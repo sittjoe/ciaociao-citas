@@ -4,6 +4,7 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { formatDate, formatTime, BUSINESS_TZ, redactPII } from './utils'
 import { adminDb } from './firebase-admin'
 import { appointmentTypeLabels, engagementBriefRows, isVideoEngagement } from './commercial'
+import { reservaUrl } from './reserva-access'
 import type { Appointment } from '@/types'
 
 const FROM = process.env.RESEND_FROM_EMAIL || 'hola@ciaociao.mx'
@@ -313,7 +314,7 @@ export async function sendBookingConfirmation(
 ) {
   const dateStr = formatDate(appt.slotDatetime)
   const timeStr = formatTime(appt.slotDatetime)
-  const url = `${SITE}/reserva/${appt.confirmationCode}`
+  const url = reservaUrl(SITE, appt.confirmationCode)
   const isVideo = isVideoAppointment(appt)
 
   const guestBlock = !isVideo && guestNames.length > 0
@@ -401,7 +402,7 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
         ])}
        </div>
        ${appt.meetingUrl ? `<p style="text-align:center"><a class="btn" href="${escapeHtml(appt.meetingUrl)}">Entrar a la videollamada</a></p>` : ''}
-       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>`
+       <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver tu cita</a></p>`
       : `<div class="card">
         <p class="title">Tu cita está confirmada</p>
         <p class="copy">Te esperamos en nuestro showroom privado. Encontrarás el .ics adjunto para agregar la cita a tu calendario.</p>
@@ -413,7 +414,7 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
        </div>
        ${showroomLocationBlock()}
        ${addToCalendarButton(appt)}
-       <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>`
+       <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver tu cita</a></p>`
     : `<div class="card">
         <p class="title">No pudimos confirmar tu solicitud</p>
         <p class="copy">${escapeHtml(reason || 'En este momento no podemos confirmar ese horario. Te invitamos a elegir otro disponible.')}</p>
@@ -454,7 +455,7 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2) {
           ...videoMeetingRows(appt),
         ])}
       </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver detalles</a></p>
+      <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver detalles</a></p>
     `),
   })
 }
@@ -482,7 +483,7 @@ export async function sendReminder24Confirm(appt: Appointment) {
         ])}
       </div>
       <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
-      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${SITE}/reserva/${appt.confirmationCode}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
+      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${reservaUrl(SITE, appt.confirmationCode)}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
     `),
   })
 }
@@ -580,7 +581,7 @@ function scheduledReminder24Content(appt: Appointment): { subject: string; html:
       ${isVideo ? '' : showroomLocationBlock()}
       <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
       ${isVideo ? videoJoinButton(appt) : addToCalendarButton(appt)}
-      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${SITE}/reserva/${appt.confirmationCode}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
+      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${reservaUrl(SITE, appt.confirmationCode)}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
     `),
   }
 }
@@ -922,7 +923,7 @@ export async function sendRescheduleNotice(appt: Appointment) {
           ...videoMeetingRows(appt),
         ])}
       </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}/reserva/${appt.confirmationCode}">Ver tu cita</a></p>
+      <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver tu cita</a></p>
     `),
   })
 }
@@ -1013,7 +1014,7 @@ export async function sendReservationRecovery(params: {
           ['Estado', appt.status === 'accepted' ? 'Confirmada' : 'Pendiente de revisión'],
           ['Código', appt.confirmationCode],
         ])}
-        <p style="text-align:center;margin:16px 0 0;"><a class="btn" style="margin-top:0;" href="${SITE}/reserva/${encodeURIComponent(appt.confirmationCode)}">Ver estado de esta cita</a></p>
+        <p style="text-align:center;margin:16px 0 0;"><a class="btn" style="margin-top:0;" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver estado de esta cita</a></p>
       </div>`).join('')
 
   await sendTracked({
