@@ -289,6 +289,25 @@ export function BookingWizard() {
 
   const goBack = useCallback(() => goTo(activeSteps[stepIndex - 1]), [activeSteps, stepIndex, goTo])
 
+  // Paso 1: tocar una experiencia la marca y, tras un instante para que se
+  // vea elegida, avanza sola al calendario (Enter/Espacio hacen lo mismo).
+  const TYPE_ADVANCE_MS = 250
+  const [advancingType, setAdvancingType] = useState<AppointmentType | null>(null)
+  const typeAdvanceTimer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (typeAdvanceTimer.current !== null) window.clearTimeout(typeAdvanceTimer.current)
+  }, [])
+  const chooseType = useCallback((type: AppointmentType) => {
+    if (typeAdvanceTimer.current !== null) return
+    setValue('appointmentType', type)
+    setAdvancingType(type)
+    typeAdvanceTimer.current = window.setTimeout(() => {
+      typeAdvanceTimer.current = null
+      setAdvancingType(null)
+      goTo('calendar')
+    }, TYPE_ADVANCE_MS)
+  }, [setValue, goTo])
+
   // Revalida el slot de un borrador restaurado contra la lista fresca de
   // /api/slots: si sigue disponible se re-selecciona; si ya lo tomaron (o ya
   // pasó), se limpia con aviso y se regresa a elegir horario.
@@ -480,22 +499,33 @@ export function BookingWizard() {
                     type="button"
                     role="radio"
                     aria-checked={appointmentType === option.type}
-                    onClick={() => setValue('appointmentType', option.type)}
+                    onClick={() => chooseType(option.type)}
                     className={cn(
-                      'rounded-2xl border p-4 text-left transition-all',
+                      'relative rounded-2xl border p-4 text-left transition-all duration-150 ease-expo',
                       appointmentType === option.type
                         ? 'border-champagne bg-champagne-tint shadow-soft'
                         : 'border-ink-line bg-porcelain hover:border-champagne-soft',
                     )}
                   >
                     <option.Icon size={20} strokeWidth={1.5} className="text-champagne" />
+                    {advancingType === option.type && (
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                        className="absolute right-4 top-4 text-champagne-solid"
+                        aria-hidden="true"
+                      >
+                        <CheckCircle2 size={18} strokeWidth={1.5} />
+                      </motion.span>
+                    )}
                     <span className="mt-3 block font-serif text-xl font-light text-ink">{option.title}</span>
                     <span className="mt-2 block text-sm leading-6 text-ink-muted">{option.copy}</span>
                   </button>
                 ))}
               </div>
 
-              {isVideo && (
+              {isVideo && advancingType === null && (
                 <div className="overflow-hidden rounded-2xl border border-ink-line">
                   <Image
                     src="/video-engagement-consultation.webp"
@@ -507,9 +537,6 @@ export function BookingWizard() {
                 </div>
               )}
 
-              <Button className="w-full" onClick={() => goTo('calendar')}>
-                Continuar
-              </Button>
             </Card>
           )}
 
