@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { formatDate, formatTime } from '@/lib/utils'
+import { formatDate, formatTime12 } from '@/lib/utils'
 import { recomputeGuestsAllVerified } from '@/lib/guests'
 import { randomUUID } from 'node:crypto'
 
@@ -90,8 +90,8 @@ export async function GET(
     },
     appointment: {
       dateStr:      formatDate(slotDatetime),
-      timeStr:      formatTime(slotDatetime),
-      deadlineStr:  `${formatDate(deadline)} a las ${formatTime(deadline)}`,
+      timeStr:      formatTime12(slotDatetime),
+      deadlineStr:  `${formatDate(deadline)} a las ${formatTime12(deadline)}`,
       hostName:     appt.name,
     },
   })

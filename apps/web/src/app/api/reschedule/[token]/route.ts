@@ -5,6 +5,7 @@ import { updateAppointmentCalendarEvent } from '@/lib/google-calendar'
 import { sendRescheduleNotice, sendCalendarError, syncScheduledReminderEmails, cancelScheduledReminderEmails } from '@/lib/email'
 import { createSlotLock, releaseSlotLock, slotLockRef } from '@/lib/slot-locks'
 import { liberarSlotDeCita } from '@/lib/slot-release'
+import { PENDING_ALERT_AFTER_MS } from '@/lib/holds'
 import { normalizeAppointmentType } from '@/lib/commercial'
 import { logAppointmentEvent } from '@/lib/appointment-events'
 import { checkPublicRateLimit, requestIp } from '@/lib/public-rate-limit'
@@ -124,7 +125,13 @@ export async function POST(
       if (oldSlotSnap.exists) {
         liberarSlotDeCita(tx, oldSlotRef, apptData)
       }
-      tx.update(newSlotRef, { available: false, bookedBy: doc.id, heldUntil: null })
+      // Una solicitud pendiente sigue bajo el barrido de lib/holds.ts (aviso al
+      // equipo y expiración avisada); antes reprogramarla la sacaba de ahí.
+      tx.update(newSlotRef, {
+        available: false,
+        bookedBy: doc.id,
+        heldUntil: apptData.status === 'pending' ? Timestamp.fromMillis(Date.now() + PENDING_ALERT_AFTER_MS) : null,
+      })
 
       tx.update(apptRef, {
         // Ver la nota del reagendado del admin: el horario nuevo es publicado.
@@ -139,6 +146,8 @@ export async function POST(
         clientConfirmed: false,
         clientConfirmedAt: FieldValue.delete(),
         scheduledEmails: FieldValue.delete(),
+        // .ics: mismo UID y SEQUENCE mayor → el calendario mueve el evento.
+        icsSequence: FieldValue.increment(1),
       })
 
       previousSlotId = apptData.slotId
@@ -169,6 +178,7 @@ export async function POST(
         meetingUrl: apptData.meetingUrl ?? null,
         meetingProvider: apptData.meetingProvider ?? null,
         meetingInstructions: apptData.meetingInstructions ?? null,
+        icsSequence: (Number(apptData.icsSequence ?? 0) || 0) + 1,
         createdAt:    (apptData.createdAt as Timestamp).toDate(),
       }
     })
