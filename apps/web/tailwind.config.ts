@@ -38,7 +38,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans:    ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        sans:    ['var(--font-body)', 'system-ui', 'sans-serif'],
+        wordmark: ['var(--font-wordmark)', 'var(--font-cormorant)', 'Georgia', 'serif'],
         serif:   ['var(--font-cormorant)', 'Georgia', 'serif'],
         display: ['var(--font-cormorant)', 'Georgia', 'serif'],
       },
@@ -52,6 +53,7 @@ const config: Config = {
       letterSpacing: {
         eyebrow:         '0.18em',
         'display-eyebrow': '0.32em',
+        wordmark:        '0.3em',
       },
       boxShadow: {
         soft:    '0 1px 2px color-mix(in oklch, var(--showroom-ink) 5%, transparent), 0 10px 30px color-mix(in oklch, var(--showroom-ink) 7%, transparent)',

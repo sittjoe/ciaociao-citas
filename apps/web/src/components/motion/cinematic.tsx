@@ -31,7 +31,7 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
 // navegador, pero el servidor no la conoce: si el HTML depende de ella, la
 // hidratación falla (React #418) para quien tiene «reducir movimiento». Este
 // hook arranca igual que el servidor y aplica la preferencia tras montar.
-function useReducedMotionAfterMount() {
+export function useReducedMotionAfterMount() {
   const reduced = useReducedMotion()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -243,6 +243,7 @@ export function DepthReveal({
 }) {
   return (
     <motion.div
+      data-reveal
       className={className}
       initial={{ opacity: 0, y: 34, rotateX: 14, transformPerspective: 900 }}
       whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
@@ -252,5 +253,75 @@ export function DepthReveal({
     >
       {children}
     </motion.div>
+  )
+}
+
+// ── WordsReveal ────────────────────────────────────────────────────────────
+// Como TitleReveal pero por palabra: cada palabra sube desde su máscara y
+// los espacios siguen siendo espacios reales, así el título parte línea
+// donde debe (TitleReveal une todo con &nbsp; y solo sirve para una palabra).
+
+export function WordsReveal({
+  text,
+  delay = 0,
+  className,
+}: {
+  text: string
+  delay?: number
+  className?: string
+}) {
+  const words = text.split(' ')
+  return (
+    <span className={className} aria-label={text} role="text">
+      {words.map((word, i) => (
+        <span key={i} aria-hidden>
+          <span
+            style={{ display: 'inline-block', overflow: 'hidden', verticalAlign: 'bottom', paddingBottom: '0.08em', marginBottom: '-0.08em' }}
+          >
+            <motion.span
+              data-reveal
+              style={{ display: 'inline-block', willChange: 'transform' }}
+              initial={{ y: '105%', opacity: 0 }}
+              animate={{ y: '0%', opacity: 1 }}
+              transition={{ ease: EASE, duration: 1, delay: delay + i * 0.08 }}
+            >
+              {word}
+            </motion.span>
+          </span>
+          {i < words.length - 1 ? ' ' : null}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// ── Rise ───────────────────────────────────────────────────────────────────
+// Entrada sobria al asomar: sube 20px y aparece, una sola vez. Es el
+// movimiento por defecto de las secciones de la portada; DepthReveal (con
+// inclinación 3D) queda para lo que de verdad se «posa» sobre la mesa.
+
+export function Rise({
+  children,
+  delay = 0,
+  className,
+  as = 'div',
+}: {
+  children: ReactNode
+  delay?: number
+  className?: string
+  as?: 'div' | 'li' | 'section' | 'figure'
+}) {
+  const Tag = motion[as]
+  return (
+    <Tag
+      data-reveal
+      className={className}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ ease: EASE, duration: 0.8, delay }}
+    >
+      {children}
+    </Tag>
   )
 }

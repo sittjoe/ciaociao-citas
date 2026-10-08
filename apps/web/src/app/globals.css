@@ -257,3 +257,105 @@ kbd {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ─── La casa: papelería de invitación ──────────────────────────────────────
+   Mismo vocabulario que El Estuche (certificados.ciaociao.mx): papel cálido,
+   oro que se siente metal, marca grabada en Cinzel. Aquí el objeto no es un
+   estuche sino una tarjeta de invitación a una cita privada. */
+
+:root {
+  --paper:        oklch(0.975 0.009 84);
+  --paper-deep:   oklch(0.948 0.017 82);
+  /* Oro metálico (5 paradas, como El Estuche): solo para filetes, sellos y
+     marcos. Nunca en texto: no pasa AA. */
+  --gold-leaf: linear-gradient(135deg,
+    oklch(0.90 0.055 88) 0%,
+    oklch(0.74 0.090 78) 28%,
+    oklch(0.62 0.095 68) 52%,
+    oklch(0.82 0.070 84) 74%,
+    oklch(0.60 0.090 66) 100%);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .28 0 0 0 0 .2 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* Grano de papel: capa fija, sin eventos, casi imperceptible. Va en una capa
+   fija (no en contenedores que hacen scroll) para no repintar al desplazar. */
+.paper-grain { position: relative; background-color: var(--paper); }
+.paper-grain::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background-image: var(--grain);
+  opacity: 0.045;
+  mix-blend-mode: multiply;
+}
+
+/* Marca grabada: Cinzel con tracking amplio y compensación óptica. */
+.wordmark {
+  font-family: var(--font-wordmark), serif;
+  letter-spacing: 0.3em;
+  padding-left: 0.3em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+
+/* Filete de invitación: dos líneas finas, la exterior en oro. */
+.engraved {
+  position: relative;
+  background-color: oklch(0.992 0.006 86);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--champagne) 55%, transparent),
+    inset 0 0 0 6px oklch(0.992 0.006 86),
+    inset 0 0 0 7px color-mix(in oklch, var(--champagne) 28%, transparent),
+    0 1px 2px color-mix(in oklch, var(--champagne-deep) 8%, transparent),
+    0 22px 50px -24px color-mix(in oklch, var(--champagne-deep) 30%, transparent);
+}
+
+/* Lámina de oro para sellos y filetes ornamentales. */
+.gold-leaf { background-image: var(--gold-leaf); }
+
+/* Filete con rombo central, el separador de la casa. */
+.ornament-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--champagne);
+}
+.ornament-rule::before,
+.ornament-rule::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--champagne) 70%, transparent));
+}
+.ornament-rule::after { transform: scaleX(-1); }
+
+/* Numeral romano de capítulo (eco de los capítulos del certificado). */
+.chapter-numeral {
+  font-family: var(--font-cormorant), serif;
+  font-weight: 300;
+  font-style: italic;
+  color: var(--champagne-deep);
+  font-variant-numeric: lining-nums;
+}
+
+/* FAQ nativo: el marcador lo pinta el diseño, no el navegador. */
+.faq summary { list-style: none; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary .faq-mark { transition: transform 280ms var(--ease); }
+.faq details[open] summary .faq-mark { transform: rotate(45deg); }
+
+@keyframes agenda-line {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(220%); }
+}
+
+/* Cormorant trae cifras elzevirianas por defecto: «11:00» se lee «I I:OO» y
+   el 0 se confunde con la O. En la casa las cifras siempre van alineadas. */
+.font-serif, .chapter-numeral { font-variant-numeric: lining-nums; }
+.font-serif.tabular-nums, .font-serif .tabular-nums { font-variant-numeric: lining-nums tabular-nums; }
