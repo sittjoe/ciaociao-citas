@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { formatInTimeZone } from 'date-fns-tz'
-import { BUSINESS_TZ } from '@/lib/utils'
-import { isVideoEngagement } from '@/lib/commercial'
+import { normalizeAppointmentType } from '@/lib/commercial'
+import { buildAppointmentICS } from '@/lib/ics'
+import { icsOrganizerEmail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,56 +21,19 @@ export async function GET(
   const d        = snap.data()!
   if (String(d.confirmationCode ?? '').toUpperCase() !== code) return new NextResponse('Not found', { status: 404 })
   if (d.status !== 'accepted') return new NextResponse('Calendar unavailable', { status: 409 })
-  const start    = (d.slotDatetime as Timestamp).toDate()
-  const end      = new Date(start.getTime() + 60 * 60 * 1000)
-  const fmtLocal = (dt: Date) => formatInTimeZone(dt, BUSINESS_TZ, "yyyyMMdd'T'HHmmss")
-  const dtstamp  = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
-  const ADMIN    = process.env.ADMIN_EMAIL ?? 'info@ciaociao.mx'
-  const isVideo = isVideoEngagement(d.appointmentType)
-  const meetingUrl = String(d.meetingUrl ?? '').trim()
-  const escapeIcs = (value: string) => value
-    .replace(/\\/g, '\\\\')
-    .replace(/\n/g, '\\n')
-    .replace(/,/g, '\\,')
-    .replace(/;/g, '\\;')
-  const description = isVideo
-    ? [
-        'Video consulta para anillo de compromiso en Ciao Ciao Joyería.',
-        meetingUrl ? `Link: ${meetingUrl}` : 'Link pendiente por enviar.',
-        d.meetingInstructions ? `Indicaciones: ${d.meetingInstructions}` : '',
-      ].filter(Boolean).join('\n')
-    : 'Tu cita personalizada en el showroom privado de Ciao Ciao Joyería.'
-  const location = isVideo ? (meetingUrl || 'Videollamada') : 'Showroom Ciao Ciao Joyería'
-  const summary = isVideo ? 'Video consulta Ciao Ciao' : 'Cita en Ciao Ciao Joyería'
 
-  const ics = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//CiaoCiao//Citas//ES',
-    'METHOD:REQUEST',
-    'BEGIN:VTIMEZONE',
-    `TZID:${BUSINESS_TZ}`,
-    'BEGIN:STANDARD',
-    'DTSTART:19700101T000000',
-    'TZNAME:CST',
-    'TZOFFSETFROM:-0600',
-    'TZOFFSETTO:-0600',
-    'END:STANDARD',
-    'END:VTIMEZONE',
-    'BEGIN:VEVENT',
-    `UID:${apptId}@ciaociao.mx`,
-    `DTSTAMP:${dtstamp}`,
-    `DTSTART;TZID=${BUSINESS_TZ}:${fmtLocal(start)}`,
-    `DTEND;TZID=${BUSINESS_TZ}:${fmtLocal(end)}`,
-    `SUMMARY:${escapeIcs(summary)}`,
-    `DESCRIPTION:${escapeIcs(description)}`,
-    `LOCATION:${escapeIcs(location)}`,
-    `ORGANIZER;CN=Ciao Ciao Joyería:mailto:${ADMIN}`,
-    `ATTENDEE;RSVP=TRUE;CN=${escapeIcs(String(d.name ?? 'Cliente'))}:mailto:${d.email}`,
-    'STATUS:CONFIRMED',
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].join('\r\n')
+  // Mismo generador que el adjunto del correo (escapado RFC 5545, CN entre
+  // comillas, líneas plegadas, SEQUENCE vigente de la cita).
+  const ics = buildAppointmentICS({
+    id: apptId,
+    slotDatetime: (d.slotDatetime as Timestamp).toDate(),
+    appointmentType: normalizeAppointmentType(d.appointmentType),
+    name: String(d.name ?? 'Cliente'),
+    email: String(d.email ?? ''),
+    meetingUrl: d.meetingUrl ?? null,
+    meetingInstructions: d.meetingInstructions ?? null,
+    icsSequence: Number(d.icsSequence ?? 0) || 0,
+  }, { method: 'REQUEST', organizerEmail: icsOrganizerEmail() })
 
   return new NextResponse(ics, {
     headers: {

@@ -47,6 +47,7 @@ export function mapAppointment(
     meetingUrl: data.meetingUrl ?? null,
     meetingProvider: data.meetingProvider ?? null,
     meetingInstructions: data.meetingInstructions ?? null,
+    icsSequence: Number(data.icsSequence ?? 0) || 0,
     createdAt: (data.createdAt as Timestamp).toDate(),
   }
 }
@@ -150,7 +151,7 @@ export async function applyAppointmentDecision(opts: {
       await syncScheduledReminderEmails(appointment!)
     } else {
       // Rechazo: si el doc traía correos programados, se cancelan (ignora errores).
-      await cancelScheduledReminderEmails(scheduledEmailIds)
+      await cancelScheduledReminderEmails(scheduledEmailIds, { appointmentId: id })
     }
 
     if (action === 'accept') {

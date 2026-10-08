@@ -86,6 +86,8 @@ export async function POST(
         clientConfirmed: false,
         clientConfirmedAt: FieldValue.delete(),
         scheduledEmails: FieldValue.delete(),
+        // .ics: mismo UID y SEQUENCE mayor → el calendario mueve el evento.
+        icsSequence: FieldValue.increment(1),
       })
 
       updatedAppt = {
@@ -111,6 +113,7 @@ export async function POST(
         meetingUrl: apptData.meetingUrl ?? null,
         meetingProvider: apptData.meetingProvider ?? null,
         meetingInstructions: apptData.meetingInstructions ?? null,
+        icsSequence: (Number(apptData.icsSequence ?? 0) || 0) + 1,
         createdAt:    (apptData.createdAt as Timestamp).toDate(),
       }
     })

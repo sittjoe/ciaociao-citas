@@ -3,7 +3,10 @@ import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
-import { retryEmailOutbox, sendReminder, sendReminder24Confirm, sendGuestReminder } from '@/lib/email'
+import { retryEmailOutbox, retryPendingScheduledEmailCancels, sendGuestReminder } from '@/lib/email'
+import { runClientReminders } from '@/lib/client-reminders'
+import { releaseExpiredHolds } from '@/lib/holds'
+import { cdmxHour, inBusinessSendHours } from '@/lib/reminder-windows'
 import {
   sendDailyTeamDigest,
   sendPostVisitThanks,
@@ -18,21 +21,27 @@ import { cleanupOrphanedIdentifications } from '@/lib/storage-cleanup'
 import { retryFailedCalendarSyncs } from '@/lib/google-calendar'
 import { formatWhatsAppUrl, appointmentTypeLabels, normalizeAppointmentType, isVideoEngagement } from '@/lib/commercial'
 import { getBlockedDateSet, businessDateKey } from '@/lib/blocked-dates'
-import { BUSINESS_TZ, formatTime } from '@/lib/utils'
+import { BUSINESS_TZ, formatTime12 } from '@/lib/utils'
 import type { Appointment } from '@/types'
 
 export const dynamic = 'force-dynamic'
+
+/** Salida temprana de un bloque del cron que no toca en esta corrida. */
+class SkipBlock extends Error {}
 
 // Resend permite 5 req/s; los bloques que mandan en lote pausan entre envíos.
 const EMAIL_PAUSE_MS = 250
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
-// Etiqueta corta CDMX para listas del digest, p.ej. "jue 17 de jul · 11:00".
+// Etiqueta corta CDMX para listas del digest, p.ej. "jue 17 de jul · 11:00 am".
 function shortDayLabel(d: Date): string {
-  return formatInTimeZone(d, BUSINESS_TZ, "EEE d 'de' MMM · HH:mm", { locale: es })
+  return `${formatInTimeZone(d, BUSINESS_TZ, "EEE d 'de' MMM", { locale: es })} · ${formatTime12(d)}`
 }
 
-// Called by Vercel cron daily at 8am CST (see vercel.json: "0 14 * * *")
+// OJO — FRECUENCIA REAL: vercel.json lo agenda 1×/día ("0 14 * * *" = 08:00 CDMX),
+// pero maintenanceRuns muestra que ALGO EXTERNO (fuera de este repo) lo llama
+// cada ~30 min (:00 y :30). Todo lo de abajo debe ser correcto a cualquier
+// frecuencia: cada envío revisa su ventana en hora CDMX y lleva marca idempotente.
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim()
   if (!secret) {
@@ -50,103 +59,30 @@ export async function GET(request: Request) {
   const errors: string[] = []
 
   try {
-    // 24h confirmation reminders: appointments 12–36h from now (covers all of tomorrow for daily cron)
-    const from24 = new Date(now.getTime() + 12 * 60 * 60 * 1000)
-    const to24   = new Date(now.getTime() + 36 * 60 * 60 * 1000)
+    // Recordatorios a clientas (24h «mañana» y 2h): ventanas CDMX + marca
+    // transaccional por cita y tipo. Ver lib/client-reminders.ts.
+    const clientReminders = await runClientReminders(now)
+    sent24 = clientReminders.sent24
+    sent2  = clientReminders.sent2
+    errors.push(...clientReminders.errors)
 
-    const snap24 = await adminDb
-      .collection('appointments')
-      .where('status', '==', 'accepted')
-      .where('slotDatetime', '>=', Timestamp.fromDate(from24))
-      .where('slotDatetime', '<=', Timestamp.fromDate(to24))
-      .where('reminder24Sent', '==', false)
-      .get()
-
-    for (const doc of snap24.docs) {
-      const d = doc.data()
-      const appt: Appointment = {
-        id: doc.id,
-        slotId: d.slotId,
-        slotDatetime: (d.slotDatetime as Timestamp).toDate(),
-        appointmentType: normalizeAppointmentType(d.appointmentType),
-        name: d.name,
-        email: d.email,
-        phone: d.phone,
-        notes: d.notes,
-        productType: d.productType,
-        budgetRange: d.budgetRange,
-        lookingFor: d.lookingFor,
-        engagementBrief: d.engagementBrief ?? {},
-        identificationUrl: d.identificationUrl,
-        status: d.status,
-        confirmationCode: d.confirmationCode,
-        cancelToken: d.cancelToken,
-        reminder24Sent: d.reminder24Sent,
-        reminder2Sent: d.reminder2Sent,
-        googleCalendarEventId: d.googleCalendarEventId ?? null,
-        meetingUrl: d.meetingUrl ?? null,
-        meetingProvider: d.meetingProvider ?? null,
-        meetingInstructions: d.meetingInstructions ?? null,
-        createdAt: (d.createdAt as Timestamp).toDate(),
-      }
-      // Mark before send for idempotency; rollback on failure so the next cron retries
-      await doc.ref.update({ reminder24Sent: true, updatedAt: FieldValue.serverTimestamp() })
-      try {
-        await sendReminder24Confirm(appt)
-        sent24++
-      } catch (err) {
-        await doc.ref.update({ reminder24Sent: false })
-        errors.push(`24h reminder failed for ${doc.id}: ${err}`)
-      }
+    // Solicitudes pendientes: aviso al equipo a los 20 min y expiración avisada
+    // al llegar su horario (lib/holds.ts). También corre al abrir /api/slots;
+    // aquí asegura que pase aunque nadie visite la página.
+    let holds: Awaited<ReturnType<typeof releaseExpiredHolds>> | null = null
+    try {
+      holds = await releaseExpiredHolds()
+    } catch (err) {
+      errors.push(`Holds sweep failed: ${err}`)
     }
 
-    // 2h reminders: appointments 1h–12h from now (covers all confirmed same-day appointments for daily cron)
-    const from2 = new Date(now.getTime() +  1 * 60 * 60 * 1000)
-    const to2   = new Date(now.getTime() + 12 * 60 * 60 * 1000)
-
-    const snap2 = await adminDb
-      .collection('appointments')
-      .where('status', '==', 'accepted')
-      .where('slotDatetime', '>=', Timestamp.fromDate(from2))
-      .where('slotDatetime', '<=', Timestamp.fromDate(to2))
-      .where('reminder2Sent', '==', false)
-      .get()
-
-    for (const doc of snap2.docs) {
-      const d = doc.data()
-      const appt: Appointment = {
-        id: doc.id,
-        slotId: d.slotId,
-        slotDatetime: (d.slotDatetime as Timestamp).toDate(),
-        appointmentType: normalizeAppointmentType(d.appointmentType),
-        name: d.name,
-        email: d.email,
-        phone: d.phone,
-        notes: d.notes,
-        productType: d.productType,
-        budgetRange: d.budgetRange,
-        lookingFor: d.lookingFor,
-        engagementBrief: d.engagementBrief ?? {},
-        identificationUrl: d.identificationUrl,
-        status: d.status,
-        confirmationCode: d.confirmationCode,
-        cancelToken: d.cancelToken,
-        reminder24Sent: d.reminder24Sent,
-        reminder2Sent: d.reminder2Sent,
-        googleCalendarEventId: d.googleCalendarEventId ?? null,
-        meetingUrl: d.meetingUrl ?? null,
-        meetingProvider: d.meetingProvider ?? null,
-        meetingInstructions: d.meetingInstructions ?? null,
-        createdAt: (d.createdAt as Timestamp).toDate(),
-      }
-      await doc.ref.update({ reminder2Sent: true, updatedAt: FieldValue.serverTimestamp() })
-      try {
-        await sendReminder(appt, 2)
-        sent2++
-      } catch (err) {
-        await doc.ref.update({ reminder2Sent: false })
-        errors.push(`2h reminder failed for ${doc.id}: ${err}`)
-      }
+    // Cancelaciones de correos programados que Resend rechazó: se reintentan
+    // hasta que salgan (si no, una clienta que canceló recibe su recordatorio).
+    let pendingCancels: Awaited<ReturnType<typeof retryPendingScheduledEmailCancels>> | null = null
+    try {
+      pendingCancels = await retryPendingScheduledEmailCancels()
+    } catch (err) {
+      errors.push(`Pending scheduled-email cancels failed: ${err}`)
     }
 
     // Guest reminders — 48h window: 47h–49h from now
@@ -166,7 +102,8 @@ export async function GET(request: Request) {
       .where('slotDatetime', '<=', Timestamp.fromDate(to48g))
       .get()
 
-    for (const apptDoc of appts48.docs) {
+    // Invitados: tampoco en horario silencioso (sus ventanas son de 24 h, alcanzan).
+    for (const apptDoc of inBusinessSendHours(now) ? appts48.docs : []) {
       const apptData = apptDoc.data()
       const slotDatetime = (apptData.slotDatetime as Timestamp).toDate()
       const apptForEmail: Appointment = {
@@ -238,7 +175,7 @@ export async function GET(request: Request) {
       .where('slotDatetime', '<=', Timestamp.fromDate(to24g))
       .get()
 
-    for (const apptDoc of appts24g.docs) {
+    for (const apptDoc of inBusinessSendHours(now) ? appts24g.docs : []) {
       const apptData = apptDoc.data()
       const slotDatetime = (apptData.slotDatetime as Timestamp).toDate()
       const apptForEmail: Appointment = {
@@ -314,6 +251,12 @@ export async function GET(request: Request) {
     const digest: { sent: boolean; recipients: number; skipped: string | null; lowSlots: number | null } =
       { sent: false, recipients: 0, skipped: null, lowSlots: null }
     try {
+      // Digest «matutino»: nunca antes de las 08:00 CDMX (con llamadas cada
+      // 30 min salía a las 00:00). Control por día = una sola vez.
+      if (cdmxHour(now) < 8 || !inBusinessSendHours(now)) {
+        digest.skipped = 'fuera_de_horario'
+        throw new SkipBlock()
+      }
       // Alerta de pocos horarios: slots libres reservables de los próximos
       // 7 días (disponibles, futuros y fuera de fechas bloqueadas — mismos
       // criterios que el /api/slots público). Si quedan <8, el digest lo
@@ -364,7 +307,7 @@ export async function GET(request: Request) {
           pending.push({ id: doc.id, dateLabel: shortDayLabel(dt), name, typeLabel: appointmentTypeLabels[type] })
         } else if (dt < tomorrowStart) {
           today.push({
-            time: formatTime(dt),
+            time: formatTime12(dt),
             name,
             typeLabel: appointmentTypeLabels[type],
             isVideo: isVideoEngagement(type),
@@ -414,13 +357,14 @@ export async function GET(request: Request) {
         }
       }
     } catch (err) {
-      errors.push(`Digest matutino failed: ${err}`)
+      if (!(err instanceof SkipBlock)) errors.push(`Digest matutino failed: ${err}`)
     }
 
     // ——— 2. Post-cita (citas de AYER con asistencia registrada) ———
     let postVisitThanks = 0
     let postVisitRescue = 0
-    try {
+    // Correos a clientas: nunca en horario silencioso (22:00–08:00 CDMX).
+    if (inBusinessSendHours(now)) try {
       // Misma forma de query (status == + rango) que ya usa este cron; el
       // filtro por attended/postVisitEmailSent va en memoria porque los docs
       // viejos no tienen esos campos y una igualdad en Firestore los omitiría.
@@ -476,7 +420,7 @@ export async function GET(request: Request) {
 
     // ——— 3. Waitlist viva ———
     let waitlistNotified = 0
-    try {
+    if (inBusinessSendHours(now)) try {
       const wlSnap = await adminDb
         .collection('availabilityWaitlist')
         .where('status', '==', 'new')
@@ -587,6 +531,9 @@ export async function GET(request: Request) {
       postVisitThanks,
       postVisitRescue,
       waitlistNotified,
+      holds,
+      pendingCancels,
+      quietHours: clientReminders.quiet,
       idCleanup,
       emailRetry,
       calendarRetry,
@@ -597,7 +544,7 @@ export async function GET(request: Request) {
       console.error('Unable to record reminders maintenance run:', err)
     })
 
-    return NextResponse.json({ sent24, sent2, sentGuest48, sentGuest24, expiredCount, digest, postVisitThanks, postVisitRescue, waitlistNotified, idCleanup, emailRetry, calendarRetry, errors })
+    return NextResponse.json({ sent24, sent2, holds, pendingCancels, sentGuest48, sentGuest24, expiredCount, digest, postVisitThanks, postVisitRescue, waitlistNotified, idCleanup, emailRetry, calendarRetry, errors })
   } catch (err) {
     console.error('GET /api/reminders', err)
     return NextResponse.json({ error: 'Error en reminders' }, { status: 500 })

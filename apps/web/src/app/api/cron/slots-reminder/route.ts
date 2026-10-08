@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
-import { Timestamp } from 'firebase-admin/firestore'
-import { isEmailConfigured, sendSlotsReminderEmail } from '@/lib/email'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { cdmxHour, cdmxIsoWeekKey, inBusinessSendHours } from '@/lib/reminder-windows'
+import { isEmailConfigured, ResendError, sendSlotsReminderEmail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,10 @@ export const dynamic = 'force-dynamic'
  *
  * Sustituye al antiguo cron generate-slots: los horarios se publican A MANO
  * cada semana por decisión del negocio, y este correo evita que se olvide.
+ *
+ * Robusto a cualquier frecuencia (hay un llamador externo que pega a los crons
+ * cada ~30 min): solo sale de 08:00 a 22:00 CDMX y UNA vez por semana ISO
+ * (documento de control `slotsReminderRuns/{2026-W41}` creado con create()).
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim()
@@ -25,10 +30,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'RESEND_API_KEY no configurado' }, { status: 503 })
   }
 
+  const now = new Date()
+  if (cdmxHour(now) < 8 || !inBusinessSendHours(now)) {
+    return NextResponse.json({ ok: true, skipped: 'fuera_de_horario' })
+  }
+  const weekKey = cdmxIsoWeekKey(now)
+  const controlRef = adminDb.collection('slotsReminderRuns').doc(weekKey)
+
   try {
+    // Se consulta ANTES de tomar la marca semanal: si esta lectura falla, la
+    // marca no queda puesta y la siguiente corrida lo reintenta.
     // Inventario actual para que el correo sea accionable: cuántos slots hay
     // publicados y cuántos siguen libres en las próximas dos semanas.
-    const now = new Date()
     const horizonDays = 14
     const until = new Date(now.getTime() + horizonDays * 86_400_000)
 
@@ -41,7 +54,31 @@ export async function GET(request: Request) {
     const published = snap.size
     const available = snap.docs.filter(doc => doc.data().available === true).length
 
-    const result = await sendSlotsReminderEmail({ published, available, horizonDays })
+    try {
+      await controlRef.create({ status: 'sending', createdAt: FieldValue.serverTimestamp() })
+    } catch (err) {
+      if ((err as { code?: number }).code === 6) { // ALREADY_EXISTS: ya salió esta semana
+        return NextResponse.json({ ok: true, skipped: 'ya_enviado', week: weekKey })
+      }
+      throw err
+    }
+
+    let result: Awaited<ReturnType<typeof sendSlotsReminderEmail>>
+    try {
+      result = await sendSlotsReminderEmail({ published, available, horizonDays })
+    } catch (err) {
+      if (err instanceof ResendError) {
+        // No se borra la marca: el correo quedó en emailOutbox como 'failed' y
+        // retryEmailOutbox() lo reintenta; borrarla lo mandaría dos veces.
+        await controlRef.update({ status: 'failed', updatedAt: FieldValue.serverTimestamp() }).catch(() => {})
+      } else {
+        // Falló antes de llegar a Resend (p.ej. leer destinatarios): no hay nada
+        // en el outbox, así que se suelta la marca para que otra corrida lo mande.
+        await controlRef.delete().catch(() => {})
+      }
+      throw err
+    }
+    await controlRef.update({ status: result.sent ? 'sent' : 'no_recipients', sentAt: FieldValue.serverTimestamp() }).catch(() => {})
 
     return NextResponse.json({ ok: true, published, available, ...result })
   } catch (err) {
