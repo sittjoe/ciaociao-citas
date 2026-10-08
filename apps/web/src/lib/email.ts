@@ -8,6 +8,7 @@ import { reservaUrl } from './reserva-access'
 import { buildAppointmentICS, type IcsMethod } from './ics'
 import { relativeDayWord, scheduled24SendAt } from './reminder-windows'
 import type { Appointment } from '@/types'
+import { aviso, boton, documento, enlace, libro, notaCentrada, parrafo } from './email-design'
 
 /**
  * Resend 4.x NUNCA lanza: devuelve `{ data: null, error }` ante un 429, un 422
@@ -273,50 +274,9 @@ function escapeHtml(value: string): string {
   })
 }
 
-function baseTemplate(body: string): string {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  body { margin:0; background:#FAFAF7; font-family:Inter,Helvetica,Arial,sans-serif; color:#1A1A1A; }
-  .wrap { max-width:600px; margin:0 auto; padding:36px 20px; }
-  .logo { text-align:center; margin-bottom:28px; }
-  .logo h1 { font-family:Georgia,serif; color:#1A1A1A; font-size:30px; margin:0; letter-spacing:4px; font-weight:400; }
-  .logo p { color:#9A7E50; font-size:11px; letter-spacing:3px; margin:6px 0 0; text-transform:uppercase; }
-  .card { background:#FFFFFF; border:1px solid #E7E2D7; border-radius:16px; padding:28px; margin:22px 0; }
-  .title { font-family:Georgia,serif; font-size:24px; color:#1A1A1A; margin:0 0 12px; font-weight:400; }
-  .copy { color:#6B6B6B; font-size:14px; line-height:1.65; margin:0 0 18px; }
-  .detail { display:flex; justify-content:space-between; gap:20px; padding:11px 0; border-bottom:1px solid #F0EDE6; font-size:14px; }
-  .detail:last-child { border-bottom:none; }
-  .label { color:#9A7E50; }
-  .value { color:#1A1A1A; font-weight:600; text-align:right; }
-  .btn { display:inline-block; background:#B89968; color:#FFFFFF; padding:13px 24px; border-radius:10px; text-decoration:none; font-weight:700; font-size:14px; margin-top:18px; }
-  .footer { text-align:center; color:#8B8B8B; font-size:12px; margin-top:30px; line-height:1.6; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="logo">
-    <h1>CIAO CIAO</h1>
-    <p>Joyería fina · Citas privadas</p>
-  </div>
-  ${body}
-  <div class="footer">
-    <p>Ciao Ciao Joyería · Showroom Privado</p>
-    <p>Dudas: <a href="mailto:hola@ciaociao.mx" style="color:#9A7E50;">hola@ciaociao.mx</a></p>
-  </div>
-</div>
-</body>
-</html>`
-}
-
-function details(rows: [string, string][]): string {
-  return rows.map(([label, value]) =>
-    `<div class="detail"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value)}</span></div>`
-  ).join('')
-}
+// Presentación: papelería de la casa (lib/email-design.ts). El libro de la
+// cita conserva la firma de siempre: filas [etiqueta, valor] escapadas.
+const details = libro
 
 function isVideoAppointment(appt: Appointment): boolean {
   return isVideoEngagement(appt.appointmentType)
@@ -335,23 +295,20 @@ function videoMeetingRows(appt: Appointment): [string, string][] {
 function showroomLocationBlock(): string {
   if (!SHOWROOM_ADDRESS) return ''
   const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(SHOWROOM_ADDRESS)}`
-  return `<div style="text-align:center;margin:20px 0;padding:18px 20px;background:#FAF7F2;border-radius:14px;border:1px solid #E7E2D7;">
-         <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px;">Ubicación del showroom</p>
-         <p style="font-size:14px;color:#1A1A1A;font-weight:600;margin:0 0 4px;">${escapeHtml(SHOWROOM_ADDRESS)}</p>
-         <a href="${mapsUrl}" style="font-size:12px;color:#9A7E50;text-decoration:none;">Ver en Google Maps →</a>
-       </div>`
+  return aviso('Ubicación del showroom',
+    `<span style="font-weight:500">${escapeHtml(SHOWROOM_ADDRESS)}</span><br>${enlace(mapsUrl, 'Ver en Google Maps →')}`)
 }
 
 /** Botón «Agregar a mi calendario» — descarga el .ics desde /api/calendar/[apptId] (solo citas aceptadas). */
-function addToCalendarButton(appt: Appointment): string {
+function addToCalendarButton(appt: Appointment, variante: 'principal' | 'secundario' = 'principal'): string {
   const url = `${SITE}/api/calendar/${appt.id}?code=${encodeURIComponent(appt.confirmationCode)}`
-  return `<p style="text-align:center"><a class="btn" href="${url}">Agregar a mi calendario</a></p>`
+  return boton(url, 'Agregar a mi calendario', variante)
 }
 
 /** Botón para entrar a la videollamada; vacío si aún no hay link. */
-function videoJoinButton(appt: Appointment): string {
+function videoJoinButton(appt: Appointment, variante: 'principal' | 'secundario' = 'principal'): string {
   if (!appt.meetingUrl) return ''
-  return `<p style="text-align:center"><a class="btn" href="${escapeHtml(appt.meetingUrl)}">Entrar a la videollamada</a></p>`
+  return boton(appt.meetingUrl, 'Entrar a la videollamada', variante)
 }
 
 export async function sendBookingConfirmation(
@@ -364,11 +321,10 @@ export async function sendBookingConfirmation(
   const isVideo = isVideoAppointment(appt)
 
   const guestBlock = !isVideo && guestNames.length > 0
-    ? `<div style="margin:16px 0;padding:14px 16px;background:#FAF7F2;border-radius:12px;border:1px solid #E7E2D7;">
-        <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px;font-weight:600;">Invitados agregados</p>
-        ${guestNames.map(n => `<p style="font-size:13px;color:#1A1A1A;margin:2px 0;">· ${escapeHtml(n)}</p>`).join('')}
-        <p style="font-size:11px;color:#6B6B6B;margin:10px 0 0;">Cada uno recibirá un correo con su link de verificación. Solo las personas verificadas podrán ingresar al showroom.</p>
-       </div>`
+    ? aviso('Invitados agregados',
+        guestNames.map(n => `· ${escapeHtml(n)}`).join('<br>')
+        + `<div class="cc-tenue" style="font-size:12px;line-height:18px;color:#605a52;margin-top:10px">Cada uno recibirá un correo con su link de verificación. Solo las personas verificadas podrán ingresar al showroom.</div>`,
+        { centrado: false })
     : ''
 
   // Si falla el correo a la clienta, el aviso al equipo sale igual (antes
@@ -379,20 +335,20 @@ export async function sendBookingConfirmation(
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: appt.email,
     subject: `Solicitud recibida en Ciao Ciao - ${dateStr}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Solicitud recibida</p>
-        <p class="copy">Gracias, ${escapeHtml(appt.name)}. Nuestro equipo revisará tu solicitud de ${isVideo ? 'video consulta para anillo de compromiso' : 'cita en showroom'} y te notificará la confirmación.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Solicitud de cita',
+      titulo: 'Solicitud recibida',
+      preheader: `${dateStr} · ${timeStr}. Te avisaremos en cuanto quede confirmada.`,
+      cuerpo: parrafo(`Gracias, ${escapeHtml(appt.name)}. Nuestro equipo revisará tu solicitud de ${isVideo ? 'video consulta para anillo de compromiso' : 'cita en showroom'} y te notificará la confirmación.`)
+        + details([
           ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
-        ])}
-      </div>
-      ${guestBlock}
-      <p style="text-align:center"><a class="btn" href="${url}">Ver estado de tu cita</a></p>
-    `),
+        ])
+        + guestBlock
+        + boton(url, 'Ver estado de tu cita'),
+    }),
   }).then(() => null, (err: unknown) => err)
 
   const adminRecipients = await getActiveAdminEmails()
@@ -403,11 +359,12 @@ export async function sendBookingConfirmation(
       from: `Sistema Citas <${FROM}>`,
       to: adminRecipients,
       subject: `Nueva solicitud: ${appt.name} - ${dateStr} ${timeStr}`,
-      html: baseTemplate(`
-        <div class="card">
-          <p class="title">Nueva solicitud de cita</p>
-          <p class="copy">Hay una nueva solicitud pendiente en el panel administrativo.</p>
-          ${details([
+      html: documento({
+        eyebrow: 'Para el equipo',
+        titulo: 'Nueva solicitud de cita',
+        preheader: `${appt.name} · ${dateStr} ${timeStr}`,
+        cuerpo: parrafo('Hay una nueva solicitud pendiente en el panel administrativo.')
+          + details([
             ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
             ['Nombre', appt.name],
             ['Email', appt.email],
@@ -419,10 +376,9 @@ export async function sendBookingConfirmation(
             ...(appt.lookingFor ? [['Busca', appt.lookingFor] as [string, string]] : []),
             ...engagementBriefRows(appt.engagementBrief),
             ...videoMeetingRows(appt),
-          ])}
-        </div>
-        <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}">Gestionar cita</a></p>
-      `),
+          ])
+          + boton(`${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}`, 'Gestionar cita'),
+      }),
     })
   }
   if (clientError) throw clientError
@@ -435,37 +391,43 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
   const isVideo = isVideoAppointment(appt)
   const attachments = accepted ? [icsAttachment(appt, 'REQUEST')] : []
 
+  const verCita = reservaUrl(SITE, appt.confirmationCode)
   const body = accepted
     ? isVideo
-      ? `<div class="card">
-        <p class="title">Tu video consulta está confirmada</p>
-        <p class="copy">${appt.meetingUrl ? 'Tu enlace de videollamada aparece abajo y también en el .ics adjunto.' : 'Encontrarás el .ics adjunto. El equipo te enviará el enlace de videollamada antes de la consulta.'}</p>
-        ${details([
-          ['Fecha', dateStr],
-          ['Hora', timeStr],
-          ['Código', appt.confirmationCode],
-          ...videoMeetingRows(appt),
-        ])}
-       </div>
-       ${appt.meetingUrl ? `<p style="text-align:center"><a class="btn" href="${escapeHtml(appt.meetingUrl)}">Entrar a la videollamada</a></p>` : ''}
-       <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver tu cita</a></p>`
-      : `<div class="card">
-        <p class="title">Tu cita está confirmada</p>
-        <p class="copy">Te esperamos en nuestro showroom privado. Encontrarás el .ics adjunto para agregar la cita a tu calendario.</p>
-        ${details([
-          ['Fecha', dateStr],
-          ['Hora', timeStr],
-          ['Código', appt.confirmationCode],
-        ])}
-       </div>
-       ${showroomLocationBlock()}
-       ${addToCalendarButton(appt)}
-       <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver tu cita</a></p>`
-    : `<div class="card">
-        <p class="title">No pudimos confirmar tu solicitud</p>
-        <p class="copy">${escapeHtml(reason || 'En este momento no podemos confirmar ese horario. Te invitamos a elegir otro disponible.')}</p>
-       </div>
-       <p style="text-align:center"><a class="btn" href="${SITE}">Agendar nueva cita</a></p>`
+      ? documento({
+        eyebrow: 'Cita confirmada',
+        titulo: 'Tu video consulta está confirmada',
+        preheader: `${dateStr} · ${timeStr}. El .ics va adjunto.`,
+        cuerpo: parrafo(appt.meetingUrl ? 'Tu enlace de videollamada aparece abajo y también en el .ics adjunto.' : 'Encontrarás el .ics adjunto. El equipo te enviará el enlace de videollamada antes de la consulta.')
+          + details([
+            ['Fecha', dateStr],
+            ['Hora', timeStr],
+            ['Código', appt.confirmationCode],
+            ...videoMeetingRows(appt),
+          ])
+          + videoJoinButton(appt)
+          + boton(verCita, 'Ver tu cita', appt.meetingUrl ? 'secundario' : 'principal'),
+      })
+      : documento({
+        eyebrow: 'Cita confirmada',
+        titulo: 'Tu cita está confirmada',
+        preheader: `${dateStr} · ${timeStr}. Te esperamos en nuestro showroom privado.`,
+        cuerpo: parrafo('Te esperamos en nuestro showroom privado. Encontrarás el .ics adjunto para agregar la cita a tu calendario.')
+          + details([
+            ['Fecha', dateStr],
+            ['Hora', timeStr],
+            ['Código', appt.confirmationCode],
+          ])
+          + showroomLocationBlock()
+          + addToCalendarButton(appt)
+          + boton(verCita, 'Ver tu cita', 'secundario'),
+      })
+    : documento({
+      eyebrow: 'Tu solicitud',
+      titulo: 'No pudimos confirmar tu solicitud',
+      cuerpo: parrafo(escapeHtml(reason || 'En este momento no podemos confirmar ese horario. Te invitamos a elegir otro disponible.'))
+        + boton(SITE, 'Agendar nueva cita'),
+    })
 
   await sendTracked({
     kind: 'status_update',
@@ -473,7 +435,7 @@ export async function sendStatusUpdate(appt: Appointment, action: 'accept' | 're
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: appt.email,
     subject: accepted ? `Cita confirmada - ${dateStr}` : 'Actualización sobre tu solicitud de cita',
-    html: baseTemplate(body),
+    html: body,
     attachments,
   })
 }
@@ -491,19 +453,19 @@ export async function sendReminder(appt: Appointment, hoursAhead: 24 | 2, opts: 
     to: appt.email,
     ...opts,
     subject: `Recordatorio: tu cita es ${label}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Tu ${isVideo ? 'video consulta' : 'cita'} es ${label}</p>
-        ${isVideo ? `<p class="copy">${appt.meetingUrl ? 'Usa el link guardado para entrar a la videollamada.' : 'El equipo te compartirá el enlace de videollamada antes de iniciar.'}</p>` : ''}
-        ${details([
+    html: documento({
+      eyebrow: 'Recordatorio',
+      titulo: `Tu ${isVideo ? 'video consulta' : 'cita'} es ${label}`,
+      preheader: `${dateStr} · ${timeStr}`,
+      cuerpo: (isVideo ? parrafo(appt.meetingUrl ? 'Usa el link guardado para entrar a la videollamada.' : 'El equipo te compartirá el enlace de videollamada antes de iniciar.') : '')
+        + details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
           ...videoMeetingRows(appt),
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver detalles</a></p>
-    `),
+        ])
+        + boton(reservaUrl(SITE, appt.confirmationCode), 'Ver detalles'),
+    }),
   })
 }
 
@@ -519,20 +481,20 @@ export async function sendReminder24Confirm(appt: Appointment, opts: { idempoten
     to: appt.email,
     ...opts,
     subject: `Confirma tu cita de mañana — ${dateStr}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Tu ${isVideo ? 'video consulta' : 'cita'} es mañana</p>
-        <p class="copy">Hola ${escapeHtml(appt.name)}, ${isVideo ? 'mañana será tu video consulta con Ciao Ciao Joyería' : 'te esperamos mañana en el showroom privado de Ciao Ciao Joyería'}. Para ayudarnos a prepararnos, confírmanos que podrás asistir.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Confirma tu asistencia',
+      titulo: `Tu ${isVideo ? 'video consulta' : 'cita'} es mañana`,
+      preheader: `${dateStr} · ${timeStr}. Confírmanos que podrás asistir.`,
+      cuerpo: parrafo(`Hola ${escapeHtml(appt.name)}, ${isVideo ? 'mañana será tu video consulta con Ciao Ciao Joyería' : 'te esperamos mañana en el showroom privado de Ciao Ciao Joyería'}. Para ayudarnos a prepararnos, confírmanos que podrás asistir.`)
+        + details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
           ...videoMeetingRows(appt),
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
-      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${reservaUrl(SITE, appt.confirmationCode)}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
-    `),
+        ])
+        + boton(`${SITE}/confirmar/${appt.cancelToken}`, 'Sí, confirmar mi cita')
+        + notaCentrada(`¿No podrás asistir? ${enlace(reservaUrl(SITE, appt.confirmationCode), 'Cancelar mi cita')}`),
+    }),
   })
 }
 
@@ -615,22 +577,22 @@ function scheduledReminder24Content(appt: Appointment): { subject: string; html:
 
   return {
     subject: `Confirma tu cita de mañana — ${dateStr}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Tu ${isVideo ? 'video consulta' : 'cita'} es mañana</p>
-        <p class="copy">Hola ${escapeHtml(appt.name)}, ${isVideo ? 'mañana será tu video consulta con Ciao Ciao Joyería' : 'te esperamos mañana en el showroom privado de Ciao Ciao Joyería'}. Para tenerlo todo listo, confírmanos que podrás asistir.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Confirma tu asistencia',
+      titulo: `Tu ${isVideo ? 'video consulta' : 'cita'} es mañana`,
+      preheader: `${dateStr} · ${timeStr}. Confírmanos que podrás asistir.`,
+      cuerpo: parrafo(`Hola ${escapeHtml(appt.name)}, ${isVideo ? 'mañana será tu video consulta con Ciao Ciao Joyería' : 'te esperamos mañana en el showroom privado de Ciao Ciao Joyería'}. Para tenerlo todo listo, confírmanos que podrás asistir.`)
+        + details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
           ...videoMeetingRows(appt),
-        ])}
-      </div>
-      ${isVideo ? '' : showroomLocationBlock()}
-      <p style="text-align:center"><a class="btn" href="${SITE}/confirmar/${appt.cancelToken}">Sí, confirmar mi cita</a></p>
-      ${isVideo ? videoJoinButton(appt) : addToCalendarButton(appt)}
-      <p style="text-align:center;margin-top:12px;font-size:13px;color:#8B8B8B;">¿No podrás asistir? <a href="${reservaUrl(SITE, appt.confirmationCode)}" style="color:#9A7E50;text-decoration:none;">Cancelar mi cita</a></p>
-    `),
+        ])
+        + (isVideo ? '' : showroomLocationBlock())
+        + boton(`${SITE}/confirmar/${appt.cancelToken}`, 'Sí, confirmar mi cita')
+        + (isVideo ? videoJoinButton(appt, 'secundario') : addToCalendarButton(appt, 'secundario'))
+        + notaCentrada(`¿No podrás asistir? ${enlace(reservaUrl(SITE, appt.confirmationCode), 'Cancelar mi cita')}`),
+    }),
   }
 }
 
@@ -644,19 +606,18 @@ function scheduledReminder2Content(appt: Appointment): { subject: string; html: 
 
   return {
     subject: `Tu ${isVideo ? 'video consulta' : 'cita'} es en 2 horas — ${timeStr}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Te esperamos en 2 horas</p>
-        <p class="copy">${escapeHtml(appt.name)}, tu ${isVideo ? 'video consulta' : 'cita en el showroom privado'} es ${dayWord ? `${dayWord} ` : ''}a las ${timeStr}.${isVideo && !appt.meetingUrl ? ' El equipo te compartirá el enlace de videollamada antes de iniciar.' : ''}</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Recordatorio',
+      titulo: 'Te esperamos en 2 horas',
+      preheader: `${dayWord ? `${dayWord} ` : ''}a las ${timeStr}`,
+      cuerpo: parrafo(`${escapeHtml(appt.name)}, tu ${isVideo ? 'video consulta' : 'cita en el showroom privado'} es ${dayWord ? `${dayWord} ` : ''}a las ${timeStr}.${isVideo && !appt.meetingUrl ? ' El equipo te compartirá el enlace de videollamada antes de iniciar.' : ''}`)
+        + details([
           ['Hora', timeStr],
           ['Código', appt.confirmationCode],
           ...videoMeetingRows(appt),
-        ])}
-      </div>
-      ${isVideo ? videoJoinButton(appt) : `${showroomLocationBlock()}
-      ${addToCalendarButton(appt)}`}
-    `),
+        ])
+        + (isVideo ? videoJoinButton(appt) : showroomLocationBlock() + addToCalendarButton(appt)),
+    }),
   }
 }
 
@@ -917,18 +878,17 @@ export async function sendCalendarError(appt: Appointment, errorMessage: string)
     from: `Sistema Citas <${FROM}>`,
     to: adminRecipients,
     subject: `⚠ Error Calendar — ${escapeHtml(appt.name)} ${dateStr}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Error al crear evento en Calendar</p>
-        <p class="copy">La cita de <strong>${escapeHtml(appt.name)}</strong> fue aprobada pero no se pudo sincronizar con Google Calendar. La cita sigue confirmada.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Para el equipo',
+      titulo: 'Error al crear evento en Calendar',
+      cuerpo: parrafo(`La cita de <strong>${escapeHtml(appt.name)}</strong> fue aprobada pero no se pudo sincronizar con Google Calendar. La cita sigue confirmada.`)
+        + details([
           ['Cliente', appt.name],
           ['Fecha', `${dateStr} ${timeStr}`],
           ['Error', errorMessage],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Ver en panel</a></p>
-    `),
+        ])
+        + boton(`${SITE}/admin/citas`, 'Ver en panel'),
+    }),
   })
 }
 
@@ -950,26 +910,20 @@ export async function sendGuestInvitation(params: {
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: guest.email,
     subject: `Verifica tu identidad para tu visita a Ciao Ciao`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Visita al showroom privado</p>
-        <p class="copy">
-          ${escapeHtml(hostName)} te ha invitado a su visita privada al showroom de Ciao Ciao Joyería.
-          Para poder ingresar, necesitamos verificar tu identidad antes del ${escapeHtml(deadlineStr)}.
-        </p>
-        ${details([
+    html: documento({
+      eyebrow: 'Invitación',
+      titulo: 'Visita al showroom privado',
+      preheader: `${hostName} te invitó · ${dateStr} · ${timeStr}`,
+      cuerpo: parrafo(`${escapeHtml(hostName)} te ha invitado a su visita privada al showroom de Ciao Ciao Joyería. Para poder ingresar, necesitamos verificar tu identidad antes del ${escapeHtml(deadlineStr)}.`)
+        + details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
           ['Invitado por', hostName],
-        ])}
-      </div>
-      <div style="background:#FFF8F0;border:1px solid #E7E2D7;border-radius:12px;padding:14px 18px;margin:20px 0;text-align:center;">
-        <p style="font-size:11px;color:#9A7E50;letter-spacing:2px;text-transform:uppercase;margin:0 0 4px;font-weight:600;">Importante</p>
-        <p style="font-size:13px;color:#1A1A1A;margin:0;">Solo las personas con identificación verificada podrán ingresar al showroom.</p>
-      </div>
-      <p style="text-align:center"><a class="btn" href="${link}">Verificar mi identidad</a></p>
-      <p style="text-align:center;font-size:12px;color:#8B8B8B;margin-top:8px;">Válido hasta el ${escapeHtml(deadlineStr)}</p>
-    `),
+        ])
+        + aviso('Importante', 'Solo las personas con identificación verificada podrán ingresar al showroom.')
+        + boton(link, 'Verificar mi identidad')
+        + notaCentrada(`Válido hasta el ${escapeHtml(deadlineStr)}`, '12px 0 0'),
+    }),
   })
 }
 
@@ -990,19 +944,17 @@ export async function sendGuestReminder(params: {
     from: `Ciao Ciao Joyería <${FROM}>`,
     to: guest.email,
     subject: `Recordatorio: verifica tu identidad para ingresar al showroom`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Faltan ${escapeHtml(label)} para tu visita</p>
-        <p class="copy">
-          Todavía no hemos recibido tu identificación. Sin verificación no podrás ingresar al showroom privado de Ciao Ciao.
-        </p>
-        ${details([
+    html: documento({
+      eyebrow: 'Invitación',
+      titulo: `Faltan ${label} para tu visita`,
+      preheader: `${dateStr} · ${timeStr}`,
+      cuerpo: parrafo('Todavía no hemos recibido tu identificación. Sin verificación no podrás ingresar al showroom privado de Ciao Ciao.')
+        + details([
           ['Fecha', dateStr],
           ['Hora', timeStr],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${link}">Verificar ahora</a></p>
-    `),
+        ])
+        + boton(link, 'Verificar ahora'),
+    }),
   })
 }
 
@@ -1040,18 +992,18 @@ export async function sendCancellationEmail(appt: Appointment, opts: { wasAccept
     to: appt.email,
     subject: `Cita cancelada - ${dateStr}`,
     ...(opts.wasAccepted ? { attachments: [icsAttachment(appt, 'CANCEL')] } : {}),
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Cita cancelada</p>
-        <p class="copy">Tu ${isVideo ? 'video consulta' : 'cita'} del ${dateStr} a las ${timeStr} ha sido cancelada. Si deseas agendar de nuevo, puedes hacerlo en cualquier momento.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Tu cita',
+      titulo: 'Cita cancelada',
+      preheader: `${dateStr} · ${timeStr}`,
+      cuerpo: parrafo(`Tu ${isVideo ? 'video consulta' : 'cita'} del ${dateStr} a las ${timeStr} ha sido cancelada. Si deseas agendar de nuevo, puedes hacerlo en cualquier momento.`)
+        + details([
           ['Fecha',  dateStr],
           ['Hora',   timeStr],
           ['Código', appt.confirmationCode],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}">Agendar nueva cita</a></p>
-    `),
+        ])
+        + boton(SITE, 'Agendar nueva cita'),
+    }),
   }).then(() => null, (err: unknown) => err)
 
   const adminRecipients = await getActiveAdminEmails()
@@ -1062,19 +1014,19 @@ export async function sendCancellationEmail(appt: Appointment, opts: { wasAccept
       from: `Sistema Citas <${FROM}>`,
       to: adminRecipients,
       subject: `Cita cancelada: ${appt.name} — ${dateStr} ${timeStr}`,
-      html: baseTemplate(`
-        <div class="card">
-          <p class="title">Cita cancelada por el cliente</p>
-          <p class="copy">El cliente canceló desde su link de cancelación.</p>
-          ${details([
+      html: documento({
+        eyebrow: 'Para el equipo',
+        titulo: 'Cita cancelada por el cliente',
+        preheader: `${appt.name} · ${dateStr} ${timeStr}`,
+        cuerpo: parrafo('El cliente canceló desde su link de cancelación.')
+          + details([
             ['Nombre',  appt.name],
             ['Email',   appt.email],
             ['Fecha',   `${dateStr} ${timeStr}`],
             ['Código',  appt.confirmationCode],
-          ])}
-        </div>
-        <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas">Ver panel</a></p>
-      `),
+          ])
+          + boton(`${SITE}/admin/citas`, 'Ver panel'),
+      }),
     })
   }
   if (clientError) throw clientError
@@ -1094,19 +1046,19 @@ export async function sendRescheduleNotice(appt: Appointment) {
     // Cita confirmada: .ics con el mismo UID y SEQUENCE mayor para que el
     // calendario de la clienta MUEVA el evento en lugar de dejarlo en la hora vieja.
     ...(appt.status === 'accepted' ? { attachments: [icsAttachment(appt, 'REQUEST')] } : {}),
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Tu cita fue reprogramada</p>
-        <p class="copy">Hemos actualizado el horario de tu ${isVideo ? 'video consulta' : 'visita al showroom'}. A continuación encontrarás los nuevos detalles.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Nuevo horario',
+      titulo: 'Tu cita fue reprogramada',
+      preheader: `${dateStr} · ${timeStr}`,
+      cuerpo: parrafo(`Hemos actualizado el horario de tu ${isVideo ? 'video consulta' : 'visita al showroom'}. A continuación encontrarás los nuevos detalles.`)
+        + details([
           ['Nueva fecha', dateStr],
           ['Nueva hora',  timeStr],
           ['Código',      appt.confirmationCode],
           ...videoMeetingRows(appt),
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver tu cita</a></p>
-    `),
+        ])
+        + boton(reservaUrl(SITE, appt.confirmationCode), 'Ver tu cita'),
+    }),
   })
 }
 
@@ -1127,20 +1079,20 @@ export async function sendPendingRequestAlert(appt: Appointment, minutesWaiting:
     to: adminRecipients,
     subject: `Solicitud sin atender (${minutesWaiting} min): ${appt.name} — ${dateStr} ${timeStr}`,
     idempotencyKey: `request-alert/${appt.id}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Una clienta espera respuesta</p>
-        <p class="copy">Esta solicitud lleva ${minutesWaiting} minutos sin aceptarse ni rechazarse. El horario sigue apartado para ella; no se cancelará sola mientras la cita no haya pasado.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Para el equipo',
+      titulo: 'Una clienta espera respuesta',
+      preheader: `${minutesWaiting} min sin respuesta · ${appt.name}`,
+      cuerpo: parrafo(`Esta solicitud lleva ${minutesWaiting} minutos sin aceptarse ni rechazarse. El horario sigue apartado para ella; no se cancelará sola mientras la cita no haya pasado.`)
+        + details([
           ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
           ['Nombre', appt.name],
           ['Teléfono', appt.phone],
           ['Fecha', `${dateStr} ${timeStr}`],
           ['Código', appt.confirmationCode],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}">Atender solicitud</a></p>
-    `),
+        ])
+        + boton(`${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}`, 'Atender solicitud'),
+    }),
   })
   return { sent: true as const, recipients: adminRecipients.length }
 }
@@ -1160,16 +1112,15 @@ export async function sendRequestExpiredNotices(appt: Appointment) {
     to: appt.email,
     subject: 'Sobre tu solicitud de cita en Ciao Ciao',
     idempotencyKey: `request-expired-client/${appt.id}`,
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">No alcanzamos a confirmar tu solicitud</p>
-        <p class="copy">Hola ${escapeHtml(appt.name)}, lamentamos no haber confirmado a tiempo tu solicitud para el ${escapeHtml(dateStr)} a las ${escapeHtml(timeStr)}. Nos encantará recibirte: elige un nuevo horario o escríbenos y te ayudamos.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Tu solicitud',
+      titulo: 'No alcanzamos a confirmar tu solicitud',
+      cuerpo: parrafo(`Hola ${escapeHtml(appt.name)}, lamentamos no haber confirmado a tiempo tu solicitud para el ${escapeHtml(dateStr)} a las ${escapeHtml(timeStr)}. Nos encantará recibirte: elige un nuevo horario o escríbenos y te ayudamos.`)
+        + details([
           ['Código', appt.confirmationCode],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}">Elegir un nuevo horario</a></p>
-    `),
+        ])
+        + boton(SITE, 'Elegir un nuevo horario'),
+    }),
   }).then(() => null, (err: unknown) => err)
 
   const adminRecipients = await getActiveAdminEmails()
@@ -1181,20 +1132,20 @@ export async function sendRequestExpiredNotices(appt: Appointment) {
       to: adminRecipients,
       subject: `Solicitud expirada sin respuesta: ${appt.name} — ${dateStr} ${timeStr}`,
       idempotencyKey: `request-expired-team/${appt.id}`,
-      html: baseTemplate(`
-        <div class="card">
-          <p class="title">Solicitud expirada sin respuesta</p>
-          <p class="copy">Nadie aceptó ni rechazó esta solicitud antes de su horario, así que se canceló y se le avisó a la clienta. Conviene contactarla.</p>
-          ${details([
+      html: documento({
+        eyebrow: 'Para el equipo',
+        titulo: 'Solicitud expirada sin respuesta',
+        preheader: `${appt.name} · ${dateStr} ${timeStr}`,
+        cuerpo: parrafo('Nadie aceptó ni rechazó esta solicitud antes de su horario, así que se canceló y se le avisó a la clienta. Conviene contactarla.')
+          + details([
             ['Nombre', appt.name],
             ['Email', appt.email],
             ['Teléfono', appt.phone],
             ['Fecha', `${dateStr} ${timeStr}`],
             ['Código', appt.confirmationCode],
-          ])}
-        </div>
-        <p style="text-align:center"><a class="btn" href="${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}">Ver en el panel</a></p>
-      `),
+          ])
+          + boton(`${SITE}/admin/citas?open=${encodeURIComponent(appt.id)}`, 'Ver en el panel'),
+      }),
     })
   }
   if (clientError) throw clientError
@@ -1228,17 +1179,16 @@ export async function sendSlotsReminderEmail(stats: {
     subject: lowInventory
       ? `🗓 Recordatorio: quedan ${stats.available} horarios — publica los de esta semana`
       : '🗓 Recordatorio semanal: publica los horarios de citas',
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">Hora de publicar horarios</p>
-        <p class="copy">${intro} Los horarios se añaden a mano — la generación automática está desactivada.</p>
-        ${details([
+    html: documento({
+      eyebrow: 'Para el equipo',
+      titulo: 'Hora de publicar horarios',
+      cuerpo: parrafo(`${intro} Los horarios se añaden a mano — la generación automática está desactivada.`)
+        + details([
           [`Publicados (próx. ${stats.horizonDays} días)`, String(stats.published)],
           ['Disponibles para agendar', String(stats.available)],
-        ])}
-      </div>
-      <p style="text-align:center"><a class="btn" href="${SITE}/admin/slots">Añadir horarios</a></p>
-    `),
+        ])
+        + boton(`${SITE}/admin/slots`, 'Añadir horarios'),
+    }),
   })
   return { sent: true as const, recipients: adminRecipients.length }
 }
@@ -1265,29 +1215,27 @@ export async function sendReservationRecovery(params: {
       from: `Ciao Ciao Joyería <${FROM}>`,
       to,
       subject: 'Tu consulta de citas en Ciao Ciao',
-      html: baseTemplate(`
-        <div class="card">
-          <p class="title">Sin citas vigentes</p>
-          <p class="copy">${greeting}recibimos tu solicitud para consultar tu reserva. Por el momento no encontramos citas próximas activas asociadas a tus datos. Será un placer recibirte cuando lo desees.</p>
-        </div>
-        <p style="text-align:center"><a class="btn" href="${SITE}">Agendar una cita</a></p>
-      `),
+      html: documento({
+        eyebrow: 'Tu reserva',
+        titulo: 'Sin citas vigentes',
+        cuerpo: parrafo(`${greeting}recibimos tu solicitud para consultar tu reserva. Por el momento no encontramos citas próximas activas asociadas a tus datos. Será un placer recibirte cuando lo desees.`)
+          + boton(SITE, 'Agendar una cita'),
+      }),
     })
     return
   }
 
   const plural = appointments.length > 1
-  const cards = appointments.map(appt => `
-      <div class="card">
-        ${details([
+  const cards = appointments.map((appt, i) => `<div style="margin:${i ? 34 : 8}px 0 0">`
+        + details([
           ['Tipo', appointmentTypeLabels[appt.appointmentType ?? 'showroom']],
           ['Fecha', formatDate(appt.slotDatetime)],
           ['Hora', formatTime12(appt.slotDatetime)],
           ['Estado', appt.status === 'accepted' ? 'Confirmada' : 'Pendiente de revisión'],
           ['Código', appt.confirmationCode],
-        ])}
-        <p style="text-align:center;margin:16px 0 0;"><a class="btn" style="margin-top:0;" href="${reservaUrl(SITE, appt.confirmationCode)}">Ver estado de esta cita</a></p>
-      </div>`).join('')
+        ])
+        + boton(reservaUrl(SITE, appt.confirmationCode), 'Ver estado de esta cita', plural ? 'secundario' : 'principal')
+        + '</div>').join('')
 
   await sendTracked({
     kind: 'reservation_recovery',
@@ -1295,14 +1243,13 @@ export async function sendReservationRecovery(params: {
     from: `Ciao Ciao Joyería <${FROM}>`,
     to,
     subject: plural ? 'Tus citas vigentes en Ciao Ciao' : 'Tu cita en Ciao Ciao',
-    html: baseTemplate(`
-      <div class="card">
-        <p class="title">${plural ? 'Tus citas vigentes' : 'Tu cita'}</p>
-        <p class="copy">${greeting}${plural
+    html: documento({
+      eyebrow: 'Tu reserva',
+      titulo: plural ? 'Tus citas vigentes' : 'Tu cita',
+      cuerpo: parrafo(`${greeting}${plural
           ? `encontramos ${appointments.length} citas vigentes a tu nombre. Aquí puedes consultar el estado de cada una y hacer los cambios disponibles.`
-          : 'aquí puedes consultar el estado de tu cita y hacer los cambios disponibles.'}</p>
-      </div>
-      ${cards}
-    `),
+          : 'aquí puedes consultar el estado de tu cita y hacer los cambios disponibles.'}`, { final: true })
+        + cards,
+    }),
   })
 }
