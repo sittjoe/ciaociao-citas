@@ -59,6 +59,12 @@ const STEP_LABELS: Record<Step, string> = {
   review: 'Confirmar',
   done: '',
 }
+// Nombre corto para el resumen fijo («Jue 8 oct · 1:00 pm · Showroom»).
+const SHORT_TYPE_LABELS: Record<AppointmentType, string> = {
+  showroom: 'Showroom',
+  video_engagement_rings: 'Video consulta',
+}
+const SUMMARY_STEPS: Step[] = ['form', 'upload', 'review']
 const DRAFT_KEY = 'ciaociao-booking-draft-v1'
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const SUPPORT_EMAIL = 'hola@ciaociao.mx'
@@ -241,6 +247,13 @@ export function BookingWizard() {
   // Sin horarios, el paso de fecha se convierte en la lista de espera: no es
   // un paso del asistente, así que no lleva barra de progreso ni encabezado.
   const showWaitlist = step === 'calendar' && !loadingSlots && !slotsError && !hasAvailability
+
+  const choiceSummary = useMemo(() => {
+    if (!selectedSlot) return null
+    const day = formatInTimeZone(parseISO(selectedSlot.datetime), BUSINESS_TZ, 'EEE d MMM', { locale: es }).replace(/\./g, '')
+    return `${day.charAt(0).toUpperCase()}${day.slice(1)} · ${formatTime12(selectedSlot.datetime)} · ${SHORT_TYPE_LABELS[appointmentType]}`
+  }, [selectedSlot, appointmentType])
+  const showSummary = SUMMARY_STEPS.includes(step) && choiceSummary !== null
 
   const stepIndex = activeSteps.indexOf(step)
   const canGoBack = stepIndex > 0 && step !== 'done'
@@ -485,6 +498,32 @@ export function BookingWizard() {
           <ChevronLeft size={16} strokeWidth={1.5} /> Volver
         </button>
       )}
+
+      {/* Resumen fijo de la elección en los pasos posteriores al horario. */}
+      <AnimatePresence initial={false}>
+        {showSummary && (
+          <motion.div
+            key="choice-summary"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.38, ease: EASE_QUART }}
+            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-ink-line/80 bg-porcelain/70 py-2 pl-4 pr-2"
+          >
+            <p data-booking-summary className="min-w-0 font-serif text-xl font-light leading-tight text-ink sm:text-2xl">
+              <span className="sr-only">Tu elección: </span>{choiceSummary}
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-[44px] shrink-0 px-3 text-sm text-champagne-solid hover:text-champagne-deep"
+              onClick={() => goTo('calendar')}
+            >
+              Cambiar
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="wait" initial={false} custom={direction.current}>
       <motion.div
