@@ -126,4 +126,17 @@ describe('cron de recordatorios a clientas: ventanas CDMX + marca idempotente', 
     const [appt] = sendReminder.mock.calls[0] as [{ meetingUrl: string }]
     expect(appt.meetingUrl).toBe('https://meet.example/nuevo')
   })
+
+  it('si el envío falla pero mientras tanto quedó programado en Resend, NO suelta la marca (sin duplicado)', async () => {
+    putAppt('a1', cdmx('2026-10-22T12:00:00'))
+    sendReminder.mockImplementationOnce(async () => {
+      // Carrera: syncScheduledReminderEmails programó el «en 2 horas» y marcó la cita.
+      fakeStore.put('appointments/a1', { ...fakeStore.get('appointments/a1')!, scheduledEmails: { h2: 'em_x' }, reminder2Sent: true })
+      throw new Error('network')
+    })
+    await runClientReminders(cdmx('2026-10-22T09:45:00'))
+    expect(fakeStore.get('appointments/a1')!.reminder2Sent).toBe(true)
+    await runClientReminders(cdmx('2026-10-22T10:15:00'))
+    expect(sendReminder).toHaveBeenCalledTimes(1)
+  })
 })

@@ -65,8 +65,23 @@ async function claimReminder(
   })
 }
 
-async function releaseClaim(ref: FirebaseFirestore.DocumentReference, flag: Flag) {
-  await ref.update({ [flag]: false, [`${flag}At`]: FieldValue.delete() }).catch(() => {})
+/**
+ * Suelta la marca tras un envío fallido, pero solo si sigue siendo NUESTRA:
+ * si mientras tanto se programó el recordatorio en Resend (scheduledEmails) o
+ * la cita cambió de horario/estado, no se toca (antes se ponía en false a
+ * ciegas y el cron podía mandar un duplicado del correo ya programado).
+ */
+async function releaseClaim(ref: FirebaseFirestore.DocumentReference, flag: Flag, slotMs: number) {
+  const scheduledKey = flag === 'reminder24Sent' ? 'h24' : 'h2'
+  await adminDb.runTransaction(async tx => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) return
+    const d = snap.data()!
+    const current = d.slotDatetime instanceof Timestamp ? d.slotDatetime.toMillis() : NaN
+    if (d[flag] !== true || current !== slotMs || d.status !== 'accepted') return
+    if (d.scheduledEmails && typeof d.scheduledEmails === 'object' && d.scheduledEmails[scheduledKey]) return
+    tx.update(ref, { [flag]: false, [`${flag}At`]: FieldValue.delete() })
+  }).catch(err => console.error(`releaseClaim ${ref.id}/${flag} failed:`, err))
 }
 
 export async function runClientReminders(now: Date = new Date()): Promise<ClientRemindersResult> {
@@ -99,7 +114,7 @@ export async function runClientReminders(now: Date = new Date()): Promise<Client
             })
             result.sent24++
           } catch (err) {
-            await releaseClaim(doc.ref, 'reminder24Sent')
+            await releaseClaim(doc.ref, 'reminder24Sent', slot.getTime())
             result.errors.push(`24h reminder failed for ${doc.id}: ${err}`)
           }
         } catch (err) {
@@ -136,7 +151,7 @@ export async function runClientReminders(now: Date = new Date()): Promise<Client
           })
           result.sent2++
         } catch (err) {
-          await releaseClaim(doc.ref, 'reminder2Sent')
+          await releaseClaim(doc.ref, 'reminder2Sent', slot.getTime())
           result.errors.push(`2h reminder failed for ${doc.id}: ${err}`)
         }
       } catch (err) {
