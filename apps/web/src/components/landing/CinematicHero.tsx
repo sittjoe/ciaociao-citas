@@ -3,21 +3,23 @@
 import Image from 'next/image'
 import { StaggerChildren, StaggerItem } from '@/components/motion'
 import {
-  ParallaxStage, ParallaxLayer, ScrollParallax, TitleReveal, LightSweep, DepthReveal,
+  ParallaxStage, ParallaxLayer, ScrollParallax, WordsReveal, LightSweep,
 } from '@/components/motion/cinematic'
 
 /**
- * Hero as a vitrine: the photo sits deep (drifts against the cursor, lags the
- * scroll), the title rises out of a 3D mask, the process card floats nearest
- * to the glass, and a champagne light sweep crosses once on arrival.
+ * Portada: la foto del atelier se queda (decisión de Joe) como el umbral
+ * oscuro de la casa; todo lo demás de la página es papel. Una sola promesa,
+ * una sola acción principal: el resto de la historia vive debajo.
+ *
+ * La foto va al fondo (deriva contra el cursor y se rezaga al hacer scroll),
+ * el título sube palabra por palabra y una luz champagne cruza una vez.
+ * Todo es transform/opacity y se aquieta con «reducir movimiento».
  */
 export function CinematicHero() {
   return (
-    <section className="relative min-h-[92vh] lg:min-h-screen overflow-hidden bg-showroom-ink">
-      <ParallaxStage className="relative min-h-[92vh] lg:min-h-screen">
+    <section className="relative min-h-[100svh] overflow-hidden bg-showroom-ink">
+      <ParallaxStage className="relative min-h-[100svh]">
 
-        {/* Photo plane — deepest layer. Oversized so parallax drift never
-            exposes an edge. */}
         <ParallaxLayer depth={-14} className="absolute -inset-10" style={{ zIndex: 0 }}>
           <ScrollParallax speed={0.72} scaleFrom={1.06} className="absolute inset-0">
             <Image
@@ -31,16 +33,14 @@ export function CinematicHero() {
           </ScrollParallax>
         </ParallaxLayer>
 
-        {/* Static atmosphere — vignette and page-blend stay pinned so the
-            drift beneath them reads as depth. */}
-        <div className="absolute inset-0 z-[1] bg-[linear-gradient(100deg,oklch(0.145_0.017_66/0.90)_0%,oklch(0.145_0.017_66/0.68)_42%,oklch(0.145_0.017_66/0.16)_100%)]" />
-        <div className="absolute inset-x-0 bottom-0 z-[1] h-40 bg-[linear-gradient(180deg,transparent,oklch(0.982_0.008_86))]" />
+        {/* Atmósfera fija: viñeta y fundido a papel al pie. */}
+        <div className="absolute inset-0 z-[1] bg-[linear-gradient(100deg,oklch(0.145_0.017_66/0.88)_0%,oklch(0.145_0.017_66/0.62)_46%,oklch(0.145_0.017_66/0.12)_100%)]" />
+        <div className="absolute inset-x-0 bottom-0 z-[1] h-48 bg-[linear-gradient(180deg,transparent,oklch(0.145_0.017_66/0.35)_45%,oklch(0.975_0.009_84))]" />
 
-        {/* The lamp passes over the vitrine once. */}
         <LightSweep delay={1.15} className="z-[2]" />
 
-        <div className="relative z-10 flex min-h-[92vh] lg:min-h-screen flex-col justify-between px-6 py-7 sm:px-10 lg:px-16">
-          <header className="flex items-center justify-between text-porcelain">
+        <div className="relative z-10 flex min-h-[100svh] flex-col justify-between px-5 pb-16 pt-6 sm:px-10 lg:px-16">
+          <header className="flex items-center justify-between gap-4 text-porcelain">
             <Image
               src="/logo-ciaociao.png"
               alt="Ciao Ciao Joyería"
@@ -50,72 +50,46 @@ export function CinematicHero() {
               priority
             />
             <a
-              href="#booking"
-              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-11 font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
-            >
-              Reservar
-            </a>
-            <a
               href="/reserva"
-              className="hidden sm:inline-flex rounded-full border border-porcelain/20 px-4 py-2 text-11 font-semibold uppercase tracking-eyebrow text-porcelain/80 hover:border-champagne-soft hover:text-champagne-soft transition-colors"
+              className="inline-flex min-h-[44px] items-center rounded-full border border-porcelain/25 px-4 text-11 font-medium uppercase tracking-eyebrow text-porcelain/85 transition-colors duration-200 hover:border-champagne-soft hover:text-champagne-soft"
             >
               Ver mi reserva
             </a>
           </header>
 
-          <div className="grid gap-10 pb-10 sm:pb-16 lg:grid-cols-[minmax(0,680px)_280px] lg:items-end">
-            <ParallaxLayer depth={5}>
-              <StaggerChildren>
-                <StaggerItem>
-                  <p className="mb-5 text-11 font-semibold uppercase tracking-display-eyebrow text-[oklch(0.88_0.045_82)]">
-                    Showroom privado · México
-                  </p>
-                </StaggerItem>
+          <ParallaxLayer depth={5} className="max-w-[44rem] pb-6 sm:pb-12">
+            <StaggerChildren>
+              <StaggerItem>
+                <p className="mb-6 text-11 font-medium uppercase tracking-display-eyebrow text-[oklch(0.88_0.045_82)]">
+                  Cita privada · Ciudad de México
+                </p>
+              </StaggerItem>
 
-                <h1 className="font-serif text-[clamp(3.6rem,9vw,8rem)] leading-[0.9] text-[oklch(0.97_0.012_84)] font-light">
-                  <TitleReveal text="Ciao Ciao" delay={0.25} />
-                </h1>
+              <h1 className="font-serif text-[clamp(2.9rem,8.2vw,6.4rem)] font-light leading-[0.98] tracking-tight text-[oklch(0.97_0.012_84)]">
+                <WordsReveal text="Una mesa preparada para ti." delay={0.2} />
+              </h1>
 
-                <StaggerItem>
-                  <p className="mt-7 max-w-lg text-base leading-7 text-[oklch(0.91_0.018_84)] sm:text-lg">
-                    Agenda una visita privada con el equipo. Te recibimos con tiempo, piezas preparadas y una confirmación cuidada de principio a fin.
-                  </p>
-                </StaggerItem>
+              <StaggerItem>
+                <p className="mt-7 max-w-md text-[1.0625rem] font-light leading-8 text-[oklch(0.92_0.016_84)]">
+                  Visítanos en el showroom o por videollamada. Elegimos las piezas antes de que llegues y te damos el tiempo que necesites.
+                </p>
+              </StaggerItem>
 
-                <StaggerItem>
-                  <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                    <a href="#booking" className="btn-atelier text-sm">
-                      Reservar cita
-                    </a>
-                    <a
-                      href="/reserva"
-                      className="inline-flex items-center justify-center rounded-xl border border-white/25 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:border-white/55 hover:bg-white/10"
-                    >
-                      Ver mi reserva
-                    </a>
-                  </div>
-                </StaggerItem>
-              </StaggerChildren>
-            </ParallaxLayer>
-
-            <ParallaxLayer depth={12}>
-              <DepthReveal delay={0.5}>
-                <div className="hidden border-l border-[oklch(0.93_0.018_84/0.32)] pl-6 text-[oklch(0.90_0.018_84)] lg:block">
-                  <p className="h-eyebrow text-[oklch(0.88_0.045_82)]">Proceso</p>
-                  <div className="mt-4 space-y-4 text-sm">
-                    {['Elige fecha', 'Comparte tus datos', 'Recibe confirmación'].map((item, i) => (
-                      <div key={item} className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[oklch(0.93_0.018_84/0.38)] text-[0.7rem] tabular-nums">
-                          {i + 1}
-                        </span>
-                        <span>{item}</span>
-                      </div>
-                    ))}
-                  </div>
+              <StaggerItem>
+                <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <a href="#reservar" className="btn-atelier min-h-[52px] px-8 text-[0.95rem]">
+                    Reservar mi cita
+                  </a>
+                  <a
+                    href="#la-cita"
+                    className="inline-flex min-h-[48px] items-center justify-center px-2 text-sm font-medium text-[oklch(0.92_0.016_84)] underline decoration-[oklch(0.88_0.045_82/0.5)] underline-offset-[6px] transition-colors hover:text-champagne-soft"
+                  >
+                    Cómo es la cita
+                  </a>
                 </div>
-              </DepthReveal>
-            </ParallaxLayer>
-          </div>
+              </StaggerItem>
+            </StaggerChildren>
+          </ParallaxLayer>
         </div>
       </ParallaxStage>
     </section>
