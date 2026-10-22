@@ -22,11 +22,13 @@ const nextConfig: NextConfig = {
   },
   images: {
     formats: ['image/avif', 'image/webp'],
-    remotePatterns: [
-      { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
-      { protocol: 'https', hostname: 'storage.googleapis.com' },
-      { protocol: 'https', hostname: 'images.unsplash.com' },
-    ],
+    // Sin imágenes remotas: todo <Image> del sitio usa archivos de /public.
+    // Los comodines de storage.googleapis.com / firebasestorage.googleapis.com
+    // convertían /_next/image en un proxy abierto hacia CUALQUIER bucket de
+    // Google. Las identificaciones se abren con URL firmada (api/admin/id-url),
+    // nunca por el optimizador. Si algún día hace falta una imagen remota,
+    // agrégala aquí con `pathname` acotado al bucket propio.
+    remotePatterns: [],
   },
 }
 
