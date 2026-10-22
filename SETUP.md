@@ -222,7 +222,7 @@ Así debería verse tu archivo una vez completado:
 
 ```javascript
 export const firebaseConfig = {
-  apiKey: "AIzaSyC1234567890abcdefghijklmnop",
+  apiKey: "TU_API_KEY_DE_FIREBASE",
   authDomain: "ciaociao-citas.firebaseapp.com",
   projectId: "ciaociao-citas",
   storageBucket: "ciaociao-citas.appspot.com",

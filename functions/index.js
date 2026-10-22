@@ -1,6 +1,14 @@
 /**
  * Cloud Functions - CiaoCiao Citas
  * adminLogin: verifica contraseña hasheada y emite custom token con claim admin:true
+ *
+ * LEGADO — NO LO USA EL SITIO (oct-2026). El login del admin en apps/web es
+ * Firebase Auth (signInWithEmailAndPassword) + POST /api/admin/login con el
+ * idToken; nada en el repo llama a esta función (ni httpsCallable ni fetch a
+ * cloudfunctions.net / run.app). Además está apagada salvo que
+ * ENABLE_LEGACY_ADMIN_LOGIN === 'true'. Pendiente para Joe: borrarla en GCP
+ *   firebase functions:delete adminLogin --region us-central1 --project ciaociao-citas
+ * y el secreto ADMIN_PASSWORD_HASH en Secret Manager.
  */
 
 const { onCall, HttpsError } = require('firebase-functions/v2/https');

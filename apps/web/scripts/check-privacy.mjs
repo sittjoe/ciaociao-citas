@@ -13,10 +13,11 @@
 import { spawnSync } from 'node:child_process'
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const SENTINEL = 'Calle Falsa 123 Col. Prueba'
 const SENTINEL_MAPS = 'https://maps.example.invalid/calle-falsa-123'
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const nextDir = path.join(root, '.next')
 
 if (!process.argv.includes('--no-build')) {
