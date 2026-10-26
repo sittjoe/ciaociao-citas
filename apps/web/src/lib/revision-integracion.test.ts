@@ -116,6 +116,10 @@ describe('cron a las 03:00 CDMX', () => {
 
 describe('Resend devuelve error en el cron', () => {
   it('libera la marca, deja el outbox failed con su Idempotency-Key y el reintento usa la MISMA llave', async () => {
+    // El reintento del outbox mira la edad del registro contra el reloj real: sin fijar el
+    // reloj, la prueba dejó de pasar en cuanto el 22-oct-2026 quedó en el pasado.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(cdmx('2026-10-22T08:00:00'))
     putAppt('e', cdmx('2026-10-23T11:00:00'))
     R.sendError = { name: 'rate_limit_exceeded', message: 'Too many requests' }
     const r1 = await runClientReminders(cdmx('2026-10-22T08:00:00'))

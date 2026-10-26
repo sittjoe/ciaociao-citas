@@ -30,6 +30,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'RESEND_API_KEY no configurado' }, { status: 503 })
   }
 
+  // Apagado por decisión de Joe (9-oct y 26-oct-2026: «no quiero recordatorios de nada»).
+  // Se quitó de vercel.json, pero un llamador externo pega a los crons cada ~30 min:
+  // sin esta salida el aviso semanal seguía saliendo. Reactivar solo con SLOTS_REMINDER_ENABLED=true.
+  if (process.env.SLOTS_REMINDER_ENABLED !== 'true') {
+    return NextResponse.json({ ok: true, skipped: 'apagado' })
+  }
+
   const now = new Date()
   if (cdmxHour(now) < 8 || !inBusinessSendHours(now)) {
     return NextResponse.json({ ok: true, skipped: 'fuera_de_horario' })

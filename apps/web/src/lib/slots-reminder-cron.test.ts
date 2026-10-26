@@ -21,6 +21,7 @@ const call = () => GET(new Request('https://citas.test/api/cron/slots-reminder',
 describe('cron slots-reminder: robusto a cualquier frecuencia', () => {
   beforeEach(() => {
     vi.stubEnv('CRON_SECRET', 's3cret')
+    vi.stubEnv('SLOTS_REMINDER_ENABLED', 'true')   // el aviso está apagado de fábrica (ver prueba de abajo)
     fakeStore.reset()
     M.send.mockClear()
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -70,5 +71,25 @@ describe('cron slots-reminder: robusto a cualquier frecuencia', () => {
     await call()
     expect(M.send).toHaveBeenCalledTimes(1)
     expect(fakeStore.get('slotsReminderRuns/2026-W42')!.status).toBe('failed')
+  })
+})
+
+/* 26-oct-2026: Joe no quiere recordatorios. Sin SLOTS_REMINDER_ENABLED=true el endpoint no
+   manda nada aunque el llamador externo lo siga golpeando en horario y en lunes. */
+describe('cron slots-reminder: apagado de fábrica', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    fakeStore.reset()
+    M.send.mockClear()
+    vi.useFakeTimers({ toFake: ['Date'] })
+  })
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs() })
+
+  it('lunes 9:00 CDMX sin la variable: no manda', async () => {
+    vi.setSystemTime(cdmx('2026-10-12T09:00:00'))
+    const res = await call()
+    expect((await res.json()).skipped).toBe('apagado')
+    expect(M.send).not.toHaveBeenCalled()
   })
 })

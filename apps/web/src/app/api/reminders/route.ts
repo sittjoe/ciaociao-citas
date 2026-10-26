@@ -324,8 +324,11 @@ export async function GET(request: Request) {
         }
       }
 
-      if (today.length + unconfirmed.length + pending.length === 0 && lowSlots === null) {
-        digest.skipped = 'sin_contenido'
+      // 26-oct-2026 (Joe): «solo si hay cita me llega; si no, no quiero recordatorios de nada».
+      // El resumen sale ÚNICAMENTE el día que hay citas aceptadas HOY; ni «pocos horarios»,
+      // ni citas sin confirmar de otros días, ni solicitudes pendientes lo disparan.
+      if (today.length === 0) {
+        digest.skipped = 'sin_citas_hoy'
       } else {
         // Documento de control por día: create() falla si ya existe, así una
         // reejecución manual del cron no duplica el digest.
@@ -346,7 +349,7 @@ export async function GET(request: Request) {
         if (!digest.skipped) {
           const dayLabelRaw = formatInTimeZone(now, BUSINESS_TZ, "EEEE d 'de' MMMM", { locale: es })
           const dayLabel = dayLabelRaw.charAt(0).toUpperCase() + dayLabelRaw.slice(1)
-          const result = await sendDailyTeamDigest({ dayLabel, dateKey: todayKey, today, unconfirmed, pending, lowSlots })
+          const result = await sendDailyTeamDigest({ dayLabel, dateKey: todayKey, today, unconfirmed: [], pending: [], lowSlots: null })
           digest.sent = result.sent
           digest.recipients = result.recipients
           await controlRef.update({
